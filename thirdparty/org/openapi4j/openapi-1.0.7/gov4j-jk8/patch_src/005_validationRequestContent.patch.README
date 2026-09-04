@@ -1,0 +1,6 @@
+Risolto problema derivante dall'utilizzo errato della specifica OpenAPI per quanto concerne l'attributo required del requestContentBody.
+La specifica indica in https://swagger.io/docs/specification/describing-request-body/
+     "Request bodies are optional by default. To mark the body as required, use required: true."
+Mentre per default (attributo non presente) la libreria trattava come required il body.
+
+Si è intervenuti solamente nel modulo 'openapi-operation-validator'

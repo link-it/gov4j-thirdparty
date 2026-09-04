@@ -1,0 +1,19 @@
+https://datatracker.ietf.org/doc/html/rfc3339#section-5.6
+
+== Uso di "T" e "Z" maiuscole e minuscole
+
+Per ABNF e ISO 8601: L'RFC chiarisce che sia l'ABNF (usato per definire la sintassi) sia la specifica ISO 8601 permettono l'uso delle lettere minuscole "t" e "z" come alternative alle maiuscole "T" e "Z".
+Comunque sia le applicazioni che generano timestamp conformi a RFC 3339 dovrebbero preferibilmente utilizzare le lettere maiuscole "T" e "Z" per garantire maggiore compatibilità e aderenza alle convenzioni comuni.
+
+Si è voluto impostare per default un criterio di validazione più stringente, accettando solamente le lettere maiuscole.
+È possibile ri-abilitare il comportamento precedente utilizzando il metodo org.openapi4j.schema.validator.v3.FormatValidator.setDateTimeAllowLowerCaseTZ(true).
+
+== Uso di uno spazio come separatore al posto di "T"
+
+L'ultima nota della sezione evidenzia che ISO 8601 consente di usare uno spazio al posto della "T" come separatore tra la data e l'ora, ma RFC 3339 non prevede questa opzione.
+Quindi per rispettare rigorosamente l'RFC 3339, deve essere usate la "T" (o eventualmente "t").
+
+Tuttavia, in altri contesti o per migliorare la leggibilità, potrebbe essere accettabile usare uno spazio, ma ciò è fuori dall'ambito strettamente RFC 3339.
+
+Si è voluto impostare per default un criterio di validazione più stringente, segnalando come errato la presenza dello spazio al posto della "T".
+È possibile ri-abilitare il comportamento precedente utilizzando il metodo org.openapi4j.schema.validator.v3.FormatValidator.setDateTimeAllowSpaceSeparator(true).

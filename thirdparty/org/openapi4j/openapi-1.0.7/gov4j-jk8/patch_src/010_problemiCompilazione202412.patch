@@ -1,0 +1,26 @@
+--- openapi-perf-checker/build.gradle	2024-12-27 16:35:23.421723899 +0100
++++ openapi-perf-checker/build.gradle	2024-12-27 16:37:45.354442125 +0100
+@@ -21,6 +21,12 @@
+   buildConfigField('String', 'NETWORKNT_VERSION', "\"$NETWORKNT_VERSION\"")
+ }
+ 
++configurations {
++    runtimeClasspath {
++        exclude group: 'com.google.guava', module: 'guava' // Rimuove Guava problematico
++    }
++}
++
+ dependencies {
+   // Parsers
+   implementation(project(":openapi-parser"))
+--- openapi-core/src/test/java/org/openapi4j/core/model/v3/OAI3ContextTest.java	2024-12-27 16:35:23.402723669 +0100
++++ openapi-core/src/test/java/org/openapi4j/core/model/v3/OAI3ContextTest.java	2024-12-27 16:34:41.179212513 +0100
+@@ -38,7 +38,7 @@
+ 
+   @Test
+   public void remote() throws ResolutionException, MalformedURLException {
+-    URL specPath = new URL("https://raw.githubusercontent.com/OAI/OpenAPI-Specification/master/examples/v3.0/petstore.yaml");
++    URL specPath = new URL("https://raw.githubusercontent.com/swagger-api/swagger-petstore/refs/heads/master/src/main/resources/openapi.yaml");
+ 
+     OAI3Context apiContext = new OAI3Context(specPath);
+     assertEquals(specPath, apiContext.getBaseUrl());

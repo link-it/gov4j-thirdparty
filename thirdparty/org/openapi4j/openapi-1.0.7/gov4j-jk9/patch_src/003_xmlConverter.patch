@@ -1,0 +1,28 @@
+diff --git openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/util/convert/XmlConverter.java openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/util/convert/XmlConverter.java
+index c548b9b..ca74bfb 100644
+--- openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/util/convert/XmlConverter.java
++++ openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/util/convert/XmlConverter.java
+@@ -121,6 +121,11 @@ class XmlConverter {
+   }
+ 
+   private JsonNode unwrap(OAIContext context, final Schema schema, final JsonNode content, final String defaultKey) {
++
++if(content==null){
++return content;
++}
++
+     Xml xmlConf = schema.getXml();
+ 
+     Schema flatSchema = schema.getFlatSchema(context);
+@@ -152,6 +157,11 @@ class XmlConverter {
+   }
+ 
+   private JsonNode getRenamedNode(final Xml xmlConf, final JsonNode content, final String defaultKey) {
++
++if(content==null){
++return content;
++}
++
+     if (xmlConf != null && xmlConf.getName() != null) {
+       return content.get(xmlConf.getName());
+     } else if (defaultKey != null) {

@@ -1,0 +1,33 @@
+--- openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/validation/OperationValidator.java	2020-10-30 16:26:37.269057901 +0100
++++ openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/validation/OperationValidator.java	2020-10-30 15:35:10.046466298 +0100
+@@ -247,14 +247,24 @@
+   public void validateBody(final Request request, final ValidationData<?> validation) {
+     if (specRequestBodyValidators == null) return;
+ 
+-    if (operation.getRequestBody().isRequired()) {
+-      if (request.getContentType() == null) {
+-        validation.add(BODY_CONTENT_TYPE_ERR);
+-        return;
+-      } else if (request.getBody() == null) {
++    // FIX: https://swagger.io/docs/specification/describing-request-body/
++    //  Request bodies are optional by default. To mark the body as required, use required: true.
++    Boolean requestBodyRequired = operation.getRequestBody().getRequired();
++    if(requestBodyRequired==null){
++	requestBodyRequired=false;
++    }
++    //FIXif (operation.getRequestBody().isRequired()) {
++    if(!requestBodyRequired && request.getBody() == null){
++       return;
++    }
++    if(requestBodyRequired){
++      if (request.getBody() == null) {
+         validation.add(BODY_REQUIRED_ERR);
+         return;
+-      }
++      }else if (request.getContentType() == null) {
++        validation.add(BODY_CONTENT_TYPE_ERR);
++        return;
++      } 
+     }
+ 
+     validateBodyWithContentType(

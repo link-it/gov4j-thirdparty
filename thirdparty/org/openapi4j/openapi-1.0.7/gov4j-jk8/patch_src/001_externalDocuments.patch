@@ -1,0 +1,176 @@
+diff --git openapi-core/src/main/java/org/openapi4j/core/model/reference/AbstractReferenceResolver.java openapi-core/src/main/java/org/openapi4j/core/model/reference/AbstractReferenceResolver.java
+index eb839dd..4120ed1 100644
+--- openapi-core/src/main/java/org/openapi4j/core/model/reference/AbstractReferenceResolver.java
++++ openapi-core/src/main/java/org/openapi4j/core/model/reference/AbstractReferenceResolver.java
+@@ -24,7 +24,7 @@ public abstract class AbstractReferenceResolver {
+   private final URL baseUrl;
+   private final List<AuthOption> authOptions;
+   private JsonNode baseDocument;
+-  private final Map<URL, JsonNode> documentRegistry = new HashMap<>();
++  private Map<URL, JsonNode> documentRegistry = new HashMap<>();
+   private final ReferenceRegistry referenceRegistry;
+   final String refKeyword;
+ 
+@@ -35,6 +35,22 @@ public abstract class AbstractReferenceResolver {
+     this.refKeyword = refKeyword;
+     this.referenceRegistry = referenceRegistry;
+   }
++  protected AbstractReferenceResolver(URL baseUrl, List<AuthOption> authOptions, JsonNode baseDocument, String refKeyword, ReferenceRegistry referenceRegistry, Map<URL, JsonNode> documentRegistryParam) throws ResolutionException {
++    this.baseUrl = baseUrl;
++    this.authOptions = authOptions;
++    this.baseDocument = baseDocument;
++    this.refKeyword = refKeyword;
++    this.referenceRegistry = referenceRegistry;
++    if(documentRegistryParam!=null){
++       this.documentRegistry = documentRegistryParam;
++       if(this.documentRegistry!=null){
++          for (URL subUrl: documentRegistryParam.keySet()) {
++             JsonNode subDocument = documentRegistryParam.get(subUrl);
++             findReferences(subUrl, subDocument);
++          }
++       }
++    }
++  }
+ 
+   public void resolve() throws ResolutionException {
+     // Register base resolution document
+diff --git openapi-core/src/main/java/org/openapi4j/core/model/reference/ReferenceResolver.java openapi-core/src/main/java/org/openapi4j/core/model/reference/ReferenceResolver.java
+index 3e38336..8f66268 100644
+--- openapi-core/src/main/java/org/openapi4j/core/model/reference/ReferenceResolver.java
++++ openapi-core/src/main/java/org/openapi4j/core/model/reference/ReferenceResolver.java
+@@ -1,16 +1,21 @@
+ package org.openapi4j.core.model.reference;
+ 
+ import com.fasterxml.jackson.databind.JsonNode;
++import org.openapi4j.core.exception.ResolutionException;
+ import org.openapi4j.core.model.AuthOption;
+ 
+ import java.net.URL;
+ import java.util.Collection;
+ import java.util.List;
++import java.util.Map;
+ 
+ /**
+  * The default JSON reference resolver.
+  */
+ public class ReferenceResolver extends AbstractReferenceResolver {
++  public ReferenceResolver(URL baseUrl, List<AuthOption> authOptions, JsonNode apiNode, String refKeyword, ReferenceRegistry referenceRegistry, Map<URL, JsonNode> documentRegistryParam) throws ResolutionException {
++    super(baseUrl, authOptions, apiNode, refKeyword, referenceRegistry, documentRegistryParam);
++  }
+   public ReferenceResolver(URL baseUrl, List<AuthOption> authOptions, JsonNode apiNode, String refKeyword, ReferenceRegistry referenceRegistry) {
+     super(baseUrl, authOptions, apiNode, refKeyword, referenceRegistry);
+   }
+diff --git openapi-core/src/main/java/org/openapi4j/core/model/v3/OAI3Context.java openapi-core/src/main/java/org/openapi4j/core/model/v3/OAI3Context.java
+index 333163f..3ffa90f 100644
+--- openapi-core/src/main/java/org/openapi4j/core/model/v3/OAI3Context.java
++++ openapi-core/src/main/java/org/openapi4j/core/model/v3/OAI3Context.java
+@@ -9,6 +9,7 @@ import org.openapi4j.core.model.reference.ReferenceResolver;
+ 
+ import java.net.URL;
+ import java.util.List;
++import java.util.Map;
+ 
+ import static org.openapi4j.core.model.v3.OAI3SchemaKeywords.$REF;
+ 
+@@ -32,7 +33,7 @@ public class OAI3Context implements OAIContext {
+    * @throws ResolutionException In case of missing or wrong reference during discovery process.
+    */
+   public OAI3Context(URL baseUrl) throws ResolutionException {
+-    this(baseUrl, null, null);
++    this(baseUrl, null, null, null);
+   }
+ 
+   /**
+@@ -43,7 +44,7 @@ public class OAI3Context implements OAIContext {
+    * @throws ResolutionException In case of missing or wrong reference during discovery process.
+    */
+   public OAI3Context(URL baseUrl, List<AuthOption> authOptions) throws ResolutionException {
+-    this(baseUrl, authOptions, null);
++    this(baseUrl, authOptions, null, null);
+   }
+ 
+   /**
+@@ -54,7 +55,7 @@ public class OAI3Context implements OAIContext {
+    * @throws ResolutionException In case of missing or wrong reference during discovery process.
+    */
+   public OAI3Context(URL baseUrl, JsonNode baseDocument) throws ResolutionException {
+-    this(baseUrl, null, baseDocument);
++    this(baseUrl, null, baseDocument, null);
+   }
+ 
+   /**
+@@ -66,12 +67,60 @@ public class OAI3Context implements OAIContext {
+    * @throws ResolutionException In case of missing or wrong reference during discovery process.
+    */
+   public OAI3Context(URL baseUrl, List<AuthOption> authOptions, JsonNode baseDocument) throws ResolutionException {
++    this(baseUrl, authOptions, baseDocument, null);
++  }
++
++
++
++  /**
++   * Creates a context from the given url.
++   *
++   * @param baseUrl The given url.
++   * @throws ResolutionException In case of missing or wrong reference during discovery process.
++   */
++  public OAI3Context(URL baseUrl, Map<URL, JsonNode> documentRegistryParam) throws ResolutionException {
++    this(baseUrl, null, null, documentRegistryParam);
++  }
++
++  /**
++   * Creates a context from the given url.
++   *
++   * @param baseUrl     The given url.
++   * @param authOptions The authentication values.
++   * @throws ResolutionException In case of missing or wrong reference during discovery process.
++   */
++  public OAI3Context(URL baseUrl, List<AuthOption> authOptions, Map<URL, JsonNode> documentRegistryParam) throws ResolutionException {
++    this(baseUrl, authOptions, null, documentRegistryParam);
++  }
++
++  /**
++   * Creates a context from the given url.
++   *
++   * @param baseUrl      The given url.
++   * @param baseDocument The tree node representing the Open API schema.
++   * @throws ResolutionException In case of missing or wrong reference during discovery process.
++   */
++  public OAI3Context(URL baseUrl, JsonNode baseDocument, Map<URL, JsonNode> documentRegistryParam) throws ResolutionException {
++    this(baseUrl, null, baseDocument, documentRegistryParam);
++  }
++
++  /**
++   * Creates a context from the given url.
++   *
++   * @param baseUrl      The given url.
++   * @param authOptions  The authentication values.
++   * @param baseDocument The tree node representing the Open API schema.
++   * @throws ResolutionException In case of missing or wrong reference during discovery process.
++   */
++  public OAI3Context(URL baseUrl, List<AuthOption> authOptions, JsonNode baseDocument, Map<URL, JsonNode> documentRegistryParam) throws ResolutionException {
+     this.baseUrl = baseUrl;
+     referenceRegistry = new ReferenceRegistry(baseUrl);
+     this.authOptions = authOptions;
+-    this.baseDocument = resolveReferences(baseDocument);
++    this.baseDocument = resolveReferences(baseDocument, documentRegistryParam);
+   }
+ 
++
++
+   /**
+    * {@inheritDoc}
+    */
+@@ -97,8 +146,11 @@ public class OAI3Context implements OAIContext {
+   }
+ 
+   private JsonNode resolveReferences(JsonNode baseDocument) throws ResolutionException {
++    return this.resolveReferences(baseDocument, null);
++  }
++  private JsonNode resolveReferences(JsonNode baseDocument, Map<URL, JsonNode> documentRegistryParam) throws ResolutionException {
+     // Standard JSON references
+-    ReferenceResolver resolver = new ReferenceResolver(baseUrl, authOptions, baseDocument, $REF, referenceRegistry);
++    ReferenceResolver resolver = new ReferenceResolver(baseUrl, authOptions, baseDocument, $REF, referenceRegistry, documentRegistryParam);
+     resolver.resolve();
+ 
+     // Mapping JSON references

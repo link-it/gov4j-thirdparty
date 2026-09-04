@@ -1,0 +1,6 @@
+Il content type 'speciale' */* non veniva gestito, mentre era supportato quello con lo * sul subtype (es. application/*)
+Il problema è stato risolto e adesso viene gestito anche */* in modo da essere conformi alla specifica:
+     https://swagger.io/docs/specification/media-types/
+     "To define the same format for multiple media types, you can also use placeholders like */*, application/*, image/* or others"
+
+Si è intervenuti solamente nel modulo 'openapi-operation-validator'

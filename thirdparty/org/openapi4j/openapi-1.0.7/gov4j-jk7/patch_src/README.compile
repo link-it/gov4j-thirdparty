@@ -1,0 +1,26 @@
+ NOTA: Usare java 11 e maven 3.6.1 o superiore
+
+git clone https://github.com/openapi4j/openapi4j.git
+cd openapi4j
+git checkout 1.0.7
+patch -p0 < 001_externalDocuments.patch
+patch -p0 < 002_parser.patch
+patch -p0 < 003_xmlConverter.patch
+patch -p0 < 004_validation.patch
+patch -p0 < 005_validationRequestContent.patch
+patch -p0 < 006_validationMediaTypeStarStar.patch
+patch -p0 < 007_validationMultipartFormDataMixed.patch
+patch -p0 < 008_validationComplexTypeParameters.patch
+patch -p0 < 009_validationPath.patch
+patch -p0 < 010_problemiCompilazione202412.patch
+patch -p0 < 011_jakartaCommonsFileUpload2.patch
+cd openapi-core; gradle build jar; cd ..;
+cd openapi-parser; gradle build jar; cd ..;
+cd openapi-schema-validator; gradle build jar; cd ..;
+cd openapi-operation-validator; gradle build jar; cd ..;
+cd openapi-core; gradle javadoc jar; cd ..;
+cd openapi-parser; gradle build javadoc; cd ..;
+cd openapi-schema-validator; gradle build javadoc; cd ..;
+cd openapi-operation-validator; gradle build javadoc; cd ..;
+cd ..
+

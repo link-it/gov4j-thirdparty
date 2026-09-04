@@ -1,0 +1,344 @@
+diff --git openapi-parser/src/main/java/org/openapi4j/parser/validation/ValidatorBase.java openapi-parser/src/main/java/org/openapi4j/parser/validation/ValidatorBase.java
+index 4b4c738..9c05de6 100644
+--- openapi-parser/src/main/java/org/openapi4j/parser/validation/ValidatorBase.java
++++ openapi-parser/src/main/java/org/openapi4j/parser/validation/ValidatorBase.java
+@@ -30,12 +30,16 @@ public abstract class ValidatorBase<O extends OAI, T> implements Validator<O, T>
+   private static final ValidationResult POSITIVE_VALUE = new ValidationResult(ERROR, 104, "Value '%s' must be positive or 0.");
+   private static final ValidationResult MISSING_REQUIRED_FIELD = new ValidationResult(ERROR, 105, "Required field is missing '%s'.");
+   private static final ValidationResult PATTERN_NOT_MATCHED = new ValidationResult(ERROR, 106, "String value '%s' does not match required pattern '%s'.");
+-  private static final ValidationResult INVALID_KEY = new ValidationResult(ERROR, 107, "Invalid key '%s' in map '%s'.");
++  protected static final ValidationResult INVALID_KEY = new ValidationResult(ERROR, 107, "Invalid key '%s' in map '%s'.");
+   private static final ValidationResult INVALID_URI = new ValidationResult(ERROR, 144, "Invalid (or not absolute) URI '%s'.");
+ 
+-  protected static final Pattern EMAIL_REGEX = Pattern.compile("(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|\"(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21\\x23-\\x5b\\x5d-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])*\")@(?:(?:[a-z0-9]" +
++  /*protected static final Pattern EMAIL_REGEX = Pattern.compile("(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|\"(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21\\x23-\\x5b\\x5d-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])*\")@(?:(?:[a-z0-9]" +
+     "(?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:" +
+     "(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21-\\x5a\\x53-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])+)])");
++  */
++  // Copio da openapi-schema-validator/src/main/java/org/openapi4j/schema/validator/v3/FormatValidator.java:  private static final Pattern EMAIL_PATTERN = Pattern.compile("^\\S+@\\S+$");
++  protected static final Pattern EMAIL_REGEX = Pattern.compile("^\\S+@\\S+$");
++
+ 
+   protected <V> void validate(final ValidationContext<O> context,
+                               final O api,
+diff --git openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/ParameterValidator.java openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/ParameterValidator.java
+index be06059..fffa0b9 100644
+--- openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/ParameterValidator.java
++++ openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/ParameterValidator.java
+@@ -44,8 +44,26 @@ class ParameterValidator extends Validator3Base<OpenApi3, Parameter> {
+       checkAllowReserved(parameter, results);
+       validateField(context, api, parameter.getSchema(), results, false, CRUMB_SCHEMA, SchemaValidator.instance());
+       validateMap(context, api, parameter.getContentMediaTypes(), results, false, CRUMB_CONTENT, Regexes.NOEXT_REGEX, MediaTypeValidator.instance());
++
++      Object oAllowEmptyValue = null;
++      String key_allowEmptyValue = "allowEmptyValue";
++      if(parameter.getExtensions()!=null && parameter.getExtensions().containsKey(key_allowEmptyValue)){
++          oAllowEmptyValue=parameter.getExtensions().remove(key_allowEmptyValue);
++          //System.out.println("allowEmptyValue: '"+oAllowEmptyValue.getClass().getName()+"'");
++	  if(oAllowEmptyValue==null){
++	     results.add(org.openapi4j.parser.validation.ValidatorBase.INVALID_KEY, key_allowEmptyValue, "null");
++	  }
++          if(! (oAllowEmptyValue instanceof java.lang.Boolean)){
++             results.add(org.openapi4j.parser.validation.ValidatorBase.INVALID_KEY, key_allowEmptyValue, oAllowEmptyValue.toString());
++	  }
++      }
++
+       validateMap(context, api, parameter.getExtensions(), results, false, CRUMB_EXTENSIONS, Regexes.EXT_REGEX, null);
+ 
++      if(oAllowEmptyValue!=null){
++          parameter.getExtensions().put(key_allowEmptyValue,oAllowEmptyValue);
++      }
++
+       // Content or schema, not both
+       if (parameter.getContentMediaTypes() != null && parameter.getSchema() != null) {
+         results.add(CONTENT_SCHEMA_EXCLUSIVE_ERR);
+diff --git openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/SchemaValidator.java openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/SchemaValidator.java
+index 5ec4251..3ab448b 100644
+--- openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/SchemaValidator.java
++++ openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/SchemaValidator.java
+@@ -113,7 +113,8 @@ class SchemaValidator extends Validator3Base<OpenApi3, Schema> {
+       results.add(CRUMB_DISCRIMINATOR, DISCRIM_ONLY_ONE, discriminator.getPropertyName());
+     } else if (count == 0) {
+       // discriminator is located aside properties
+-      checkSchemaDiscriminator(api, discriminator, Collections.singletonList(schema), results);
++      checkSchemaDiscriminator(api, discriminator, Collections.singletonList(schema), results,
++    		  schema, false, false);
+     } else {
+       // discriminator is aside xxxOf
+       // check properties for the schemas
+@@ -122,46 +123,74 @@ class SchemaValidator extends Validator3Base<OpenApi3, Schema> {
+   }
+ 
+   private void checkSchemaCollections(OpenApi3 api, Schema schema, Discriminator discriminator, ValidationResults results) {
++	  
+     if (schema.hasAllOfSchemas()) {
+-      if (!checkSchemaDiscriminator(api, discriminator, schema.getAllOfSchemas(), new ValidationResults())) {
++      if (!checkSchemaDiscriminator(api, discriminator, schema.getAllOfSchemas(), new ValidationResults(), 
++    		  schema, false, true)) {
+         results.add(CRUMB_DISCRIMINATOR, DISCRIM_CONSTRAINT_MISSING, discriminator.getPropertyName());
+       }
+     } else if (schema.hasAnyOfSchemas()) {
+-      checkSchemaDiscriminator(api, discriminator, schema.getAnyOfSchemas(), results);
++      checkSchemaDiscriminator(api, discriminator, schema.getAnyOfSchemas(), results, 
++    		  schema, false, false);
+     } else {
+-      checkSchemaDiscriminator(api, discriminator, schema.getOneOfSchemas(), results);
++      checkSchemaDiscriminator(api, discriminator, schema.getOneOfSchemas(), results, 
++    		  schema, true, false);
+     }
+   }
+ 
+-  private boolean checkSchemaDiscriminator(OpenApi3 api, Discriminator discriminator, List<Schema> schemas, ValidationResults results) {
++  private boolean checkSchemaDiscriminator(OpenApi3 api, Discriminator discriminator, List<Schema> schemas, ValidationResults results, 
++		  Schema rootSchema, boolean oneOf, boolean analyzeSchemaAllOf) {
+     boolean hasProperty = true;
++    boolean foundDiscriminatorProperty = false;
+ 
+     for (Schema schema : schemas) {
++    	    	
+       if (schema.isRef()) {
+         schema = getReferenceContent(api, schema, results, CRUMB_DISCRIMINATOR, Schema.class);
+       }
+-
++      
+       // Check for extended model with allOf
+       if (schema.hasAllOfSchemas()) {
+-        if (!checkSchemaDiscriminator(api, discriminator, schema.getAllOfSchemas(), new ValidationResults())) {
++        if (!checkSchemaDiscriminator(api, discriminator, schema.getAllOfSchemas(), new ValidationResults(), 
++        		schema, oneOf, true)) {
+           results.add(CRUMB_DISCRIMINATOR, DISCRIM_CONSTRAINT_MISSING, discriminator.getPropertyName());
+           hasProperty = false;
+         }
++        else {
++        	if(analyzeSchemaAllOf) {
++        		foundDiscriminatorProperty = true;
++        	}
++        }
+       } else {
++    	boolean error = false;
+         if (!schema.hasProperty(discriminator.getPropertyName())) {
+           results.add(CRUMB_DISCRIMINATOR, DISCRIM_PROP_MISSING, discriminator.getPropertyName());
+           hasProperty = false;
++          error=true;
+         }
+         if (!schema.hasRequiredFields() || !schema.getRequiredFields().contains(discriminator.getPropertyName())) {
+           results.add(CRUMB_DISCRIMINATOR, DISCRIM_REQUIRED_MISSING, discriminator.getPropertyName());
+           hasProperty = false;
++          error=true;
++        }
++        
++        if(!error && analyzeSchemaAllOf) {
++        	foundDiscriminatorProperty = true;
+         }
+       }
+ 
+-      break;
++      if(!oneOf && !analyzeSchemaAllOf) {
++    	  break;
++      }
+     }
+ 
+-    return hasProperty;
++    if(analyzeSchemaAllOf) {
++    	// basta che sia presente in uno
++    	return foundDiscriminatorProperty;
++    }
++    else {
++    	return hasProperty;
++    }
+   }
+ 
+   private void checkReadWrite(Schema schema, ValidationResults results) {
+@@ -209,6 +238,24 @@ class SchemaValidator extends Validator3Base<OpenApi3, Schema> {
+           break;
+         case TYPE_NUMBER:
+           ok = defaultValue instanceof Number;
++          if (!ok && (defaultValue instanceof String) && ValidationContext.convertDefaultStringValueInPrimitiveType) {
++            if(FORMAT_FLOAT.equals(format)){
++              try{
++                java.lang.Float.valueOf((String)defaultValue);
++                ok=true;
++              }catch(Throwable t){
++                ok = false;
++              }
++            }
++            else if(FORMAT_DOUBLE.equals(format) || format == null){
++              try{
++                java.lang.Double.valueOf((String)defaultValue);
++                ok=true;
++              }catch(Throwable t){
++                ok = false;
++              }
++            }
++          }
+           break;
+         case TYPE_INTEGER:
+           if (format == null || format.equals(FORMAT_INT64)) {
+@@ -216,9 +263,35 @@ class SchemaValidator extends Validator3Base<OpenApi3, Schema> {
+           } else if (format.equals(FORMAT_INT32)) {
+             ok = defaultValue instanceof Integer;
+           }
++          if (!ok && (defaultValue instanceof String) && ValidationContext.convertDefaultStringValueInPrimitiveType) {
++            if(FORMAT_INT32.equals(format)){
++              try{
++                java.lang.Integer.valueOf((String)defaultValue);
++                ok=true;
++              }catch(Throwable t){
++                ok = false;
++              }
++            }
++            else if(FORMAT_INT64.equals(format) || format == null){
++              try{
++                java.lang.Long.valueOf((String)defaultValue);
++                ok=true;
++              }catch(Throwable t){
++                ok = false;
++              }
++            }
++          }
+           break;
+         case TYPE_BOOLEAN:
+           ok = defaultValue instanceof Boolean;
++          if (!ok && (defaultValue instanceof String) && ValidationContext.convertDefaultStringValueInPrimitiveType) {
++              try{
++                java.lang.Boolean.valueOf((String)defaultValue);
++                ok=true;
++              }catch(Throwable t){
++                ok = false;
++              }
++          }
+           break;
+         case TYPE_OBJECT:
+           ok = defaultValue instanceof Map;
+diff --git openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/SecurityRequirementValidator.java openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/SecurityRequirementValidator.java
+index bec52a4..f65ec76 100644
+--- openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/SecurityRequirementValidator.java
++++ openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/SecurityRequirementValidator.java
+@@ -30,10 +30,14 @@ class SecurityRequirementValidator extends Validator3Base<OpenApi3, SecurityRequ
+ 
+   @Override
+   public void validate(ValidationContext<OpenApi3> context, OpenApi3 api, SecurityRequirement securityRequirement, ValidationResults results) {
+-    Set<String> schemes = api.getComponents().getSecuritySchemes().keySet();
++    Set<String> schemes = null;
++    if(api.getComponents()!=null && api.getComponents().getSecuritySchemes()!=null){
++	    schemes = api.getComponents().getSecuritySchemes().keySet();
++    }
+ 
++    if(securityRequirement!=null && securityRequirement.getRequirements()!=null){
+     for (Map.Entry<String, List<String>> entry : securityRequirement.getRequirements().entrySet()) {
+-      if (!schemes.contains(entry.getKey())) {
++      if (schemes==null || !schemes.contains(entry.getKey())) {
+         results.add(SCHEME_NOT_DEFINED, entry.getKey());
+       } else {
+         String type = api.getComponents().getSecurityScheme(entry.getKey()).getType();
+@@ -47,5 +51,6 @@ class SecurityRequirementValidator extends Validator3Base<OpenApi3, SecurityRequ
+         }
+       }
+     }
++    }
+   }
+ }
+diff --git openapi-parser/src/main/java/org/openapi4j/parser/validation/ValidationContext.java openapi-parser/src/main/java/org/openapi4j/parser/validation/ValidationContext.java
+index 9223095..7b84a2f 100644
+--- openapi-parser/src/main/java/org/openapi4j/parser/validation/ValidationContext.java
++++ openapi-parser/src/main/java/org/openapi4j/parser/validation/ValidationContext.java
+@@ -9,6 +9,8 @@ import java.util.Set;
+ public class ValidationContext<O extends OAI> {
+   private final Set<Integer> visitedElements = new HashSet<>();
+ 
++  public static boolean convertDefaultStringValueInPrimitiveType = true;
++
+   public <V> void validate(O api, V value, final Validator<O, V> validator, ValidationResults results) {
+     if (!visitedElements.add(value.hashCode())) {
+       return;
+diff --git openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/ContactValidator.java openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/ContactValidator.java
+index c4e5c4d..ef5c129 100644
+--- openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/ContactValidator.java
++++ openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/ContactValidator.java
+@@ -23,6 +23,12 @@ class ContactValidator extends Validator3Base<OpenApi3, Contact> {
+     validateString(contact.getEmail(), results, false, EMAIL_REGEX, CRUMB_EMAIL);
+     validateMap(context, api, contact.getExtensions(), results, false, CRUMB_EXTENSIONS, Regexes.EXT_REGEX, null);
+     validateString(contact.getName(), results, false, CRUMB_NAME);
+-    validateUrl(api, contact.getUrl(), results, false, CRUMB_URL);
++
++    if(org.openapi4j.parser.validation.v3.OpenApi3Validator.VALIDATE_URI_REFERENCE_AS_URL){
++      validateUrl(api, contact.getUrl(), results, false, CRUMB_URL);
++    }
++    else{
++      validateString(contact.getUrl(), results, false, CRUMB_URL);
++    }
+   }
+ }
+diff --git openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/ExternalDocsValidator.java openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/ExternalDocsValidator.java
+index 2c2130e..d76f6e1 100644
+--- openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/ExternalDocsValidator.java
++++ openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/ExternalDocsValidator.java
+@@ -24,6 +24,13 @@ class ExternalDocsValidator extends Validator3Base<OpenApi3, ExternalDocs> {
+     // VALIDATION EXCLUSIONS :
+     // description
+     validateMap(context, api, externalDocs.getExtensions(), results, false, CRUMB_EXTENSIONS, Regexes.EXT_REGEX, null);
+-    validateUrl(api, externalDocs.getUrl(), results, true, CRUMB_EXTERNALDOCS);
++
++    if(org.openapi4j.parser.validation.v3.OpenApi3Validator.VALIDATE_URI_REFERENCE_AS_URL){
++      validateUrl(api, externalDocs.getUrl(), results, false, CRUMB_EXTERNALDOCS);
++    }
++    else{
++      validateString(externalDocs.getUrl(), results, false, CRUMB_EXTERNALDOCS);
++    }
++
+   }
+ }
+diff --git openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/InfoValidator.java openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/InfoValidator.java
+index d3fbe46..ca4f7b1 100644
+--- openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/InfoValidator.java
++++ openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/InfoValidator.java
+@@ -25,7 +25,12 @@ class InfoValidator extends Validator3Base<OpenApi3, Info> {
+     validateField(context, api, info.getContact(), results, false, CRUMB_CONTACT, ContactValidator.instance());
+     validateMap(context, api, info.getExtensions(), results, false, CRUMB_EXTENSIONS, Regexes.EXT_REGEX, null);
+     validateField(context, api, info.getLicense(), results, false, CRUMB_LICENSE, LicenseValidator.instance());
+-    validateUrl(api, info.getTermsOfService(), results, false, CRUMB_TERMSOFSERVICE);
++    if(org.openapi4j.parser.validation.v3.OpenApi3Validator.VALIDATE_URI_REFERENCE_AS_URL){
++      validateUrl(api, info.getTermsOfService(), results, false, CRUMB_TERMSOFSERVICE);
++    }
++    else{
++      validateString(info.getTermsOfService(), results, false, CRUMB_TERMSOFSERVICE);
++    }
+     validateString(info.getTitle(), results, true, CRUMB_TITLE);
+     validateString(info.getVersion(), results, true, CRUMB_VERSION);
+   }
+diff --git openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/LicenseValidator.java openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/LicenseValidator.java
+index 15c63ad..bf98cd8 100644
+--- openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/LicenseValidator.java
++++ openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/LicenseValidator.java
+@@ -22,6 +22,13 @@ class LicenseValidator extends Validator3Base<OpenApi3, License> {
+   public void validate(ValidationContext<OpenApi3> context, OpenApi3 api, License license, ValidationResults results) {
+     validateMap(context, api, license.getExtensions(), results, false, CRUMB_EXTENSIONS, Regexes.EXT_REGEX, null);
+     validateString(license.getName(), results, true, CRUMB_NAME);
+-    validateUrl(api, license.getUrl(), results, false, CRUMB_URL);
++
++    if(org.openapi4j.parser.validation.v3.OpenApi3Validator.VALIDATE_URI_REFERENCE_AS_URL){
++      validateUrl(api, license.getUrl(), results, false, CRUMB_URL);
++    }
++    else{
++      validateString(license.getUrl(), results, false, CRUMB_URL);
++    }
++
+   }
+ }
+diff --git openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/OpenApi3Validator.java openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/OpenApi3Validator.java
+index 656cf23..ffe947b 100644
+--- openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/OpenApi3Validator.java
++++ openapi-parser/src/main/java/org/openapi4j/parser/validation/v3/OpenApi3Validator.java
+@@ -7,6 +7,12 @@ import org.openapi4j.parser.model.v3.OpenApi3;
+ import org.openapi4j.parser.validation.ValidationContext;
+ 
+ public class OpenApi3Validator {
++
++  /* se abilitate effettua la validazione come url. 
++     Non e' corretto poiche' nell'https://github.com/OAI/OpenAPI-Specification/blob/main/schemas/v3.0/schema.yaml è definito come format: uri-reference che permette url relative: 
++     "uri-reference": New in draft 6 A URI Reference (either a URI or a relative-reference), according to RFC3986, section 4.1.*/
++  public static boolean VALIDATE_URI_REFERENCE_AS_URL = true; 
++
+   private static final String VALIDATION_FAILURE = "OpenApi3 validation failure";
+ 
+   private static final OpenApi3Validator INSTANCE = new OpenApi3Validator();

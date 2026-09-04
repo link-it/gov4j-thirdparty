@@ -1,0 +1,3 @@
+Risolve problemi relativi alle validazioni di richieste o risposte multipart form-data o mixed.
+
+Aggiunge supporto per la validazione dei contenuti base64 (per default comunque disabilitato).

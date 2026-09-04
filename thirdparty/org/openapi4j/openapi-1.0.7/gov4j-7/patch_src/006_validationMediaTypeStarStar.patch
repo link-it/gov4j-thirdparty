@@ -1,0 +1,18 @@
+diff --git openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/model/impl/MediaTypeContainer.java openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/model/impl/MediaTypeContainer.java
+index 770d545..6a25cc0 100644
+--- openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/model/impl/MediaTypeContainer.java
++++ openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/model/impl/MediaTypeContainer.java
+@@ -45,6 +45,13 @@ public class MediaTypeContainer {
+ 
+     // Wildcard subtypes
+     if (hasPlaceholder) {
++
++      if("*/*".equals(contentType.trim())){
++	// https://swagger.io/docs/specification/media-types/
++	// To define the same format for multiple media types, you can also use placeholders like */*, application/*, image/* or others:
++	return true;
++      }
++
+       String definitionType = contentType.substring(0, contentType.indexOf('/'));
+       // contentType can be empty
+       final int endIndex = mediaTypeContainer.contentType.indexOf('/');

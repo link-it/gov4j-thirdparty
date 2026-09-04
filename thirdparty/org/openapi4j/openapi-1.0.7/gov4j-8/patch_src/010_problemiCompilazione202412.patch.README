@@ -1,0 +1,98 @@
+Risolti problemi di compilazione:
+
+1. Risolto risorsa non più disponibile: 
+
+   -    URL specPath = new URL("https://raw.githubusercontent.com/OAI/OpenAPI-Specification/master/examples/v3.0/petstore.yaml");
+   +    URL specPath = new URL("https://raw.githubusercontent.com/swagger-api/swagger-petstore/refs/heads/master/src/main/resources/openapi.yaml");
+
+2. Risolti problemi di compilazione:
+
+* Where: Build file 'openapi4j/openapi-perf-checker/build.gradle' line: 43
+
+* What went wrong:
+A problem occurred evaluating project ':openapi-perf-checker'.
+> Could not resolve all files for configuration ':openapi-perf-checker:runtimeClasspath'.
+   > Could not resolve com.google.guava:guava:32.1.3-android.
+     Required by:
+         project :openapi-perf-checker > io.swagger.parser.v3:swagger-parser:2.1.24 > io.swagger.parser.v3:swagger-parser-v2-converter:2.1.24 > io.swagger:swagger-core:1.6.14
+      > Cannot choose between the following variants of com.google.guava:guava:32.1.3-android:
+          - androidRuntimeElements
+          - jreRuntimeElements
+        All of them match the consumer attributes:
+          - Variant 'androidRuntimeElements' capabilities com.google.collections:google-collections:32.1.3-android and com.google.guava:guava:32.1.3-android:
+              - Unmatched attributes:
+                  - Found org.gradle.jvm.environment 'android' but wasn't required.
+                  - Found org.gradle.status 'release' but wasn't required.
+              - Compatible attributes:
+                  - Required org.gradle.category 'library' and found compatible value 'library'.
+                  - Required org.gradle.dependency.bundling 'external' and found compatible value 'external'.
+                  - Required org.gradle.jvm.version '8' and found compatible value '8'.
+                  - Required org.gradle.libraryelements 'jar' and found compatible value 'jar'.
+                  - Required org.gradle.usage 'java-runtime' and found compatible value 'java-runtime'.
+          - Variant 'jreRuntimeElements' capabilities com.google.collections:google-collections:32.1.3-android and com.google.guava:guava:32.1.3-android:
+              - Unmatched attributes:
+                  - Found org.gradle.jvm.environment 'standard-jvm' but wasn't required.
+                  - Found org.gradle.status 'release' but wasn't required.
+              - Compatible attributes:
+                  - Required org.gradle.category 'library' and found compatible value 'library'.
+                  - Required org.gradle.dependency.bundling 'external' and found compatible value 'external'.
+                  - Required org.gradle.jvm.version '8' and found compatible value '8'.
+                  - Required org.gradle.libraryelements 'jar' and found compatible value 'jar'.
+                  - Required org.gradle.usage 'java-runtime' and found compatible value 'java-runtime'.
+   > Could not resolve com.google.guava:guava:28.2-android.
+     Required by:
+         project :openapi-perf-checker > com.github.java-json-tools:json-schema-validator:2.2.14
+         project :openapi-perf-checker > com.github.java-json-tools:json-schema-validator:2.2.14 > com.github.java-json-tools:jackson-coreutils-equivalence:1.0
+         project :openapi-perf-checker > com.github.java-json-tools:json-schema-validator:2.2.14 > com.github.java-json-tools:json-schema-core:1.2.14
+      > Cannot choose between the following variants of com.google.guava:guava:32.1.3-android:
+          - androidRuntimeElements
+          - jreRuntimeElements
+        All of them match the consumer attributes:
+          - Variant 'androidRuntimeElements' capabilities com.google.collections:google-collections:32.1.3-android and com.google.guava:guava:32.1.3-android:
+              - Unmatched attributes:
+                  - Found org.gradle.jvm.environment 'android' but wasn't required.
+                  - Found org.gradle.status 'release' but wasn't required.
+              - Compatible attributes:
+                  - Required org.gradle.category 'library' and found compatible value 'library'.
+                  - Required org.gradle.dependency.bundling 'external' and found compatible value 'external'.
+                  - Required org.gradle.jvm.version '8' and found compatible value '8'.
+                  - Required org.gradle.libraryelements 'jar' and found compatible value 'jar'.
+                  - Required org.gradle.usage 'java-runtime' and found compatible value 'java-runtime'.
+          - Variant 'jreRuntimeElements' capabilities com.google.collections:google-collections:32.1.3-android and com.google.guava:guava:32.1.3-android:
+              - Unmatched attributes:
+                  - Found org.gradle.jvm.environment 'standard-jvm' but wasn't required.
+                  - Found org.gradle.status 'release' but wasn't required.
+              - Compatible attributes:
+                  - Required org.gradle.category 'library' and found compatible value 'library'.
+                  - Required org.gradle.dependency.bundling 'external' and found compatible value 'external'.
+                  - Required org.gradle.jvm.version '8' and found compatible value '8'.
+                  - Required org.gradle.libraryelements 'jar' and found compatible value 'jar'.
+                  - Required org.gradle.usage 'java-runtime' and found compatible value 'java-runtime'.
+   > Could not resolve com.google.guava:guava:28.1-android.
+     Required by:
+         project :openapi-perf-checker > com.github.java-json-tools:json-schema-validator:2.2.14 > com.github.java-json-tools:json-schema-core:1.2.14 > com.github.java-json-tools:uri-template:0.10
+      > Cannot choose between the following variants of com.google.guava:guava:32.1.3-android:
+          - androidRuntimeElements
+          - jreRuntimeElements
+        All of them match the consumer attributes:
+          - Variant 'androidRuntimeElements' capabilities com.google.collections:google-collections:32.1.3-android and com.google.guava:guava:32.1.3-android:
+              - Unmatched attributes:
+                  - Found org.gradle.jvm.environment 'android' but wasn't required.
+                  - Found org.gradle.status 'release' but wasn't required.
+              - Compatible attributes:
+                  - Required org.gradle.category 'library' and found compatible value 'library'.
+                  - Required org.gradle.dependency.bundling 'external' and found compatible value 'external'.
+                  - Required org.gradle.jvm.version '8' and found compatible value '8'.
+                  - Required org.gradle.libraryelements 'jar' and found compatible value 'jar'.
+                  - Required org.gradle.usage 'java-runtime' and found compatible value 'java-runtime'.
+          - Variant 'jreRuntimeElements' capabilities com.google.collections:google-collections:32.1.3-android and com.google.guava:guava:32.1.3-android:
+              - Unmatched attributes:
+                  - Found org.gradle.jvm.environment 'standard-jvm' but wasn't required.
+                  - Found org.gradle.status 'release' but wasn't required.
+              - Compatible attributes:
+                  - Required org.gradle.category 'library' and found compatible value 'library'.
+                  - Required org.gradle.dependency.bundling 'external' and found compatible value 'external'.
+                  - Required org.gradle.jvm.version '8' and found compatible value '8'.
+                  - Required org.gradle.libraryelements 'jar' and found compatible value 'jar'.
+                  - Required org.gradle.usage 'java-runtime' and found compatible value 'java-runtime'.
+

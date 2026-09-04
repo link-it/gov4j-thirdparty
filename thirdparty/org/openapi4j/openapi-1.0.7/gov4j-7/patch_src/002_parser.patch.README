@@ -1,0 +1,79 @@
+1. risolve la segnalazione errata in presenza del claim 'allowEmptyValue'
+     es.: paths./pet/findByStatus.get.parameters: Invalid key 'allowEmptyValue' in map 'x-.+'. (code: 107)
+
+2. risolve la problematica di nullPointer utilizzando il json Petstore: https://raw.githubusercontent.com/Mermade/openapi3-examples/master/3.0/fail/apimatic-converted-petstore.json
+  java.lang.NullPointerException
+	at deployment.govwayConsole.war//org.openapi4j.parser.validation.v3.SecurityRequirementValidator.validate(SecurityRequirementValidator.java:33)
+	at deployment.govwayConsole.war//org.openapi4j.parser.validation.v3.SecurityRequirementValidator.validate(SecurityRequirementValidator.java:18)
+	at deployment.govwayConsole.war//org.openapi4j.parser.validation.ValidationContext.validate(ValidationContext.java:17)
+	at deployment.govwayConsole.war//org.openapi4j.parser.validation.ValidatorBase.validate(ValidatorBase.java:51)
+        ...
+   Il problema avviene poichè in fondo al file, nella sezione components, viene definito un security schema vuoto:
+    "security": [
+      {}
+    ]
+
+3. risolve la problematica di validare strutture in cui viene utilizzato il discriminator, e gli oggetti sono definiti tramite strutture allOf in cui il required claim discriminator è chiaramente presente solamente in una delle allOf.
+     Ad esempio si ottiene l'errore seguente con la struttura sotto riportata:
+
+     From: components.extensions.security
+components.schemas.Pet2.properties.pet.discriminator: The discriminator 'pet_type' is not required or not a property of the allOf schemas (code: 133)
+From: components.schemas.Pet2.properties.pet.discriminator
+components.schemas.Pet3.properties.pet.discriminator: The discriminator 'pet_type' is not required or not a property of the allOf schemas (code: 133)
+From: components.schemas.Pet3.properties.pet.discriminator
+
+          pet:
+               type: object
+               oneOf:
+                 - $ref: '#/components/schemas/Dog2'
+                 - $ref: '#/components/schemas/Cat2'
+               discriminator:
+                 propertyName: pet_type
+                 mapping:
+                   'dog': '#/components/schemas/Dog2'
+                   'cat': '#/components/schemas/Cat2'
+         Dog2Base:
+           type: object
+           properties: 
+          	......
+         Dog2:
+           allOf:     
+          	- $ref: '#/components/schemas/Dog2Base'
+          	- type: object
+	       required:
+          	    - pet_type
+	       properties:
+          	    pet_type: 
+	           type: string
+          	  additionalProperties: false
+
+4. Risolve la problematica di validare valori di default di tipi primitivi (integer, number o boolena) e definiti con gli apici (es. '65' invece di 65).
+      Nel caso i valori di default venissero definiti con gli apici, il validatore segnalava il seguente errore:
+	at org.openspcoop2.utils.openapi.validator.TestOpenApi3Extended.main(TestOpenApi3Extended.java:202)
+	Caused by: org.openspcoop2.utils.rest.ProcessingException: OpenAPI3 not valid: Validation error(s) :
+	paths./pets1.patch.parameters.schema.default: Value '3147483647' is incompatible with schema type 'integer' (code: 138)
+	From: paths./pets1.patch.parameters.schema.default
+	paths./pets1.patch.parameters.schema.default: Value '1' is incompatible with schema type 'integer' (code: 138)
+	From: paths./pets1.patch.parameters.schema.default
+	paths./pets1.patch.parameters.schema.default: Value '32' is incompatible with schema type 'integer' (code: 138)
+	From: paths./pets1.patch.parameters.schema.default
+	paths./pets1.patch.parameters.schema.default: Value '3147483647' is incompatible with schema type 'integer' (code: 138)
+	From: paths./pets1.patch.parameters.schema.default
+	paths./pets1.patch.parameters.schema.default: Value '1.2' is incompatible with schema type 'number' (code: 138)
+	From: paths./pets1.patch.parameters.schema.default
+	paths./pets1.patch.parameters.schema.default: Value '2.3' is incompatible with schema type 'number' (code: 138)
+	From: paths./pets1.patch.parameters.schema.default
+	paths./pets1.patch.parameters.schema.default: Value '2.3' is incompatible with schema type 'number' (code: 138)
+	From: paths./pets1.patch.parameters.schema.default
+	paths./pets1.patch.parameters.schema.format: Format 'double' is incompatible with schema type 'boolean' (code: 137)
+	From: paths./pets1.patch.parameters.schema.format
+	paths./pets1.patch.parameters.schema.default: Value 'true' is incompatible with schema type 'boolean' (code: 138)
+	From: paths./pets1.patch.parameters.schema.default
+	paths./pets1.patch.parameters.schema.format: Format 'double' is incompatible with schema type 'boolean' (code: 137)
+	From: paths./pets1.patch.parameters.schema.format
+
+5. Rilassa il controllo in contact - email, consentendo anche i caratteri maiuscoli nella mail
+
+6. I campi definiti come uri-reference (in contact, license, info e externalDocs) vengono validati come url.
+      Non è corretto poichè nell'https://github.com/OAI/OpenAPI-Specification/blob/main/schemas/v3.0/schema.yaml è definito come format: uri-reference che permette url relative: 
+      "uri-reference": New in draft 6 A URI Reference (either a URI or a relative-reference), according to RFC3986, section 4.1.*/

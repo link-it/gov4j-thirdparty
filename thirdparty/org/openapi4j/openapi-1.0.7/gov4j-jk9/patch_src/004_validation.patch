@@ -1,0 +1,191 @@
+diff --git openapi-schema-validator/build.gradle openapi-schema-validator/build.gradle
+index 2275cb3..be803c5 100644
+--- openapi-schema-validator/build.gradle
++++ openapi-schema-validator/build.gradle
+@@ -9,6 +9,11 @@ description = "openapi4j schema data validator"
+ dependencies {
+   api(project(":openapi-core"))
+ 
++  // fix validazione caratteri \n\r\t in pattern
++  compileOnly("org.apache.commons:commons-text:1.14.0")
++
++  // fix validazione caratteri \n\r\t in pattern
++  testImplementation("org.apache.commons:commons-text:1.14.0")
+   testImplementation("junit:junit:4.13.2")
+ }
+ 
+diff --git openapi-schema-validator/src/main/java/org/openapi4j/schema/validator/v3/FormatValidator.java openapi-schema-validator/src/main/java/org/openapi4j/schema/validator/v3/FormatValidator.java
+index cfe35a0..a912d1d 100644
+--- openapi-schema-validator/src/main/java/org/openapi4j/schema/validator/v3/FormatValidator.java
++++ openapi-schema-validator/src/main/java/org/openapi4j/schema/validator/v3/FormatValidator.java
+@@ -70,6 +70,10 @@ class FormatValidator extends BaseJsonValidator<OAI3> {
+         validated = !valueNode.isTextual() || BASE64_PATTERN.matcher(valueNode.textValue()).matches();
+         break;
+       case FORMAT_BINARY:
++	// https://swagger.io/docs/specification/describing-responses/#response-that-returns-a-file
++	// https://swagger.io/docs/specification/describing-request-body/file-upload/
++	validated = true;
++	break;
+       case FORMAT_PASSWORD:
+         validated = valueNode.isTextual();
+         break;
+diff --git openapi-schema-validator/src/main/java/org/openapi4j/schema/validator/v3/PatternValidator.java openapi-schema-validator/src/main/java/org/openapi4j/schema/validator/v3/PatternValidator.java
+index 9a3efa2..8f355cd 100644
+--- openapi-schema-validator/src/main/java/org/openapi4j/schema/validator/v3/PatternValidator.java
++++ openapi-schema-validator/src/main/java/org/openapi4j/schema/validator/v3/PatternValidator.java
+@@ -47,9 +47,12 @@ class PatternValidator extends BaseJsonValidator<OAI3> {
+     }
+ 
+     String value = valueNode.textValue();
+-    Matcher m = pattern.matcher(value);
++    // Fix problema di validazione superata in presenza di valori che contengono \r\n\t.
++    // i caratteri, se non codificati in java con lo '\' vengono ignorati dal validatore java.
++    String escapeJavaValue = org.apache.commons.text.StringEscapeUtils.escapeJava(value);
++    Matcher m = pattern.matcher(escapeJavaValue);
+     if (!m.find()) {
+-      validation.add(CRUMB_INFO, ERR, value, patternStr);
++      validation.add(CRUMB_INFO, ERR, escapeJavaValue, patternStr);
+     }
+ 
+     return false;
+diff --git openapi-schema-validator/src/main/java/org/openapi4j/schema/validator/v3/TypeValidator.java openapi-schema-validator/src/main/java/org/openapi4j/schema/validator/v3/TypeValidator.java
+index 477bb9e..fc96bd3 100644
+--- openapi-schema-validator/src/main/java/org/openapi4j/schema/validator/v3/TypeValidator.java
++++ openapi-schema-validator/src/main/java/org/openapi4j/schema/validator/v3/TypeValidator.java
+@@ -1,6 +1,8 @@
+ package org.openapi4j.schema.validator.v3;
+ 
+ import com.fasterxml.jackson.databind.JsonNode;
++import com.fasterxml.jackson.databind.node.TextNode;
++import com.fasterxml.jackson.databind.node.ObjectNode;
+ import org.openapi4j.core.model.v3.OAI3;
+ import org.openapi4j.core.validation.ValidationResult;
+ import org.openapi4j.core.validation.ValidationResults;
+@@ -28,14 +30,33 @@ class TypeValidator extends BaseJsonValidator<OAI3> {
+ 
+   private final String type;
+ 
++  private boolean discriminator;
++  private String format;
++  private boolean binary;
++
+   TypeValidator(final ValidationContext<OAI3> context, final JsonNode schemaNode, final JsonNode schemaParentNode, final SchemaValidator parentSchema) {
+     super(context, schemaNode, schemaParentNode, parentSchema);
+ 
+     type = schemaNode.textValue();
++
++    if(schemaParentNode!=null && schemaParentNode instanceof ObjectNode) {
++        ObjectNode o = (ObjectNode) schemaParentNode;
++	discriminator = o!=null && o.get("discriminator")!=null;
++	if(o!=null){
++		JsonNode fO = o.get("format");
++		if(fO!=null && fO instanceof TextNode){
++			TextNode text = (TextNode) fO;
++			format = text.textValue();
++		}
++	}
++	binary = "binary".equals(format);
++    }
++
+   }
+ 
+   @Override
+   public boolean validate(final JsonNode valueNode, final ValidationData<?> validation) {
++
+     String valueType = getTypeFromValue(valueNode);
+     if (!valueType.equals(type)) {
+       if (TYPE_NUMBER.equals(type) && TYPE_INTEGER.equals(valueType)) {
+@@ -45,7 +66,18 @@ class TypeValidator extends BaseJsonValidator<OAI3> {
+       }
+ 
+       if (!TYPE_NULL.equals(valueType)) {
+-        validation.add(CRUMB_INFO, ERR, type, valueType);
++	// discriminator e' un object
++	if(this.discriminator && valueType.equals("object")){
++		// ok	
++	}
++	else if(binary){
++		// ok
++		// https://swagger.io/docs/specification/describing-responses/#response-that-returns-a-file
++		// https://swagger.io/docs/specification/describing-request-body/file-upload/
++	}
++	else{
++		validation.add(CRUMB_INFO, ERR, type, valueType);
++	}
+       }
+     }
+ 
+diff --git openapi-schema-validator/src/test/resources/schema/format.json openapi-schema-validator/src/test/resources/schema/format.json
+index 9ef01fa..f658e07 100644
+--- openapi-schema-validator/src/test/resources/schema/format.json
++++ openapi-schema-validator/src/test/resources/schema/format.json
+@@ -139,9 +139,9 @@
+         "valid": true
+       },
+       {
+-        "description": "an invalid binary",
++        "description": "an invalid binary (impostato valid a true per fix: https://swagger.io/docs/specification/describing-responses/#response-that-returns-a-file)",
+         "data": 101010101010101,
+-        "valid": false
++        "valid": true
+       }
+     ]
+   },
+diff --git openapi-schema-validator/src/main/java/org/openapi4j/schema/validator/v3/RequiredValidator.java openapi-schema-validator/src/main/java/org/openapi4j/schema/validator/v3/RequiredValidator.java
+index da8a760..96cb8e1 100644
+--- openapi-schema-validator/src/main/java/org/openapi4j/schema/validator/v3/RequiredValidator.java
++++ openapi-schema-validator/src/main/java/org/openapi4j/schema/validator/v3/RequiredValidator.java
+@@ -28,9 +28,13 @@ class RequiredValidator extends BaseJsonValidator<OAI3> {
+ 
+   private final List<String> fieldNames;
+ 
++  private JsonNode schemaParentNode;
++  
+   RequiredValidator(final ValidationContext<OAI3> context, final JsonNode schemaNode, final JsonNode schemaParentNode, final SchemaValidator parentSchema) {
+     super(context, schemaNode, schemaParentNode, parentSchema);
+ 
++    this.schemaParentNode = schemaParentNode;
++    
+     if (schemaNode.isArray()) {
+       fieldNames = new ArrayList<>();
+ 
+@@ -46,6 +50,39 @@ class RequiredValidator extends BaseJsonValidator<OAI3> {
+   public boolean validate(final JsonNode valueNode, final ValidationData<?> validation) {
+     if (fieldNames == null) return false;
+ 
++    // System.out.println("SCHEMANODE("+this.schemaNode+") ("+this.schemaParentNode+") '"+this.schemaParentNode.isObject()+"' VALUENODE("+valueNode+")");
++    try {
++	    if(fieldNames.size()>0) {
++	    	if(valueNode!=null && valueNode.isNull() && valueNode.size()<=0 ) {
++	    		if(this.schemaParentNode!=null && this.schemaParentNode.isObject()) {
++	      		  JsonNode type = this.schemaParentNode.get("type");
++	      		  //System.out.println("TYPE: '"+type+"' text("+type.isTextual()+")");
++	      		  if(type!=null && type.isTextual()) {
++	      			  String typeS = type.asText();
++	      			  if("object".equalsIgnoreCase(typeS)) {
++	      				  JsonNode nullable = this.schemaParentNode.get("nullable");
++	      				  if(nullable!=null) {
++	      					  //System.out.println("nullable: '"+nullable+"' text("+nullable.isTextual()+") boolean("+nullable.isBoolean()+")");
++	      					  if(nullable.isTextual()) {
++	      						  String nullableS = nullable.asText();
++	      						  if("true".equals(nullableS)) {
++	      							  return false;
++	      						  }
++	      					  }
++	      					  else if(nullable.isBoolean()) {
++	      						  boolean nullableB = nullable.asBoolean();
++	      						  if(nullableB) {
++	      							  return false;
++	      						  }
++	      					  }
++	      				  }
++	      			  }
++	      		  }
++	      	  }
++	    	}
++	    }
++    }catch(Throwable t) {}
++    
+     for (String fieldName : fieldNames) {
+       if (null == valueNode.get(fieldName)) {
+         validation.add(CRUMB_INFO, ERR, fieldName);

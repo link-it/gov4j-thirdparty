@@ -1,0 +1,297 @@
+--- openapi-core/src/main/java/org/openapi4j/core/model/v3/OAI3SchemaKeywords.java
++++ openapi-core/src/main/java/org/openapi4j/core/model/v3/OAI3SchemaKeywords.java
+@@ -52,6 +52,7 @@
+   public static final String FORMAT_DOUBLE = "double";
+   public static final String FORMAT_BYTE = "byte";
+   public static final String FORMAT_BINARY = "binary";
++  public static final String FORMAT_BASE64 = "base64";
+   public static final String FORMAT_PASSWORD = "password";
+   public static final String FORMAT_DATE = "date";
+   public static final String FORMAT_DATE_TIME = "date-time";
+--- openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/util/convert/MultipartConverter.java
++++ openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/util/convert/MultipartConverter.java
+@@ -46,21 +46,161 @@
+ 
+     ObjectNode result = JsonNodeFactory.instance.objectNode();
+ 
++    boolean multipartOptimization = (mediaType!=null && context!=null) ? context.isMultipartOptimization() : false;
++    //System.out.println("multipartOptimization["+multipartOptimization+"]");
++
++    java.util.List<String> notBinaries = new java.util.ArrayList();
++    java.util.List<String> binaries = null;
++    java.util.List<String> base64 = null;
++    if(multipartOptimization){
++        //System.out.println("ANALIZZO '"+mediaType.getSchema().getClass().getName()+"' CONTEXT["+context.getClass().getName()+"]");
++        Map<String, Schema> map = mediaType.getSchema()!=null ? mediaType.getSchema().getProperties() : null;
++        if(map!=null && !map.isEmpty()){
++            binaries = new java.util.ArrayList();
++            base64 = new java.util.ArrayList();
++            for(String name: map.keySet()){
++                //System.out.println("p["+name+"]");
++                Schema propSchema = mediaType.getSchema().getProperty(name);
++                if(propSchema!=null){
++                    Schema flatSchema = propSchema.getFlatSchema(context);
++                    if(flatSchema!=null){
++                        if(org.openapi4j.core.model.v3.OAI3SchemaKeywords.TYPE_ARRAY.equals(flatSchema.getSupposedType(context))){
++                            Schema arraySchema=flatSchema.getItemsSchema();
++                            if(arraySchema!=null){
++                                flatSchema = arraySchema.getFlatSchema(context);
++                            }
++                        }
++                    }
++                    if(flatSchema!=null){
++                        if(org.openapi4j.core.model.v3.OAI3SchemaKeywords.FORMAT_BINARY.equals(flatSchema.getFormat())){
++                            binaries.add(name);
++                            continue;
++                        }
++                        else if(org.openapi4j.core.model.v3.OAI3SchemaKeywords.FORMAT_BASE64.equals(flatSchema.getFormat())){
++                            base64.add(name);
++                            continue;
++                        }
++                    }
++                }
++                notBinaries.add(name);
++            }
++        }
++    }
++    else{
++        notBinaries.add("OptimizationDisabled");
++    }
++
++    //System.out.println("BASE64["+base64+"]");
++    //System.out.println("BINARY["+binaries+"]");
++    //System.out.println("NOT_BINARY["+notBinaries+"]");
++
++
+     try {
++      int unknown = 1;
+       FileItemIterator iterator = new FileUpload().getItemIterator(requestContext);
+-      while (iterator.hasNext()) {
++      while (!notBinaries.isEmpty() && iterator.hasNext()) {
+         FileItemStream item = iterator.next();
+         String name = item.getFieldName();
+ 
+-        if (item.isFormField()) {
++        // Fix: attachments che non presentano nel valore dell'header Content-Disposition il 'filename' rientrano in questo if, altrimenti vanno nell'else
++        //      però se per un bug del client, si entra in questo if si manda in crisi tutto poichè si cerca di costruire un json node da un pdf.
++        //      il sistema va in sovraccarico (es. eclipse muore)
++
++        String fileName = item.getName();
++        boolean isBin = fileName!=null;
++        Schema propSchema = null;
++        Schema flatSchema = null;
++        if (name!=null){
++            propSchema = mediaType.getSchema().getProperty(name);
++            if(propSchema!=null){
++                flatSchema = propSchema.getFlatSchema(context);
++		if(flatSchema!=null){
++			if(org.openapi4j.core.model.v3.OAI3SchemaKeywords.TYPE_ARRAY.equals(flatSchema.getSupposedType(context))){
++				Schema arraySchema=flatSchema.getItemsSchema();
++				if(arraySchema!=null){
++					 flatSchema = arraySchema.getFlatSchema(context);
++				}
++			}
++                }
++                if(flatSchema!=null){
++                    if(org.openapi4j.core.model.v3.OAI3SchemaKeywords.FORMAT_BASE64.equals(flatSchema.getFormat()) ||
++			org.openapi4j.core.model.v3.OAI3SchemaKeywords.FORMAT_BINARY.equals(flatSchema.getFormat())){
++                       isBin=true;
++                    }
++		    else{
++                       isBin=false;
++		    }
++                }
++            }
++        }
++
++        //if (name!=null && item.isFormField()) {
++        // isFormField si basa sulla presenza del parametro filename
++        if (name!=null && !isBin ) {
++
+           JsonNode convertedValue = mapValue(context, result, mediaType, item, name, encoding);
+           if (convertedValue != null) {
+             addValue(result, name, convertedValue);
+           }
+         } else { // Add file name only
+-          addValue(result, name, JsonNodeFactory.instance.textNode(item.getName()));
++          
++           if(name==null){
++		// Fix: parametro senza nome non rilevato
++		name= "_unnamedParameter"+unknown;
++		unknown++;
++		
++           }
++
++	   // Fix: fileName è opzionale
++	   String content = fileName;
++	   if(fileName==null){
++		content=name;
++	   }  
++
++	   // Fix: per poter utilizzare il validatore base64 in org.openapi4j.schema.validator.v3.FormatValidator
++           if(flatSchema!=null && content!=null){
++                 if(org.openapi4j.core.model.v3.OAI3SchemaKeywords.FORMAT_BASE64.equals(flatSchema.getFormat())){
++		    content = org.apache.commons.codec.binary.Base64.encodeBase64String(content.getBytes());
++		 }
++           }
++
++           addValue(result, name, JsonNodeFactory.instance.textNode(content));
+         }
++
++        if(multipartOptimization){
++            if(notBinaries.contains(name)){
++                notBinaries.remove(name);
++            } else if(binaries.contains(name)){
++                binaries.remove(name);
++            } else if(base64.contains(name)){
++                base64.remove(name);
++            }
++
++            //System.out.println("Dopo aver analizzato '"+name+"':");
++            //System.out.println("   BASE64["+base64+"]");
++            //System.out.println("   BINARY["+binaries+"]");
++            //System.out.println("   NOT_BINARY["+notBinaries+"]");
++        }
++
+       }
++
++    if(multipartOptimization){
++        //System.out.println("GESTIONE FINALE");
++        if(!binaries.isEmpty()){
++            for(String n: binaries){
++                //System.out.println("ADD BIN '"+n+"'");
++                addValue(result, n, JsonNodeFactory.instance.textNode(n));
++            }
++        }
++        if(!base64.isEmpty()){
++            for(String n: base64){
++                String content = org.apache.commons.codec.binary.Base64.encodeBase64String(n.getBytes());
++                //System.out.println("ADD BASE64 '"+n+"': "+content);
++                addValue(result, n, JsonNodeFactory.instance.textNode(content));
++            }
++        }
++    }
++
+     } catch (FileUploadException ex) {
+       throw new IOException(ex);
+     }
+@@ -105,6 +245,11 @@
+     String itemContentType = item.getContentType();
+     String specContentType = (encProperty != null && encProperty.getContentType() != null) ? encProperty.getContentType() : null;
+ 
++    // fix null pointer
++    if(propSchema==null){
++       return -1;
++    }
++
+     // Check given content type against spec content type
+     if (specContentType != null && !itemContentType.equals(specContentType)) {
+       return -1;
+@@ -141,14 +286,40 @@
+       return TypeConverter.instance().convertPrimitive(context, null, IOUtil.toString(item.openStream(), encoding));
+     }
+ 
+-    switch (schema.getSupposedType(context)) {
++    String supposedType = schema.getSupposedType(context);
++    if(supposedType==null){
++        return TypeConverter.instance().convertPrimitive(context, schema, IOUtil.toString(item.openStream(), encoding));
++    }
++
++    switch (supposedType) {
+       case TYPE_OBJECT:
+         Map<String, Object> jsonContent = TreeUtil.json.readValue(item.openStream(), MAP_TYPE);
+-        return TypeConverter.instance().convertObject(context, schema, jsonContent);
++        // FIX!
++        //return TypeConverter.instance().convertObject(context, schema, jsonContent);
++        try{
++           return org.openapi4j.core.util.TreeUtil.toJsonNode(jsonContent);
++        }catch(Exception e){
++           throw new IOException(e.getMessage(),e);
++        }
+       case TYPE_ARRAY:
+         // Special case for arrays
+         // They can be referenced multiple times in different ways
+-        JsonNode convertedValue = convertToJsonNode(context, result, name, schema.getItemsSchema(), item, encoding);
++
++        Schema schemaItems = null;
++        Schema flatSchema = schema.getFlatSchema(context);
++        if(flatSchema!=null){
++             schemaItems = flatSchema.getItemsSchema();
++        }else{
++             schemaItems = schema.getItemsSchema();
++        }
++        if(schemaItems!=null){
++            flatSchema = schemaItems.getFlatSchema(context);
++            if(flatSchema!=null){
++                schemaItems = flatSchema;
++            }
++        }
++
++        JsonNode convertedValue = convertToJsonNode(context, result, name, schemaItems, item, encoding);
+         JsonNode previousValue = result.get(name);
+         if ((previousValue instanceof ArrayNode)) {
+           ((ArrayNode) previousValue).add(convertedValue);
+--- openapi-operation-validator/build.gradle
++++ openapi-operation-validator/build.gradle
+@@ -9,6 +9,7 @@
+ dependencies {
+   api(project(":openapi-parser"))
+   api(project(":openapi-schema-validator"))
++  api("commons-codec:commons-codec:1.14")
+ 
+   // ---------------- Optional data adapters ----------------
+   // xml
+--- openapi-schema-validator/src/main/java/org/openapi4j/schema/validator/v3/FormatValidator.java
++++ openapi-schema-validator/src/main/java/org/openapi4j/schema/validator/v3/FormatValidator.java
+@@ -74,6 +74,16 @@
+ 	// https://swagger.io/docs/specification/describing-request-body/file-upload/
+ 	validated = true;
+ 	break;
++      case FORMAT_BASE64:
++	// https://swagger.io/docs/specification/describing-responses/#response-that-returns-a-file
++	// https://swagger.io/docs/specification/describing-request-body/file-upload/
++        if(ValidationOptions.VALIDATE_BASE64_VALUES){
++           validated = !valueNode.isTextual() || BASE64_PATTERN.matcher(valueNode.textValue()).matches();
++        }
++        else{
++           validated = true;
++        }
++	break;
+       case FORMAT_PASSWORD:
+         validated = valueNode.isTextual();
+         break;
+--- openapi-schema-validator/src/main/java/org/openapi4j/schema/validator/v3/ValidationOptions.java
++++ openapi-schema-validator/src/main/java/org/openapi4j/schema/validator/v3/ValidationOptions.java
+@@ -12,4 +12,6 @@
+    * Setting this to {@code true} invert the behaviour.
+    */
+   public static final byte ADDITIONAL_PROPS_RESTRICT = 1;
++
++  public static boolean VALIDATE_BASE64_VALUES = false;
+ }
+--- openapi-core/src/main/java/org/openapi4j/core/model/OAIContext.java
++++ openapi-core/src/main/java/org/openapi4j/core/model/OAIContext.java
+@@ -23,4 +23,7 @@
+    * Get the base document of API description.
+    */
+   JsonNode getBaseDocument();
++
++  public boolean isMultipartOptimization();
++  public void setMultipartOptimization(boolean v);
+ }
+--- openapi-core/src/main/java/org/openapi4j/core/model/v3/OAI3Context.java
++++ openapi-core/src/main/java/org/openapi4j/core/model/v3/OAI3Context.java
+@@ -167,4 +167,13 @@
+ 
+     return resolver.getBaseDocument();
+   }
++
++  private boolean multipartOptimization = false;
++  public boolean isMultipartOptimization(){
++     return this.multipartOptimization;
++  }
++  public void setMultipartOptimization(boolean v){
++    this.multipartOptimization = v;
++  }
++
+ }

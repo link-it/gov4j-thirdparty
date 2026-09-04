@@ -1,0 +1,18 @@
+Risolti i seguenti errori:
+
+  1. errore che avveniva durante la validazione dei messaggi definiti tramite discriminator nonostante la validazione venisse fatta correttamente.
+     body.allegati.documento: Type expected 'string', found 'object'. (code: 1027)
+
+  2. errore che avveniva quando la richiesta o la risposta era definita tramite format 'binary'
+     https://swagger.io/docs/specification/describing-responses/#response-that-returns-a-file
+     https://swagger.io/docs/specification/describing-request-body/file-upload/ 
+     L'errore che si otteneva era:
+       Validation error(s) :\nbody: Value '' does not match format 'binary'. (code: 1007)\nFrom: body.<format>\nbody: Type expected 'string', found 'object'. (code: 1027)
+
+  3. risolto problema di validazione errata non rilevata, in presenza di oggetti definiti come stringhe con associato un pattern (es. '^\d{6}$'), in cui nell'oggetti veicolato sono presenti caratteri speciali come \r\n o \n o \t.
+     I caratteri speciali, se non codificati (escape) in java con lo '\', vengono ignorati dal parser java.
+
+  4. risolto problema di validazione errata che veniva segnalata su oggetti serializzati con null, nonostante fossero stati definiti con nullable: true
+     L'errore che si otteneva era che veniva segnalata la mancanza degli elementi obbligatori definiti per l'oggetto.
+
+Si è intervenuti solamente nel modulo 'openapi-schema-validator'

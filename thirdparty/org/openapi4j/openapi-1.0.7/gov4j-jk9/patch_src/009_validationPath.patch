@@ -1,0 +1,167 @@
+diff --git openapi-operation-validator/build.gradle openapi-operation-validator/build.gradle
+index d086f17..58a2ff6 100644
+--- openapi-operation-validator/build.gradle
++++ openapi-operation-validator/build.gradle
+@@ -17,6 +18,9 @@ dependencies {
+   compileOnly("commons-fileupload:commons-fileupload:1.4")
+   // -------------- END Optional data adapters --------------
+ 
++  // uridecode
++  api("org.springframework:spring-web:5.3.20")
++
+   testImplementation("junit:junit:4.13.2")
+   testImplementation("org.json:json:20190722")
+   testImplementation("commons-fileupload:commons-fileupload:1.4")
+diff --git openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/model/impl/DefaultRequest.java openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/model/impl/DefaultRequest.java
+index ec97654..bc6da75 100644
+--- openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/model/impl/DefaultRequest.java
++++ openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/model/impl/DefaultRequest.java
+@@ -15,6 +15,7 @@ public class DefaultRequest implements Request {
+   private final String url;
+   private final Method method;
+   private final String path;
++  private final String rawPath;
+   private final Map<String, String> cookies;
+   private final Map<String, Collection<String>> headers;
+   private final String query;
+@@ -34,6 +35,7 @@ public class DefaultRequest implements Request {
+     this.query = query;
+     this.body = body;
+     this.path = URI.create(url).getPath();
++    this.rawPath = URI.create(url).getRawPath();
+   }
+ 
+   @Override
+@@ -46,6 +48,10 @@ public class DefaultRequest implements Request {
+     return path;
+   }
+ 
++  public String getRawPath() {
++    return rawPath;
++  }
++
+   @Override
+   public Method getMethod() {
+     return method;
+diff --git openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/util/convert/ParameterConverter.java openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/util/convert/ParameterConverter.java
+index c9f6647..d3e9e87 100644
+--- openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/util/convert/ParameterConverter.java
++++ openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/util/convert/ParameterConverter.java
+@@ -113,18 +113,21 @@ public final class ParameterConverter {
+       String paramGroupName = PathResolver.instance().getParamGroupName(paramName);
+       final JsonNode convertedValue;
+ 
++      String paramGroupNameValue = matcher.group(paramGroupName);     
++      String paramGroupNameValueDecoded = org.springframework.web.util.UriUtils.decode(paramGroupNameValue, "UTF-8");
++
+       if (param.getSchema() != null) {
+         final String style = param.getStyle();
+ 
+         if (LABEL.equals(style)) {
+-          convertedValue = LabelStyleConverter.instance().convert(context, param, paramName, matcher.group(paramGroupName));
++          convertedValue = LabelStyleConverter.instance().convert(context, param, paramName, paramGroupNameValueDecoded);
+         } else if (MATRIX.equals(style)) {
+-          convertedValue = MatrixStyleConverter.instance().convert(context, param, paramName, matcher.group(paramGroupName));
++          convertedValue = MatrixStyleConverter.instance().convert(context, param, paramName, paramGroupNameValueDecoded);
+         } else { // simple is the default
+-          convertedValue = SimpleStyleConverter.instance().convert(context, param, paramName, matcher.group(paramGroupName));
++          convertedValue = SimpleStyleConverter.instance().convert(context, param, paramName, paramGroupNameValueDecoded);
+         }
+       } else {
+-        convertedValue = getValueFromContentType(context, param.getContentMediaTypes(), matcher.group(paramGroupName));
++        convertedValue = getValueFromContentType(context, param.getContentMediaTypes(), paramGroupNameValueDecoded);
+       }
+ 
+       mappedValues.put(paramName, convertedValue);
+diff --git openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/validation/OperationValidator.java openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/validation/OperationValidator.java
+index 4acc21b..637c1c6 100644
+--- openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/validation/OperationValidator.java
++++ openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/validation/OperationValidator.java
+@@ -147,13 +147,65 @@ public class OperationValidator {
+    */
+   public Map<String, JsonNode> validatePath(final Request request, final ValidationData<?> validation) {
+     // Check paths are matching before trying to map values
+-    Pattern pathPattern = PathResolver.instance().findPathPattern(pathPatterns, request.getPath());
++
++    String rawPath = request.getPath();
++    if(request instanceof org.openapi4j.operation.validator.model.impl.DefaultRequest){
++       org.openapi4j.operation.validator.model.impl.DefaultRequest dr = (org.openapi4j.operation.validator.model.impl.DefaultRequest) request;
++       if(dr.getRawPath()!=null){
++         rawPath = dr.getRawPath();
++       }
++    }
++
++    Pattern pathPattern = PathResolver.instance().findPathPattern(pathPatterns, rawPath);
+     if (pathPattern == null) {
+-      validation.add(CRUMB_PATH, PATH_NOT_FOUND_ERR, templatePath, request.getPath());
+-      return null;
++
++      String rawPathSenzaSlash = rawPath;
++      if(rawPathSenzaSlash!=null){
++         if(rawPathSenzaSlash.length()>1 && rawPathSenzaSlash.startsWith("/")){
++           rawPathSenzaSlash = rawPathSenzaSlash.substring(1,rawPathSenzaSlash.length());
++         }
++         if(rawPathSenzaSlash.length()>1 && rawPathSenzaSlash.endsWith("/")){
++           rawPathSenzaSlash = rawPathSenzaSlash.substring(0,(rawPathSenzaSlash.length()-1));
++         }
++      }
++
++      // caso xxx
++      pathPattern = PathResolver.instance().findPathPattern(pathPatterns, rawPathSenzaSlash);
++      if(pathPattern!=null){
++        rawPath=rawPathSenzaSlash;
++      }
++
++      // caso /xxx/
++      if(pathPattern == null){
++        pathPattern = PathResolver.instance().findPathPattern(pathPatterns, "/"+rawPathSenzaSlash+"/");
++        if(pathPattern!=null){
++          rawPath="/"+rawPathSenzaSlash+"/";
++        }
++      }
++
++      // caso xxx/
++      if(pathPattern == null){
++        pathPattern = PathResolver.instance().findPathPattern(pathPatterns, rawPathSenzaSlash+"/");
++        if(pathPattern!=null){
++          rawPath=rawPathSenzaSlash+"/";
++        }
++      }
++
++      // caso /xxx
++      if(pathPattern == null){
++        pathPattern = PathResolver.instance().findPathPattern(pathPatterns, "/"+rawPathSenzaSlash);
++        if(pathPattern!=null){
++          rawPath="/"+rawPathSenzaSlash;
++        }
++      }
++
++      if (pathPattern == null) {
++        validation.add(CRUMB_PATH, PATH_NOT_FOUND_ERR, templatePath, rawPath);
++        return null;
++      }
+     }
+ 
+-    return validatePath(request, pathPattern, validation);
++    return validatePath(request, pathPattern, validation, rawPath);
+   }
+ 
+   /**
+@@ -164,13 +216,16 @@ public class OperationValidator {
+    * @return The mapped parameters with their values.
+    */
+   Map<String, JsonNode> validatePath(final Request request, Pattern pathPattern, final ValidationData<?> validation) {
++    return validatePath(request, pathPattern, validation, null);
++  }
++  Map<String, JsonNode> validatePath(final Request request, Pattern pathPattern, final ValidationData<?> validation, String rawPath) {
+     if (specRequestPathValidator == null) return null;
+ 
+     Map<String, JsonNode> mappedValues = ParameterConverter.pathToNode(
+       context.getContext(),
+       specRequestPathValidator.getParameters(),
+       pathPattern,
+-      request.getPath());
++      rawPath!=null ? rawPath : request.getPath());
+ 
+     specRequestPathValidator.validate(mappedValues, validation);
+ 

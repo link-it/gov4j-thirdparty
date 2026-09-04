@@ -1,0 +1,117 @@
+diff --git openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/util/convert/style/FormStyleConverter.java openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/util/convert/style/FormStyleConverter.java
+index e29475f..ac5412c 100644
+--- openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/util/convert/style/FormStyleConverter.java
++++ openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/util/convert/style/FormStyleConverter.java
+@@ -39,11 +39,23 @@ public class FormStyleConverter {
+ 
+     param.setSchema(param.getSchema().getFlatSchema(context));
+     String type = param.getSchema().getSupposedType(context);
++    List<Schema> lAnyOfSchemas = param.getSchema().getAnyOfSchemas();
++    List<Schema> lOneOfSchemas = param.getSchema().getOneOfSchemas();
++    List<Schema> lAllOfSchemas = param.getSchema().getAllOfSchemas();
+     if (TYPE_ARRAY.equals(type)) {
+       result = getArrayValues(context, param, paramPairs.get(paramName));
+       visitedParams.add(paramName);
+     } else if (TYPE_OBJECT.equals(type)) {
+       result = getObjectValues(context, param, paramName, paramPairs, visitedParams);
++    } else if (lAnyOfSchemas!=null && lAnyOfSchemas.size() >0) {
++      result = getPrimitiveOfValue(context, param, paramPairs.get(paramName),lAnyOfSchemas);
++      visitedParams.add(paramName);
++    } else if (lOneOfSchemas!=null && lOneOfSchemas.size() >0) {
++      result = getPrimitiveOfValue(context, param, paramPairs.get(paramName),lOneOfSchemas);
++      visitedParams.add(paramName);
++    } else if (lAllOfSchemas!=null && lAllOfSchemas.size() >0) {
++      result = getPrimitiveOfValue(context, param, paramPairs.get(paramName),lAllOfSchemas);
++      visitedParams.add(paramName);
+     } else {
+       result = getPrimitiveValue(context, param, paramPairs.get(paramName));
+       visitedParams.add(paramName);
+@@ -137,6 +149,22 @@ public class FormStyleConverter {
+       param.getSchema(),
+       getParamValue(paramValues));
+   }
++  private JsonNode getPrimitiveOfValue(OAIContext context, AbsParameter<?> param, Collection<String> paramValues, List<Schema> lOfSchemas) {
++    if (paramValues == null) {
++      return null;
++    }
++
++    for(Schema schema: lOfSchemas){
++      JsonNode n = TypeConverter.instance().convertPrimitive(
++        context,
++        schema,
++        getParamValue(paramValues));
++      if(n!=null){
++         return n; // converto con il primo tipo che trovo. Si supportano strutture solamente con tipi uguali
++      }
++    }
++    return null;
++  }
+ 
+   private String getParamValue(Collection<String> paramValues) {
+     if (paramValues == null) {
+diff --git openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/util/convert/style/StyleConverter.java openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/util/convert/style/StyleConverter.java
+index c118ef4..5618ac3 100644
+--- openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/util/convert/style/StyleConverter.java
++++ openapi-operation-validator/src/main/java/org/openapi4j/operation/validator/util/convert/style/StyleConverter.java
+@@ -8,6 +8,7 @@ import org.openapi4j.parser.model.v3.AbsParameter;
+ import org.openapi4j.parser.model.v3.Schema;
+ 
+ import java.util.Collection;
++import java.util.List;
+ import java.util.Map;
+ 
+ import static org.openapi4j.core.model.v3.OAI3SchemaKeywords.TYPE_ARRAY;
+@@ -25,6 +26,10 @@ interface StyleConverter {
+     String style = param.getSchema().getSupposedType(context);
+     Schema schema = param.getSchema().getFlatSchema(context);
+ 
++    List<Schema> lAnyOfSchemas = param.getSchema().getAnyOfSchemas();
++    List<Schema> lOneOfSchemas = param.getSchema().getOneOfSchemas();
++    List<Schema> lAllOfSchemas = param.getSchema().getAllOfSchemas();
++
+     if (TYPE_OBJECT.equals(style)) {
+       return TypeConverter.instance().convertObject(context, schema, paramValues);
+     } else if (TYPE_ARRAY.equals(style)) {
+@@ -32,6 +37,42 @@ interface StyleConverter {
+       return (value instanceof Collection)
+         ? TypeConverter.instance().convertArray(context, schema.getItemsSchema(), (Collection<Object>) value)
+         : JsonNodeFactory.instance.nullNode();
++    } else if (lAnyOfSchemas!=null && lAnyOfSchemas.size() >0) {
++      for(Schema schemaAnyOf: lAnyOfSchemas){
++        JsonNode n = TypeConverter.instance().convertPrimitive(
++          context,
++          schemaAnyOf,
++          paramValues.get(paramName));
++        if(n!=null){
++          // converto con il primo tipo che trovo. Si supportano strutture solamente con tipi uguali
++          return n;
++        }
++      }
++      return null;
++    } else if (lOneOfSchemas!=null && lOneOfSchemas.size() >0) {
++      for(Schema schemaOneOf: lOneOfSchemas){
++        JsonNode n = TypeConverter.instance().convertPrimitive(
++          context,
++          schemaOneOf,
++          paramValues.get(paramName));
++        if(n!=null){
++          // converto con il primo tipo che trovo. Si supportano strutture solamente con tipi uguali
++          return n;
++        }
++      }
++      return null;
++    } else if (lAllOfSchemas!=null && lAllOfSchemas.size() >0) {
++      for(Schema schemaAllOf: lAllOfSchemas){
++        JsonNode n = TypeConverter.instance().convertPrimitive(
++          context,
++          schemaAllOf,
++          paramValues.get(paramName));
++        if(n!=null){
++          // converto con il primo tipo che trovo. Si supportano strutture solamente con tipi uguali
++          return n;
++        }
++      }
++      return null;
+     } else {
+       return TypeConverter.instance().convertPrimitive(context, schema, paramValues.get(paramName));
+     }

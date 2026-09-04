@@ -1,0 +1,5 @@
+- follow the instructions in patch_src/README.compile
+- then run buildArtifact.sh to assemble the artifacts
+- to rebuild the artifacts, go into the openapi-* directories and run 'mvn clean package'
+- to publish them on Maven Central run 'mvn clean deploy' instead: this is restricted to
+  Link.it maintainers, as it requires the GPG signing key and the Maven Central token
