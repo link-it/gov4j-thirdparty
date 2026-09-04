@@ -71,8 +71,8 @@ Use **`mvn clean package`**, not `mvn clean deploy`. The POMs in this repository
 ones used to publish the artifacts, so they include GPG signing (`maven-gpg-plugin`) and
 Maven Central publication (`central-publishing-maven-plugin`). Those plugins concern
 maintainers only: `deploy` would attempt to sign with Link.it's key and publish under the
-`org.gov4j` namespace. Some `README.build` files say `mvn clean deploy` because they are
-written from the maintainer's point of view — read `package` instead.
+`org.gov4j` namespace, and will fail without both. The `README.build` file of each mirror
+states which of the two commands applies to whom.
 
 Plugin versions differ from one mirror to another on purpose: each `pom.xml` records the
 toolchain that artifact was actually built with, not the current one.

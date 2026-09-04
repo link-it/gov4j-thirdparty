@@ -1,3 +1,5 @@
-- seguire le istruzioni presenti in patch_src/README.compile
-- per predisporre gli artefatti al deploy eseguire poi buildArtifact.sh
-- per effettuare il deploy andare in ogni directory cxf-* ed eseguire il comando 'mvn clean deploy'
+- follow the instructions in patch_src/README.compile
+- then run buildArtifact.sh to assemble the artifacts
+- to rebuild the artifacts, go into each cxf-* directory and run 'mvn clean package'
+- to publish them on Maven Central run 'mvn clean deploy' instead: this is restricted to
+  Link.it maintainers, as it requires the GPG signing key and the Maven Central token
