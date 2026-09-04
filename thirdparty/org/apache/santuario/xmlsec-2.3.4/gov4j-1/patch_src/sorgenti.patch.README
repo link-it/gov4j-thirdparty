@@ -1,0 +1,39 @@
+Dalla versione 2.3.4 è stato aggiunto il log seguente nella classe org.apache.xml.security.algorithms.implementations.SignatureBaseRSA:
+
+        LOG.debug("Created SignatureRSA using {0} and provider {1}",
+            algorithmID, signatureAlgorithm.getProvider());
+
+Questo log causa un errore durante l'utilizzo di una chiave privata tramite pkcs11.
+Problema replicabile ad esempio tramite il test:
+   ant run_test -Ddelete=false -Dload=false -Dpackage=pkcs11.x509 -Dtest=WSSecurityTest -Dmethods=saml_sender_vouches_soap11
+
+L'errore che si ottiene (visualizzato anche sul server.log) è il seguente:
+
+Caused by: java.security.InvalidKeyException: Supplied key (sun.security.pkcs11.P11Key$P11PrivateKey) is not a RSAPrivateKey instance
+        at org.bouncycastle.jcajce.provider.asymmetric.rsa.DigestSignatureSpi.engineInitSign(DigestSignatureSpi.java:86) ~[bcprov-ext-debug-jdk18on-176.jar:1.76.0.0]
+        at java.security.Signature$Delegate.engineInitSign(Signature.java:1351) ~[?:?]
+        at java.security.Signature.initSign(Signature.java:636) ~[?:?]
+        at org.apache.xml.security.algorithms.SignatureAlgorithmSpi.engineInitSign(SignatureAlgorithmSpi.java:212) ~[xmlsec-2.3.3.jar:2.3.3]
+        at org.apache.xml.security.algorithms.implementations.SignatureBaseRSA.engineInitSign(SignatureBaseRSA.java:123) ~[xmlsec-2.3.3.jar:2.3.3]
+        at org.apache.xml.security.algorithms.implementations.SignatureBaseRSA.engineInitSign(SignatureBaseRSA.java:128) ~[xmlsec-2.3.3.jar:2.3.3]
+        at org.apache.xml.security.algorithms.SignatureAlgorithm.initSign(SignatureAlgorithm.java:273) ~[xmlsec-2.3.3.jar:2.3.3]
+        at org.apache.xml.security.signature.XMLSignature.sign(XMLSignature.java:793) ~[xmlsec-2.3.3.jar:2.3.3]
+        at org.opensaml.xmlsec.signature.support.impl.provider.ApacheSantuarioSignerProviderImpl.signObject(ApacheSantuarioSignerProviderImpl.java:59) ~[opensaml-xmlsec-impl-3.4.6.jar:?]
+        at org.opensaml.xmlsec.signature.support.Signer.signObject(Signer.java:73) ~[opensaml-xmlsec-api-3.4.6.jar:?]
+        at org.apache.wss4j.common.saml.OpenSAMLUtil.signObject(OpenSAMLUtil.java:263) ~[wss4j-ws-security-common-2.4.1.jar:2.4.1]
+        at org.apache.wss4j.common.saml.OpenSAMLUtil.signXMLObject(OpenSAMLUtil.java:254) ~[wss4j-ws-security-common-2.4.1.jar:2.4.1]
+        at org.apache.wss4j.common.saml.OpenSAMLUtil.toDom(OpenSAMLUtil.java:215) ~[wss4j-ws-security-common-2.4.1.jar:2.4.1]
+        at org.apache.wss4j.common.saml.OpenSAMLUtil.toDom(OpenSAMLUtil.java:177) ~[wss4j-ws-security-common-2.4.1.jar:2.4.1]
+        at org.apache.wss4j.common.saml.SamlAssertionWrapper.toDOM(SamlAssertionWrapper.java:245) ~[wss4j-ws-security-common-2.4.1.jar:2.4.1]
+        at org.apache.wss4j.dom.message.WSSecSAMLToken.getElement(WSSecSAMLToken.java:91) ~[wss4j-ws-security-dom-2.4.1.jar:2.4.1]
+        at org.apache.wss4j.dom.message.WSSecSAMLToken.prependToHeader(WSSecSAMLToken.java:74) ~[wss4j-ws-security-dom-2.4.1.jar:2.4.1]
+        at org.apache.wss4j.dom.message.WSSecSAMLToken.build(WSSecSAMLToken.java:123) ~[wss4j-ws-security-dom-2.4.1.jar:2.4.1]
+        at org.apache.wss4j.dom.action.SAMLTokenUnsignedAction.execute(SAMLTokenUnsignedAction.java:71) ~[wss4j-ws-security-dom-2.4.1.jar:2.4.1]
+        at org.apache.wss4j.dom.handler.WSHandler.doSenderAction(WSHandler.java:240) ~[wss4j-ws-security-dom-2.4.1.jar:2.4.1]
+        at org.apache.cxf.ws.security.wss4j.WSS4JOutInterceptor.access$000(WSS4JOutInterceptor.java:58) ~[cxf-rt-ws-security-3.6.1.jar:3.6.1]
+        at org.apache.cxf.ws.security.wss4j.WSS4JOutInterceptor$WSS4JOutInterceptorInternal.handleMessageInternal(WSS4JOutInterceptor.java:267) ~[cxf-rt-ws-security-3.6.1.jar:3.6.1]
+        at org.apache.cxf.ws.security.wss4j.WSS4JOutInterceptor$WSS4JOutInterceptorInternal.handleMessage(WSS4JOutInterceptor.java:137) ~[cxf-rt-ws-security-3.6.1.jar:3.6.1]
+        at org.apache.cxf.ws.security.wss4j.WSS4JOutInterceptor$WSS4JOutInterceptorInternal.handleMessage(WSS4JOutInterceptor.java:122) ~[cxf-rt-ws-security-3.6.1.jar:3.6.1]
+        at org.openspcoop2.security.message.wss4j.MessageSecuritySender_wss4j.process(MessageSecuritySender_wss4j.java:125) ~[openspcoop2_security-3.3.13.p1.jar:?]
+        ... 72 more
+

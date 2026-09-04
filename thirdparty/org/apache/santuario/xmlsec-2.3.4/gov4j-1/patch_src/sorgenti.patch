@@ -1,0 +1,35 @@
+--- xmlsec-2.3.4/src/main/java/org/apache/xml/security/algorithms/implementations/SignatureBaseRSA.java	2023-10-24 19:15:27.334649424 +0200
++++ xmlsec-2.3.4/src/main/java/org/apache/xml/security/algorithms/implementations/SignatureBaseRSA.java	2023-10-24 19:17:03.914177112 +0200
+@@ -60,8 +60,8 @@
+     public SignatureBaseRSA(Provider provider) throws XMLSignatureException {
+         String algorithmID = JCEMapper.translateURItoJCEID(this.engineGetURI());
+         this.signatureAlgorithm = getSignature(provider, algorithmID);
+-        LOG.debug("Created SignatureRSA using {0} and provider {1}",
+-            algorithmID, signatureAlgorithm.getProvider());
++        //LOG.debug("Created SignatureRSA using {0} and provider {1}",
++        //    algorithmID, signatureAlgorithm.getProvider());
+     }
+ 
+     Signature getSignature(Provider provider, String algorithmID)
+@@ -70,14 +70,20 @@
+             if (provider == null) {
+                 String providerId = JCEMapper.getProviderId();
+                 if (providerId == null) {
++                    LOG.debug("Created SignatureRSA using {0} without provider",
++		        algorithmID);
+                     return Signature.getInstance(algorithmID);
+ 
+                 } else {
++                    LOG.debug("Created SignatureRSA using {0} and provider {1}",
++		        algorithmID, providerId);
+                     return Signature.getInstance(algorithmID, providerId);
+                 }
+ 
+             } else {
+-                return Signature.getInstance(algorithmID, provider);
++                LOG.debug("Created SignatureRSA using {0} with provider param",
++		        algorithmID);
++                    return Signature.getInstance(algorithmID, provider);
+             }
+ 
+         } catch (NoSuchAlgorithmException | NoSuchProviderException ex) {

@@ -1,0 +1,12 @@
+ NOTA: Usare java 11 e maven 3.6.1 o superiore
+
+wget https://archive.apache.org/dist/santuario/java-library/2_3_4/xmlsec-2.3.4-source-release.zip
+unzip -q xmlsec-2.3.4-source-release.zip
+patch -p0 < sorgenti.patch
+cd xmlsec-2.3.4
+mvn clean install
+mvn javadoc:javadoc
+cd ..
+
+
+
