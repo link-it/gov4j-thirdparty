@@ -1,0 +1,7 @@
+All'interno dell'archivio jar originale vengono eliminati i package relativi ad altre librerie non appartenenti al gruppo apache ds:
+- org/apache/commons/;
+- org/bouncycastle/;
+- org/apiguardian/;
+- org/junit/;
+- org/slf4j/;
+- org/opentest4j/;

@@ -1,0 +1,13 @@
+wget https://repo1.maven.org/maven2/org/apache/directory/server/apacheds-all/2.0.0.AM27/apacheds-all-2.0.0.AM27.jar
+unzip -q apacheds-all-2.0.0.AM27.jar -d JAR;
+rm -rf JAR/org/apache/commons/;
+rm -rf JAR/org/bouncycastle/;
+rm -rf JAR/org/apiguardian/;
+rm -rf JAR/org/junit/;
+rm -rf JAR/org/slf4j/;
+rm -rf JAR/org/opentest4j/;
+rm -rf JAR/META-INF/versions;
+cd JAR;
+jar -cfM ../apacheds-all-2.0.0.AM27-gov4j-1.jar *;
+cd ..;
+rm -rf JAR;
