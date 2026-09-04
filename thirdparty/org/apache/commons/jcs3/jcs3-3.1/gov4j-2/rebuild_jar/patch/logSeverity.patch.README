@@ -1,0 +1,5 @@
+Si vuole eliminare le stampe di errore e warning non necessarie:
+- a) Si ottiene l'errore seguente se non si configurare una memoria auxiliary: Could not instantiate auxFactory named ""
+- b) Si ottiene il warning seguente usando la libreria in 2 war differenti: "WARN <28-10-2022 16:20:08.893> org.apache.commons.jcs3.log.Log4j2LogAdapter.warn(528): Could not register JMX bean. 
+     javax.management.InstanceAlreadyExistsException: org.apache.commons.jcs3:type=JCSAdminBean"
+  Entrambi i log sono stati portati al livello INFO.

@@ -1,0 +1,8 @@
+NOTA: Usare java 8 e maven 3.6.1 o superiore
+wget https://archive.apache.org/dist/commons/jcs/source/commons-jcs3-dist-3.2.1-src.tar.gz
+tar xzf commons-jcs3-dist-3.2.1-src.tar.gz
+patch -p0 < customProperties.patch
+cd commons-jcs3-3.2.1-src/commons-jcs-core/
+mvn clean install
+mvn javadoc:javadoc
+cd ../../

@@ -1,0 +1,30 @@
+diff -urN commons-jcs3-3.1-src.orig/commons-jcs-core/src/main/java/org/apache/commons/jcs3/engine/control/CompositeCacheConfigurator.java commons-jcs3-3.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/engine/control/CompositeCacheConfigurator.java
+--- commons-jcs3-3.1-src.orig/commons-jcs-core/src/main/java/org/apache/commons/jcs3/engine/control/CompositeCacheConfigurator.java	2022-10-28 16:39:22.348621620 +0200
++++ commons-jcs3-3.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/engine/control/CompositeCacheConfigurator.java	2022-10-28 16:41:06.730160206 +0200
+@@ -383,7 +383,11 @@
+                 auxFac = OptionConverter.instantiateByKey( props, prefix, null );
+                 if ( auxFac == null )
+                 {
+-                    log.error( "Could not instantiate auxFactory named \"{0}\"", auxName );
++                    if( "".equals(auxName) ){
++                	log.info( "Could not instantiate auxFactory named \"{0}\"", auxName );
++                    }else{
++                	log.error( "Could not instantiate auxFactory named \"{0}\"", auxName );
++                    }
+                     return null;
+                 }
+ 
+diff -urN commons-jcs3-3.1-src.orig/commons-jcs-core/src/main/java/org/apache/commons/jcs3/engine/control/CompositeCacheManager.java commons-jcs3-3.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/engine/control/CompositeCacheManager.java
+--- commons-jcs3-3.1-src.orig/commons-jcs-core/src/main/java/org/apache/commons/jcs3/engine/control/CompositeCacheManager.java	2022-10-28 16:39:22.348621620 +0200
++++ commons-jcs3-3.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/engine/control/CompositeCacheManager.java	2022-10-28 16:42:46.949677332 +0200
+@@ -271,6 +271,10 @@
+                     mbs.registerMBean(adminBean, jmxObjectName);
+                     isJMXRegistered = true;
+                 }
++                catch (final javax.management.InstanceAlreadyExistsException e)
++                {
++                    log.info( "Could not register JMX bean: InstanceAlreadyExistsException - " + e.getMessage() );
++                }
+                 catch (final Exception e)
+                 {
+                     log.warn( "Could not register JMX bean.", e );

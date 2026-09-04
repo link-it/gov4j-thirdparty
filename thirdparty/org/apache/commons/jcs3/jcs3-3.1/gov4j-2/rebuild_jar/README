@@ -1,0 +1,61 @@
+Problematica 1: Aggiungere la possibilità di caricare la configurazione tramite un propertie ad hoc (differente da cache.cfg).
+
+NOTA: Verificare se in una nuova versione non vi sia gia' la possibilita' di caricare tramite properties (introdotta nella versione 2.x)
+      e la possibilità di utilizzare un file differente dal nome cache.ccf
+
+NOTA: Usare Java 8!
+
+Problematica 2: Eliminare synchronized non necessarie. Questo problema presente fino alla versione jcs2 sembra superato nella versione jcs3, la classe CompositeCache e la classe AbstractDoubleLinkedListMemoryCache non presenta istruzioni synchronized, e le problematiche di lock sembrano riviste.
+
+Problematica 3: Eliminare le stampe di errore e warning non necessarie:
+- a) Si ottiene l'errore seguente se non si configurare una memoria auxiliary: Could not instantiate auxFactory named ""
+- b) Si ottiene il warning seguente usando la libreria in 2 war differenti: "WARN <28-10-2022 16:20:08.893> org.apache.commons.jcs3.log.Log4j2LogAdapter.warn(528): Could not register JMX bean. 
+     javax.management.InstanceAlreadyExistsException: org.apache.commons.jcs3:type=JCSAdminBean"
+  Entrambi i log sono stati portati al livello INFO.
+  
+1) tar xzf commons-jcs3-dist-3.1-src.tar.gz
+2) tar xzf commons-jcs3-dist-3.1-bin.tar.gz
+2.1) cp -r commons-jcs3-3.1-src commons-jcs3-3.1-src.orig
+
+3) patch -p0 < patch/customProperties.patch
+   patch -p0 < patch/logSeverity.patch
+
+Per realizzare le patch:
+diff -urN commons-jcs3-3.1-src.orig commons-jcs3-3.1-src > patch/customProperties.patch
+
+4) Nella classe 'tools/utils/src/org/openspcoop2/utils/cache/Cache.java' vedere di riportare il metodo 'getByteCount' della classe JCSAdminBean.java.
+     Il metodo non deve essere riportato cosi' come è, ma deve essere gestito un errore di accesso contemporaneo che si può verificare con la printStats del metodo di openspcoop.
+     I motivi sono scritti all'interno della classe di openspcoop Cache.java nel metodo printStats.
+
+5) unzip -q commons-jcs3-3.1-bin/commons-jcs-core/commons-jcs3-core-3.1.jar -d JAR
+
+In alternativa ai punti 6-9: 
+	cd commons-jcs3-3.1-src/commons-jcs-core/
+	mvn clean install
+
+6) javac -classpath commons-jcs3-3.1-bin/commons-jcs-core/commons-jcs3-core-3.1.jar commons-jcs3-3.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/JCS.java
+   cp commons-jcs3-3.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/JCS.class JAR/org/apache/commons/jcs3/JCS.class
+   cp commons-jcs3-3.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/JCS.java JAR/org/apache/commons/jcs3/JCS.java
+
+7) javac -classpath JAR commons-jcs3-3.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/admin/JCSAdminBean.java
+   cp commons-jcs3-3.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/admin/JCSAdminBean.class JAR/org/apache/commons/jcs3/admin/JCSAdminBean.class
+   cp commons-jcs3-3.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/admin/JCSAdminBean.java JAR/org/apache/commons/jcs3/admin/JCSAdminBean.java
+
+8) javac -classpath JAR commons-jcs3-3.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/engine/control/CompositeCacheConfigurator.java
+   cp commons-jcs3-3.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/engine/control/CompositeCacheConfigurator.class JAR/org/apache/commons/jcs3/engine/control/CompositeCacheConfigurator.class
+   cp commons-jcs3-3.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/engine/control/CompositeCacheConfigurator.java JAR/org/apache/commons/jcs3/engine/control/CompositeCacheConfigurator.java
+
+9) javac -classpath JAR commons-jcs3-3.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/engine/control/CompositeCacheManager.java
+   cp commons-jcs3-3.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/engine/control/CompositeCacheManager.class JAR/org/apache/commons/jcs3/engine/control/CompositeCacheManager.class
+   cp commons-jcs3-3.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/engine/control/CompositeCacheManager.java JAR/org/apache/commons/jcs3/engine/control/CompositeCacheManager.java
+
+10) cp patch/*.patch JAR/
+    cp patch/*.README JAR/
+
+11) cd JAR
+12) rm -f ../commons-jcs3-core-3.1.jar; rm -f ../commons-jcs3-core-3.1-gov4j-2.jar; jar -cfM ../commons-jcs3-core-3.1-gov4j-2.jar *
+13) cd ..;
+14) rm -rf commons-jcs3-3.1-bin; rm -rf commons-jcs3-3.1-src; rm -rf commons-jcs3-3.1-src.orig; rm -rf JAR; 
+# MAVEN 15) cp commons-jcs3-core-3.1-gov4j-2.jar ../../jar/shared/
+
+

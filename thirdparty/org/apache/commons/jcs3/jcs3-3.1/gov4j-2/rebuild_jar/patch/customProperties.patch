@@ -1,0 +1,76 @@
+diff -urN commons-jcs3-3.1-src.orig/commons-jcs-core/src/main/java/org/apache/commons/jcs3/admin/JCSAdminBean.java commons-jcs3-3.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/admin/JCSAdminBean.java
+--- commons-jcs3-3.1-src.orig/commons-jcs-core/src/main/java/org/apache/commons/jcs3/admin/JCSAdminBean.java	2022-04-14 14:55:23.802531092 +0200
++++ commons-jcs3-3.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/admin/JCSAdminBean.java	2022-04-14 14:57:34.165191871 +0200
+@@ -52,15 +52,39 @@
+ {
+     /** The cache manager. */
+     private final CompositeCacheManager cacheHub;
++    private static CompositeCacheManager cacheStaticHub = null;
+ 
+     /**
+      * Default constructor
+      */
+     public JCSAdminBean()
+     {
+-        try
++        super();
++	if(cacheStaticHub==null){
++            initialize();
++        }
++        this.cacheHub = cacheStaticHub;
++    }
++
++    private static synchronized void initialize(){
++	try
+         {
+-            this.cacheHub = CompositeCacheManager.getInstance();
++		if(cacheStaticHub==null){
++		    if ( org.apache.commons.jcs3.JCS.getConfigFilename() == null && org.apache.commons.jcs3.JCS.getConfigProperties() == null )
++		    {
++		        cacheStaticHub = CompositeCacheManager.getInstance();
++		    }
++		    else if( org.apache.commons.jcs3.JCS.getConfigFilename() != null )
++		    {
++		        cacheStaticHub = CompositeCacheManager.getUnconfiguredInstance();
++		        cacheStaticHub.configure( org.apache.commons.jcs3.JCS.getConfigFilename() );
++		    }
++		    else
++		    {
++		        cacheStaticHub = CompositeCacheManager.getUnconfiguredInstance();
++		        cacheStaticHub.configure( org.apache.commons.jcs3.JCS.getConfigProperties() );
++		    }
++		}
+         }
+         catch (final CacheException e)
+         {
+@@ -68,6 +92,10 @@
+         }
+     }
+ 
++    public static CompositeCacheManager getCompositeCacheManager(){
++        return cacheStaticHub;
++    }
++
+     /**
+      * Parameterized constructor
+      *
+diff -urN commons-jcs3-3.1-src.orig/commons-jcs-core/src/main/java/org/apache/commons/jcs3/JCS.java commons-jcs3-3.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/JCS.java
+--- commons-jcs3-3.1-src.orig/commons-jcs-core/src/main/java/org/apache/commons/jcs3/JCS.java	2022-04-14 14:55:23.800531081 +0200
++++ commons-jcs3-3.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/JCS.java	2022-04-14 14:58:04.716346718 +0200
+@@ -49,6 +49,16 @@
+     /** Cache manager use by the various forms of defineRegion and getAccess */
+     private static CompositeCacheManager cacheMgr;
+ 
++    public static String getConfigFilename()
++    {
++        return JCS.configFilename;
++    }
++
++    public static java.util.Properties getConfigProperties()
++    {
++        return JCS.configProps;
++    }
++
+     /**
+      * Set the filename that the cache manager will be initialized with. Only matters before the
+      * instance is initialized.

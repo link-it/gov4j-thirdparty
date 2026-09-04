@@ -1,0 +1,42 @@
+Problematica 1: Aggiungere la possibilità di caricare la configurazione tramite un propertie ad hoc (differente da cache.cfg).
+
+NOTA: Verificare se in una nuova versione non vi sia gia' la possibilita' di caricare tramite properties (introdotta nella versione 2.x)
+      e la possibilità di utilizzare un file differente dal nome cache.ccf
+
+NOTA: Usare Java 8!
+
+Problematica 2: Eliminare synchronized non necessarie. Questo problema presente fino alla versione jcs2 sembra superato nella versione jcs3, la classe CompositeCache e la classe AbstractDoubleLinkedListMemoryCache non presenta istruzioni synchronized, e le problematiche di lock sembrano riviste.
+  
+1) tar xzf commons-jcs3-dist-3.2.1-src.tar.gz
+2) tar xzf commons-jcs3-dist-3.2.1-bin.tar.gz
+2.1) cp -r commons-jcs3-3.2.1-src commons-jcs3-3.2.1-src.orig
+
+3) patch -p0 < patch/customProperties.patch
+
+Per realizzare le patch:
+diff -urN commons-jcs3-3.2.1-src.orig commons-jcs3-3.2.1-src > patch/customProperties.patch
+
+4) Nella classe 'tools/utils/src/org/openspcoop2/utils/cache/Cache.java' vedere di riportare il metodo 'getByteCount' della classe JCSAdminBean.java.
+     Il metodo non deve essere riportato cosi' come è, ma deve essere gestito un errore di accesso contemporaneo che si può verificare con la printStats del metodo di openspcoop.
+     I motivi sono scritti all'interno della classe di openspcoop Cache.java nel metodo printStats.
+
+5) unzip -q commons-jcs3-3.2.1-bin/commons-jcs-core/commons-jcs3-core-3.2.1.jar -d JAR
+
+6) javac -classpath commons-jcs3-3.2.1-bin/commons-jcs-core/commons-jcs3-core-3.2.1.jar commons-jcs3-3.2.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/JCS.java
+   cp commons-jcs3-3.2.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/JCS.class JAR/org/apache/commons/jcs3/JCS.class
+   cp commons-jcs3-3.2.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/JCS.java JAR/org/apache/commons/jcs3/JCS.java
+
+7) javac -classpath JAR commons-jcs3-3.2.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/admin/JCSAdminBean.java
+   cp commons-jcs3-3.2.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/admin/JCSAdminBean.class JAR/org/apache/commons/jcs3/admin/JCSAdminBean.class
+   cp commons-jcs3-3.2.1-src/commons-jcs-core/src/main/java/org/apache/commons/jcs3/admin/JCSAdminBean.java JAR/org/apache/commons/jcs3/admin/JCSAdminBean.java
+
+8) cp patch/*.patch JAR/
+   cp patch/*.README JAR/
+
+9) cd JAR
+10) rm -f ../commons-jcs3-core-3.2.1.jar; rm -f ../commons-jcs3-core-3.2.1-gov4j-1.jar; jar -cfM ../commons-jcs3-core-3.2.1-gov4j-1.jar *
+11) cd ..;
+12) rm -rf commons-jcs3-3.2.1-bin; rm -rf commons-jcs3-3.2.1-src; rm -rf commons-jcs3-3.2.1-src.orig; rm -rf JAR; 
+# MAVEN 13) cp commons-jcs3-core-3.2.1-gov4j-1.jar ../../jar/shared/
+
+
