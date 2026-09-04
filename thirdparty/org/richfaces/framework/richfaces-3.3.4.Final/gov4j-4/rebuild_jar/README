@@ -1,0 +1,144 @@
+# Passi necessari per generare la versione con patch della libreria richfaces-api-3.3.4.Final, richfaces-impl-3.3.4.Final e richfaces-ui-3.3.4.Final.
+
+# - il progetto impl si trova nel path "richfaces-ui-3.3.4.Final/framework/impl/";
+# - il progetto api si trova nel path "richfaces-ui-3.3.4.Final/framework/api/";
+# - il progetto ui si trova nel path "richfaces-ui-3.3.4.Final/ui/";
+
+1) Se non esiste il file richfaces-ui-3.3.4.Final-src-patch.zip o lo si vuole ricreare:
+   unzip -q richfaces-ui-3.3.4.Final-src.zip
+   cp -r richfaces-ui-3.3.4.Final  richfaces-ui-3.3.4.Final.orig
+   
+   # Patch Globali
+   patch -p0 < patch/CompilazioneJava8.patch;
+   
+   # Patch Cdk
+   patch -p0 < patch/cdk/CompilazioneJava8.patch;
+   
+   # Patch Samples
+   patch -p0 < patch/samples/CompilazioneJava8.patch;
+   
+   # Patch Framework/Impl
+   patch -p0 < patch/impl/CompilazioneJava8.patch;
+   patch -p0 < patch/impl/JSFAJAX.js.patch;
+   patch -p0 < patch/impl/RendererUtils.patch;
+   
+   # Patch UI
+   patch -p0 < patch/ui/CompilazioneJava8.patch;
+   patch -p0 < patch/ui/RichfacesUI-Combobox.patch;
+   patch -p0 < patch/ui/RichfacesUI-Suggestionbox.patch;
+   patch -p0 < patch/ui/RichfacesUI-Layout.patch
+
+   Se esiste basta effettuare l'unzip
+
+2) Effettuare nuove modifiche. Per creare le nuove patch:
+   diff -urN richfaces-ui-3.3.4.Final.orig/framework/impl richfaces-ui-3.3.4.Final/framework/impl > patch/impl/<NOME>.patch
+   diff -urN richfaces-ui-3.3.4.Final.orig/framework/api richfaces-ui-3.3.4.Final/framework/api > patch/api/<NOME>.patch
+   diff -urN richfaces-ui-3.3.4.Final.orig/ui richfaces-ui-3.3.4.Final/ui > patch/ui/<NOME>.patch
+   .. se serve modificare altro, creare una directory per le altre posizioni ..
+   NOTA: ricordarsi di creare anche il file patch/impl/NOME.patch.README che ne spiega la motivazione.
+
+   Patch create:
+
+   diff -urN richfaces-ui-3.3.4.Final.orig/framework/impl/src/main/javascript/ajaxjsf/JSFAJAX.js richfaces-ui-3.3.4.Final/framework/impl/src/main/javascript/ajaxjsf/JSFAJAX.js > patch/impl/JSFAJAX.js.patch
+
+  diff -urN richfaces-ui-3.3.4.Final.orig/ui/suggestionbox/src/main/resources/org/richfaces/renderkit/html/scripts/suggestionbox.js richfaces-ui-3.3.4.Final/ui/suggestionbox/src/main/resources/org/richfaces/renderkit/html/scripts/suggestionbox.js > patch/ui/RichfacesUI-Suggestionbox.patch;
+
+   diff -urN richfaces-ui-3.3.4.Final.orig/cdk/maven-cdk-plugin/pom.xml richfaces-ui-3.3.4.Final/cdk/maven-cdk-plugin/pom.xml > patch/cdk/CompilazioneJava8.patch
+   diff -urN richfaces-ui-3.3.4.Final.orig/cdk/maven-cdk-plugin/src/main/java/org/ajax4jsf/builder/mojo/AssemblyAttachedLibraryMojo.java richfaces-ui-3.3.4.Final/cdk/maven-cdk-plugin/src/main/java/org/ajax4jsf/builder/mojo/AssemblyAttachedLibraryMojo.java >> patch/cdk/CompilazioneJava8.patch
+   diff -urN richfaces-ui-3.3.4.Final.orig/cdk/maven-cdk-plugin/src/main/java/org/ajax4jsf/builder/mojo/AssemblyLibraryMojo.java richfaces-ui-3.3.4.Final/cdk/maven-cdk-plugin/src/main/java/org/ajax4jsf/builder/mojo/AssemblyLibraryMojo.java  >> patch/cdk/CompilazioneJava8.patch
+   diff -urN richfaces-ui-3.3.4.Final.orig/cdk/pom.xml richfaces-ui-3.3.4.Final/cdk/pom.xml  >> patch/cdk/CompilazioneJava8.patch
+
+   diff -urN richfaces-ui-3.3.4.Final.orig/framework/impl/pom.xml richfaces-ui-3.3.4.Final/framework/impl/pom.xml  > patch/impl/CompilazioneJava8.patch
+
+   diff -urN richfaces-ui-3.3.4.Final.orig/samples/richfaces-demo/pom.xml richfaces-ui-3.3.4.Final/samples/richfaces-demo/pom.xml > patch/samples/CompilazioneJava8.patch
+
+   diff -urN richfaces-ui-3.3.4.Final.orig/ui/pom.xml richfaces-ui-3.3.4.Final/ui/pom.xml > patch/ui/CompilazioneJava8.patch
+   diff -urN richfaces-ui-3.3.4.Final.orig/ui/assembly/pom.xml richfaces-ui-3.3.4.Final/ui/assembly/pom.xml >> patch/ui/CompilazioneJava8.patch
+   diff -urN richfaces-ui-3.3.4.Final.orig/ui/state/src/main/java/org/richfaces/ui/application/StateApplication.java richfaces-ui-3.3.4.Final/ui/state/src/main/java/org/richfaces/ui/application/StateApplication.java >> patch/ui/CompilazioneJava8.patch
+   diff -urN richfaces-ui-3.3.4.Final.orig/ui/state/src/main/java/org/richfaces/ui/application/StateExpressionFactory.java richfaces-ui-3.3.4.Final/ui/state/src/main/java/org/richfaces/ui/application/StateExpressionFactory.java >> patch/ui/CompilazioneJava8.patch
+
+   diff -urN richfaces-ui-3.3.4.Final.orig/pom.xml richfaces-ui-3.3.4.Final/pom.xml > patch/CompilazioneJava8.patch
+   diff -urN richfaces-ui-3.3.4.Final.orig/framework/pom.xml richfaces-ui-3.3.4.Final/framework/pom.xml  >> patch/CompilazioneJava8.patch
+   
+   diff -urN richfaces-ui-3.3.4.Final.orig/framework/impl/src/main/java/org/ajax4jsf/renderkit/RendererUtils.java richfaces-ui-3.3.4.Final/framework/impl/src/main/java/org/ajax4jsf/renderkit/RendererUtils.java > patch/impl/RendererUtils.patch
+   
+   diff -urN richfaces-ui-3.3.4.Final.orig/ui/layout/src/main/java/org/richfaces/renderkit/AbstractPageRenderer.java richfaces-ui-3.3.4.Final/ui/layout/src/main/java/org/richfaces/renderkit/AbstractPageRenderer.java > patch/ui/RichfacesUI-Layout.patch
+  
+   diff -urN richfaces-ui-3.3.4.Final.orig/ui/combobox/src/main/resources/org/richfaces/renderkit/html/scripts/combobox.js richfaces-ui-3.3.4.Final/ui/combobox/src/main/resources/org/richfaces/renderkit/html/scripts/combobox.js > patch/ui/RichfacesUI-Combobox.patch
+   diff -urN richfaces-ui-3.3.4.Final.orig/ui/combobox/src/main/resources/org/richfaces/renderkit/html/scripts/combolist.js richfaces-ui-3.3.4.Final/ui/combobox/src/main/resources/org/richfaces/renderkit/html/scripts/combolist.js >> patch/ui/RichfacesUI-Combobox.patch 
+   diff -urN richfaces-ui-3.3.4.Final.orig/ui/combobox/src/main/resources/org/richfaces/renderkit/html/css/combobox.xcss richfaces-ui-3.3.4.Final/ui/combobox/src/main/resources/org/richfaces/renderkit/html/css/combobox.xcss >> patch/ui/RichfacesUI-Combobox.patch
+   diff -urN richfaces-ui-3.3.4.Final.orig/ui/combobox/src/main/resources/org/richfaces/renderkit/html/css/combobox.xcss richfaces-ui-3.3.4.Final/ui/combobox/src/main/templates/ >> patch/ui/RichfacesUI-Combobox.patch
+
+3) Compilazione del progetto:
+   # N.B. --> Utilizzare mvn versione 3.6.3 e jdk 1.8
+
+   cd richfaces-ui-3.3.4.Final
+   mvn clean install -N -Dmaven.test.skip=true -Dmaven.repo.local=../repository.m2
+   cd cdk
+   mvn  clean install -Dmaven.test.skip=true -Dmaven.repo.local=../../repository.m2
+   cd ..
+   cd framework
+   mvn  clean install -Dmaven.test.skip=true -Dmaven.repo.local=../../repository.m2
+   cd ..
+   cd ui
+   export MAVEN_OPTS="-Xmx1024m -XX:MaxPermSize=1024m"
+   mvn clean install -Dmaven.test.skip=true -Dmaven.repo.local=../../repository.m2
+   cd assembly
+   mvn clean install -Dmaven.test.skip=true -Dmaven.repo.local=../../../repository.m2
+   mkdir build
+   cd build
+   unzip -q ../target/dist/richfaces-ui-3.3.4.Final.jar org/richfaces/ui.pack.js
+   cd ..
+   cd ..
+   cd ..
+   cd ..
+
+JAR presenti in:
+- richfaces-ui-3.3.4.Final/framework/api/target/richfaces-api-3.3.4.Final.jar
+- richfaces-ui-3.3.4.Final/framework/impl/target/richfaces-impl-3.3.4.Final.jar
+- richfaces-ui-3.3.4.Final/ui/assembly/target/dist/richfaces-ui-3.3.4.Final.jar
+
+unzip -q richfaces-ui-3.3.4.Final/framework/impl/target/richfaces-impl-3.3.4.Final.jar -d JAR
+cp patch/impl/* JAR/
+cd JAR
+jar -cfM ../richfaces-impl-3.3.4.Final-gov4j-4.jar *
+cd ..
+rm -rf JAR
+
+unzip -q richfaces-ui-3.3.4.Final/framework/api/target/richfaces-api-3.3.4.Final.jar -d JAR
+#cp patch/api/* JAR/
+cd JAR
+jar -cfM ../richfaces-api-3.3.4.Final-gov4j-4.jar *
+cd ..
+rm -rf JAR
+
+unzip -q richfaces-ui-3.3.4.Final/ui/assembly/target/dist/richfaces-ui-3.3.4.Final.jar -d JAR
+mkdir -p JAR/org/richfaces
+cp richfaces-ui-3.3.4.Final/ui/assembly/build/org/richfaces/ui.pack.js JAR/org/richfaces/
+cp patch/ui/* JAR/
+cd JAR
+jar -cfM ../richfaces-ui-3.3.4.Final-gov4j-4.jar *
+cd ..
+rm -rf JAR
+
+
+4) Creazione del jar dei sorgenti con patch
+
+# Pulizia delle directory target
+find richfaces-ui-3.3.4.Final -name target | xargs rm -rf
+find richfaces-ui-3.3.4.Final -name .project | xargs rm -rf
+
+# Creazione dello zip
+rm richfaces-ui-3.3.4.Final-src-patch.zip; zip -r richfaces-ui-3.3.4.Final-src-patch.zip  richfaces-ui-3.3.4.Final
+
+
+5) Pulizia delle risorse utilizzate:
+rm -rf richfaces-ui-3.3.4.Final richfaces-ui-3.3.4.Final.orig;
+
+
+
+
+
+
+
+

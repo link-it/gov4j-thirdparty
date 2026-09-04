@@ -1,0 +1,540 @@
+--- richfaces-ui-3.3.4.Final.orig/ui/combobox/src/main/resources/org/richfaces/renderkit/html/scripts/combobox.js	2022-11-10 19:29:53.532281435 +0100
++++ richfaces-ui-3.3.4.Final/ui/combobox/src/main/resources/org/richfaces/renderkit/html/scripts/combobox.js	2022-11-10 21:22:53.185418367 +0100
+@@ -145,8 +145,8 @@
+ 	},
+ 	
+ 	buttonMouseUpHandler : function(e) {
+-		this.buttonBG.className = "rich-combobox-font rich-combobox-button-background rich-combobox-button";
+-		this.button.className = this.classes.button.classes.active + " rich-combobox-button-hovered";
++		this.buttonBG.className = this.normalizeClasses(this.buttonBG.className, "rich-combobox-font rich-combobox-button-background rich-combobox-button");
++		this.button.className = this.normalizeClasses(this.button.className, this.classes.button.classes.active + " rich-combobox-button-hovered");
+ 		
+ 		var styleCss = this.classes.button.style;
+ 		if(styleCss && !styleCss.active.blank()) {
+@@ -157,8 +157,8 @@
+ 	},
+ 	
+ 	buttonMousedownHandler : function(e) {
+-		this.buttonBG.className = "rich-combobox-font rich-combobox-button-pressed-background rich-combobox-button";
+-		this.button.className = this.classes.button.classes.active + " rich-combobox-button-hovered";
++		this.buttonBG.className = this.normalizeClasses(this.buttonBG.className, "rich-combobox-font rich-combobox-button-pressed-background rich-combobox-button");
++		this.button.className = this.normalizeClasses(this.button.className, this.classes.button.classes.active + " rich-combobox-button-hovered");
+ 		
+ 		var styleCss = this.classes.button.style;
+ 		if(styleCss && !styleCss.active.blank()) {
+@@ -173,7 +173,7 @@
+ 		var iconStyles = this.classes.buttonicon.style;
+ 		var styleCss = this.classes.button.style;
+ 		if (this.isActive()) { 
+-			this.button.className= classCss.active + " " + classCss.hovered;
++			this.button.className = this.normalizeClasses(this.button.className, classCss.active + " " + classCss.hovered);
+ 			
+ 			if(styleCss && !styleCss.active.blank()) {
+ 				Element.setStyle(this.button,styleCss.active);
+@@ -184,7 +184,7 @@
+ 			}	
+ 		
+ 		} else {
+-			this.button.className = classCss.normal + " " + classCss.hovered;
++			this.button.className = this.normalizeClasses(this.button.className, classCss.normal + " " + classCss.hovered);
+ 			
+ 			if(styleCss && !styleCss.normal.blank()) {
+ 				Element.setStyle(this.button,styleCss.normal);
+@@ -202,7 +202,7 @@
+ 		var iconStyles = this.classes.buttonicon.style;
+ 		
+ 		if (this.isActive()) { 
+-			this.button.className= classCss.active;
++			this.button.className = this.normalizeClasses(this.button.className, classCss.active);
+ 			
+ 			if(styleCss && !styleCss.active.blank()) {
+ 				Element.setStyle(this.button,styleCss.active);
+@@ -212,7 +212,7 @@
+ 				Element.setStyle(this.button,{backgroundImage : iconStyles.active});
+ 			}	
+ 		} else {
+-			this.button.className = classCss.normal;
++			this.button.className = this.normalizeClasses(this.button.className, classCss.normal);
+ 			
+ 			if(styleCss && !styleCss.normal.blank()) {
+ 				Element.setStyle(this.button,styleCss.normal);
+@@ -365,10 +365,10 @@
+ 	},
+ 	
+ 	doDirectSuggestion: function(value) {
+-		var startInd = this.field.value.length; 
+-		var endInd = value.length;
+-		this.field.value = value;
+-		Richfaces.ComboBox.textboxSelect(this.field, startInd, endInd);
++//		var startInd = this.field.value.length; 
++//		var endInd = value.length;
++//		this.field.value = value;
++//		Richfaces.ComboBox.textboxSelect(this.field, startInd, endInd);
+ 	},
+ 	
+ 	wasTextDeleted : function(event) {
+@@ -446,7 +446,7 @@
+ 	},
+ 	
+ 	applyDefaultText : function() {
+-		this.field.className = this.classes.field.classes.disabled;
++		this.field.className = this.normalizeClasses(this.field.className, this.classes.field.classes.disabled);
+ 		this.field.value = this.defaultLabel;
+ 		this.comboValue.value = "";
+ 	},
+@@ -457,9 +457,9 @@
+ 	
+ 	doActive : function() {
+ 		if (this.button.className.indexOf(this.classes.button.classes.hovered) != -1) {
+-			this.button.className = this.classes.button.classes.active + " " + this.classes.button.classes.hovered;
++			this.button.className = this.normalizeClasses(this.button.className, this.classes.button.classes.active + " " + this.classes.button.classes.hovered);
+ 		} else {
+-			this.button.className = this.classes.button.classes.active ;
++			this.button.className = this.normalizeClasses(this.button.className, this.classes.button.classes.active);
+ 		}
+ 		
+ 		var iconStyles = this.classes.buttonicon.style;
+@@ -467,16 +467,16 @@
+ 			Element.setStyle(this.button, {backgroundImage:iconStyles.active});
+ 		}	
+ 				
+-		this.field.className = this.classes.field.classes.active;
++		this.field.className = this.normalizeClasses(this.field.className, this.classes.field.classes.active);
+ 		Element.setStyle(this.field, this.classes.field.style.active);
+ 		 
+ 		this.disabled = false;
+ 	},
+ 		
+ 	disable : function() {
+-		this.button.className = this.classes.button.classes.disabled;
+-		this.buttonBG.className = this.classes.buttonbg.classes.disabled;
+-		this.field.className = this.classes.field.classes.disabled;
++		this.button.className = this.normalizeClasses(this.button.className, this.classes.button.classes.disabled);
++		this.buttonBG.className = this.normalizeClasses(this.buttonBG.className, this.classes.buttonbg.classes.disabled);
++		this.field.className = this.normalizeClasses(this.field.className, this.classes.field.classes.disabled);
+ 		Element.setStyle(this.field, this.classes.field.style.disabled);
+ 		
+ 		var styleCss =  this.classes.button.style;
+@@ -496,9 +496,9 @@
+ 	},
+ 	
+ 	enable : function() {
+-		this.button.className = this.classes.button.classes.normal;
+-		this.buttonBG.className = this.classes.buttonbg.classes.normal;
+-		this.field.className = this.classes.field.classes.normal;
++		this.button.className = this.normalizeClasses(this.button.className, this.classes.button.classes.normal);
++		this.buttonBG.className = this.normalizeClasses(this.buttonBG.className, this.classes.buttonbg.classes.normal);
++		this.field.className = this.normalizeClasses(this.field.className, this.classes.field.classes.normal);
+ 		var fieldStyles = this.classes.field.style.normal;
+ 		Element.setStyle(this.field, fieldStyles);
+ 
+@@ -543,7 +543,24 @@
+ 	 
+ 	 hideList : function() {
+ 	 	this.comboList.hideWithDelay();
+-	 }
++	 },
++	 
++	 normalizeClasses: function(oldClasses, newClasses){
++		// split elenco classi attuali
++		var split = oldClasses.split(' ');
++		
++		// prelevo quelle custom create per il csp
++		var cls = '';
++		for(var i =0; i < split.length; i++) {
++			if(split[i].indexOf('-style') > -1) {
++				cls += ' ';
++				cls += split[i];
++			}
++		}
++		
++		// incollo le classi da conservare a quelle previste
++		return newClasses + cls;
++	}
+ };
+ 
+ 
+@@ -574,4 +591,4 @@
+ 
+ Richfaces.ComboBox.SPECIAL_KEYS = [
+ 	Event.KEY_RETURN, Event.KEY_UP, Event.KEY_DOWN, Event.KEY_RIGHT, Event.KEY_LEFT, Event.KEY_ESC, Event.KEY_TAB, 16 /* vladimir claims 16 is shift key code */ 
+-]
+\ No newline at end of file
++]
+--- richfaces-ui-3.3.4.Final.orig/ui/combobox/src/main/resources/org/richfaces/renderkit/html/scripts/combolist.js	2022-11-10 19:29:53.532281435 +0100
++++ richfaces-ui-3.3.4.Final/ui/combobox/src/main/resources/org/richfaces/renderkit/html/scripts/combolist.js	2022-11-10 21:25:14.806431049 +0100
+@@ -45,8 +45,10 @@
+ 	},
+ 	
+ 	initDimensions : function() {
+-		this.listParent.style.visibility = "hidden";
+-		this.listParent.style.display = "";
++	    this.listParent.classList.remove("rich-combobox-list-cord-visibility");
++       	this.listParent.classList.remove("rich-combobox-list-cord-display-none");
++     	this.listParent.classList.add("rich-combobox-list-cord-visibility-hidden");
++     	this.listParent.classList.add("rich-combobox-list-cord-display");
+ 		
+ 		var el = this.listParent.childNodes[1].firstChild;
+ 		this.LAYOUT_BORDER_V = Richfaces.getBorderWidth(el, "tb");
+@@ -54,8 +56,10 @@
+ 		this.LAYOUT_PADDING_V = Richfaces.getPaddingWidth(el, "tb");
+ 		this.LAYOUT_PADDING_H = Richfaces.getPaddingWidth(el, "lr");
+ 				
+-		this.listParent.style.display = "none";
+-		this.listParent.style.visibility = "visible";
++		this.listParent.classList.remove("rich-combobox-list-cord-visibility-hidden");
++       	this.listParent.classList.remove("rich-combobox-list-cord-display");
++     	this.listParent.classList.add("rich-combobox-list-cord-visibility");
++     	this.listParent.classList.add("rich-combobox-list-cord-display-none");
+ 	},
+ 	
+ 	createDefaultList : function() {
+@@ -63,6 +67,7 @@
+ 		for (var i = 0; i < this.itemsText.length; i++) {
+ 			items.push(this.createItem(this.itemsText[i], this.classes.item.normal));
+ 		}
++		
+ 		this.createNewList(items);
+ 	},
+ 	
+@@ -85,11 +90,15 @@
+ 		 
+ 		this.fieldDimensions.height = this.fieldElem.parentNode.offsetHeight;
+ 		
+-		this.listParent.style.visibility = "hidden";
+-		this.listParent.style.display = "";
++	    this.listParent.classList.remove("rich-combobox-list-cord-visibility");
++       	this.listParent.classList.remove("rich-combobox-list-cord-display-none");
++     	this.listParent.classList.add("rich-combobox-list-cord-visibility-hidden");
++     	this.listParent.classList.add("rich-combobox-list-cord-display");
+ 		this.setSize();
+-		this.listParent.style.display = "none";
+-		this.listParent.style.visibility = "visible";
++		this.listParent.classList.remove("rich-combobox-list-cord-visibility-hidden");
++       	this.listParent.classList.remove("rich-combobox-list-cord-display");
++     	this.listParent.classList.add("rich-combobox-list-cord-visibility");
++     	this.listParent.classList.add("rich-combobox-list-cord-display-none");
+ 		
+ 		//attach list to the document body 
+ 		this.injectListToBody(this.listParent);
+@@ -107,7 +116,8 @@
+ 			if (this.iframe) {
+ 				Element.show(this.iframe);
+ 			}
+-			this.listParent.style.display = "";
++       		this.listParent.classList.remove("rich-combobox-list-cord-display-none");
++     		this.listParent.classList.add("rich-combobox-list-cord-display");
+ 			if (this.selectFirstOnUpdate) {
+ 				if (this.selectedItem) {
+ 					this.doActiveItem(this.selectedItem);
+@@ -164,8 +174,10 @@
+ 		component.style.position = "static";
+ 		component.style.zIndex = 0;
+ 		
+-		//this.listParent.style.display = "none";
+-		Element.hide(this.listParent);
++		this.listParent.classList.remove("rich-combobox-list-cord-display");
++		this.listParent.classList.remove("rich-combobox-list-cord-visibility-hidden");
++     	this.listParent.classList.add("rich-combobox-list-cord-display-none");
++     	this.listParent.classList.add("rich-combobox-list-cord-visibility");
+ 	},
+ 	
+ 	eventOnScroll: function (e) {
+@@ -173,7 +185,7 @@
+ 	},
+ 	
+ 	visible : function() {
+-		return this.listParent.visible();
++		return this.hasClass(this.listParent.classList, 'rich-combobox-list-cord-display');
+ 	},
+ 	
+ 	setSize : function() {
+@@ -372,8 +384,9 @@
+ 		var items = new Array();
+ 		for (var i = 0; i < this.itemsText.length; i++) {
+ 			var itText = this.itemsText[i];
+-			if (itText.substr(0, text.length).toLowerCase() == text.toLowerCase()) { //FIXME: to optimaize
+-				items.push(this.createItem(itText, this.classes.item.normal));
++			// if (itText.substr(0, text.length).toLowerCase() == text.toLowerCase()) { //FIXME: to optimaize
++			if (itText.toUpperCase().indexOf(text.toUpperCase()) > -1) { // 2020/04/02 Ricerca su tutto il testo
++				items.push(this.createItemWithHighLight(itText, text, this.classes.item.normal));
+ 			}
+ 		}
+ 		return items;
+@@ -389,7 +402,7 @@
+ 		for (var i = 0; i < items.length; i++) {
+ 			var item = items[i]
+ 			var itText = item.innerHTML.unescapeHTML();
+-			if (itText.substr(0, substr.length).toLowerCase() == substr.toLowerCase()) { //FIXME: to optimaize
++			if (itText.toUpperCase().indexOf(substr.toUpperCase()) > -1) { // 2020/04/02 Ricerca su tutto il testo
+ 				return item;
+ 			}
+ 		}
+@@ -416,6 +429,17 @@
+ 		return "<span class=\"" + className+ "\">" + escapedText + "</span>";
+ 	},
+ 	
++	createItemWithHighLight : function(text, substr, className) {
++		var escapedText = text.escapeHTML();
++		
++		if(substr && substr.length > 0) {
++			var strongText = this.createHighlightItem(escapedText, substr);
++			return "<span class=\"" + className+ "\">" + strongText + "</span>";	
++		}
++		
++		return "<span class=\"" + className+ "\">" + escapedText + "</span>";
++	},
++	
+ 	createIframe : function(parentElem, width, comboboxId, classes) {
+ 		var iframe = document.createElement("iframe");
+ 		
+@@ -457,12 +481,13 @@
+     	var jqs = jQuery(source);
+     	var so = jqs.offset();
+     	
+-    	var hidden = (jqt.css('display') == 'none');
++    	var hidden = (jqt.hasClass('rich-combobox-list-cord-display-none'));
+     	var oldVisibility;
+     	
+     	if (hidden) {
+-    		oldVisibility = jqt.css('visibility');
+-    		jqt.css('visibility', 'hidden').css('display', '');
++    		oldVisibility = jqt.hasClass('rich-combobox-list-cord-visibility');
++    		jqt.removeClass( "rich-combobox-list-cord-display-none" ).addClass( "rich-combobox-list-cord-display" );
++    		jqt.removeClass( "rich-combobox-list-cord-visibility" ).addClass( "rich-combobox-list-cord-visibility-hidden" );
+     	}
+     	
+     	var left = this.parseToPx(jqt.css('left'));
+@@ -480,7 +505,14 @@
+     	var to = jqt.offset();
+ 
+     	if (hidden) {
+-    		jqt.css('display', 'none').css('visibility', oldVisibility);
++			jqt.removeClass( "rich-combobox-list-cord-display" ).addClass( "rich-combobox-list-cord-display-none" );
++    		jqt.removeClass( "rich-combobox-list-cord-visibility-hidden" );
++    		
++    		if(oldVisibility){
++				jqt.addClass( "rich-combobox-list-cord-visibility" );
++			} else {
++				jqt.addClass( "rich-combobox-list-cord-visibility-hidden" );
++			}
+     	}
+     	
+     	// set position
+@@ -488,7 +520,91 @@
+     		left: (so.left - to.left + left) + 'px', 
+     		top: (so.top - to.top + top + vOffset) + 'px'
+     	});
+-    }
++    },
++
++    
++    createHighlightItem: function(test, subString){
++	  var tokens = this.occurrences(test,test.toUpperCase(), subString.toUpperCase());
++	  
++	  var html = '';
++	  for(var i=0;i<tokens.length;i++){
++		  var token = tokens[i];
++		  if(token.highlight) { 
++			  html += "<strong>";
++		  }
++		  html += token.originText;
++		  if(token.highlight) {
++			  html += "</strong>";
++			  }
++		  }
++		  
++		  return html;
++	  },
++    	  
++    occurrences: function (originTest, test, subString) {
++		  var split = [];
++		  test += "";
++	  subString += "";
++	  if (subString.length <= 0) return split;
++
++	  var pos = 0, nuovaPos = 0, step = subString.length;
++
++	  while (true) {
++//    			  console.log('Pos: ' + pos);
++		  nuovaPos = test.indexOf(subString, pos);
++//    			  console.log('NuovaPos: ' + nuovaPos);
++		  var tokenString = '';
++		  var originTokenString = '';
++		  var highlight = false;
++		  if (nuovaPos >= 0) {
++			  if(nuovaPos == pos) { // metch del token highlight true
++				  tokenString = test.substr(pos, step);
++				  originTokenString = originTest.substr(pos, step);
++				  pos += step;
++				  highlight = true;
++			  } else {
++				  tokenString = test.substr(pos, (nuovaPos - pos));
++				  originTokenString = originTest.substr(pos, (nuovaPos - pos));
++				  pos = nuovaPos;
++			  }
++			  if(tokenString) {
++//    					  console.log('Token: ' + tokenString);
++//    					  console.log('Highlight: ' + highlight);
++				  var item = {};
++				  item.text = tokenString;
++				  item.highlight = highlight;
++				  item.originText = originTokenString;
++				  split.push(item);
++			  }
++		  } else {
++			  tokenString = test.substr(pos);
++			  originTokenString = originTest.substr(pos);
++			  if(tokenString) {
++//    					  console.log('Ultimo Token: ' + tokenString);
++//    					  console.log('Highlight: ' + highlight);
++				  var item = {};
++				  item.text = tokenString;
++				  item.highlight = highlight;
++				  item.originText = originTokenString;
++				  split.push(item);
++			  }
++			  break;
++		  }
++	  }
++	   
++	  return split;
++	},
++	hasClass: function(classes, cls) {
++		if(classes){
++		    var i;
++		    for(i = 0; i < classes.length; i++) {
++		        if(classes[i] == cls) {
++		            return true;
++		        }
++		    }
++	    }
++	    return false;
++	}
+ }
+ 
+ Richfaces.ComboBoxList.getElemXY = function(elem) {
+--- richfaces-ui-3.3.4.Final.orig/ui/combobox/src/main/resources/org/richfaces/renderkit/html/css/combobox.xcss	2022-11-10 19:29:53.532281435 +0100
++++ richfaces-ui-3.3.4.Final/ui/combobox/src/main/resources/org/richfaces/renderkit/html/css/combobox.xcss	2022-11-10 21:21:30.955830370 +0100
+@@ -82,6 +82,22 @@
+ 	position : relative; 
+ }
+ 
++.rich-combobox-list-cord-display-none {
++	display: none; 
++}
++
++.rich-combobox-list-cord-display {
++	display: ;
++}
++
++.rich-combobox-list-cord-visibility-hidden {
++	visibility: hidden; 
++}
++
++.rich-combobox-list-cord-visibility {
++	visibility: visible;
++}
++
+ .rich-combobox-item {
+ 	padding : 2px; 
+ 	white-space : nowrap;
+--- richfaces-ui-3.3.4.Final.orig/ui/combobox/src/main/templates/combobox.jspx	2022-11-10 19:29:53.532281435 +0100
++++ richfaces-ui-3.3.4.Final/ui/combobox/src/main/templates/combobox.jspx	2022-11-10 21:25:48.260670272 +0100
+@@ -26,7 +26,13 @@
+ 	</h:scripts>
+  
+ 	<f:clientid var="clientId" />
+-	
++	<jsp:scriptlet>
++	<![CDATA[ 
++			variables.setVariable("cspValue", getUtils().getCspNonceValue(context));
++			variables.setVariable("cssId", getUtils().getCssId(clientId));
++	]]>
++	</jsp:scriptlet>
++
+ 	<jsp:scriptlet>
+ 		<![CDATA[
+             Boolean disabled = (Boolean) component.getAttributes().get("disabled");
+@@ -110,21 +116,31 @@
+ 		]]>
+     </jsp:scriptlet>
+ 		<f:resource var="spacer" name="images/spacer.gif"/>
+-<div id="#{clientId}">		
+-<div id="#{clientId}combobox" class="rich-combobox-font rich-combobox #{styleClass}" style="width:#{width};#{style}"
++<div id="#{clientId}">	
++		<style type="text/css" nonce="#{cspValue}">
++			.#{cssId}-combobox-style { width:#{width};#{style} }
++			.#{cssId}-combobox-shell-style { width:#{width}; }
++			.#{cssId}-combobox-field-width-style { width:#{correction} !important; }
++			.#{cssId}-combobox-field-style { #{component.attributes['inputInactiveStyle']} }
++			.#{cssId}-combobox-button-style { #{component.attributes['buttonStyle']}; background-image: #{buttonIconInactive}; }
++			.#{cssId}-combobox-strut-style { width:#{correction}; }
++			.#{cssId}-combobox-list-cord-style { #{component.attributes['listStyle']}; }
++			.#{cssId}-combobox-list-cord-position-style { position:absolute;z-index:1000; }
++			.#{cssId}-combobox-shadow-style { border:0; }
++		</style>
++<div id="#{clientId}combobox" class="rich-combobox-font rich-combobox #{styleClass} #{cssId}-combobox-style" 
+ 	 x:passThruWithExclusions="value,name,type,id,styleClass,class,style,size,autocomplete,disabled,onchange">
+ 
+ 	<div class="rich-combobox-list-cord"></div>
+-	<div class="rich-combobox-font rich-combobox-shell" style="width:#{width};">
++	<div class="rich-combobox-font rich-combobox-shell #{cssId}-combobox-shell-style">
+ 		<input id="#{clientId}comboboxField" 
+ 					   name="#{clientId}comboboxField" 
+ 					   disabled="#{disabled}" 
+-					   class="#{valueStyle} rich-combobox-input-inactive  #{component.attributes['inputInactiveClass']}" type="text" 
++					   class="#{valueStyle} rich-combobox-input-inactive #{component.attributes['inputInactiveClass']} #{cssId}-combobox-field-width-style #{cssId}-combobox-field-style"  type="text" 
+ 					   readonly="#{this:getReadOnlyValue(enableManualInput)}"
+ 					   value="#{value}" 
+ 					   x:onblur="#{component.attributes['onblur']}"
+ 					   onfocus = "#{component.attributes['onfocus']}"
+-					   style="width:#{correction}; #{component.attributes['inputInactiveStyle']}"
+ 					   autocomplete="off"
+ 					   tabindex="#{component.attributes['tabindex']}"
+ 					   />
+@@ -140,28 +156,27 @@
+ 			   disabled="#{disabled}" 
+ 			   type="text" 
+ 			   value="" 
+-			   style="#{component.attributes['buttonStyle']}; background-image: #{buttonIconInactive};" 
+-			   class="rich-combobox-font-inactive rich-combobox-button-icon-inactive rich-combobox-button-inactive #{buttonInactiveClass}"/>
+-		<div class="rich-combobox-strut rich-combobox-font" style="width:#{correction}">Strut</div>		   
++			   class="rich-combobox-font-inactive rich-combobox-button-icon-inactive rich-combobox-button-inactive #{buttonInactiveClass} #{cssId}-combobox-button-style"/>
++		<div class="rich-combobox-strut rich-combobox-font #{cssId}-combobox-strut-style">Strut</div>		   
+ 	</div>
+ 	
+-	<div id="#{clientId}listParent" class="rich-combobox-list-cord #{component.attributes['listClass']}" style="display:none; #{component.attributes['listStyle']}; position:absolute;z-index:1000;">
++	<div id="#{clientId}listParent" class="rich-combobox-list-cord #{component.attributes['listClass']} #{cssId}-combobox-list-cord-style #{cssId}-combobox-list-cord-position-style rich-combobox-list-cord-display-none">
+ 		<div class="rich-combobox-shadow">
+ 			<table id="#{clientId}shadow" cellpadding="0" cellspacing="0" border="0">
+ 				<tr>
+ 					<td class="rich-combobox-shadow-tl">
+-						<img src="#{spacer}" width="10" height="1" alt="" style="border:0"></img><br></br>
++						<img src="#{spacer}" width="10" height="1" alt="" class="#{cssId}-combobox-shadow-style"></img><br></br>
+ 					</td>
+ 					<td class="rich-combobox-shadow-tr">
+-						<img src="#{spacer}" width="1" height="10" alt="" style="border:0"></img><br></br>
++						<img src="#{spacer}" width="1" height="10" alt="" class="#{cssId}-combobox-shadow-style"></img><br></br>
+ 					</td>
+ 				</tr>
+ 				<tr>
+ 					<td class="rich-combobox-shadow-bl">
+-						<img src="#{spacer}" width="1" height="10" alt="" style="border:0"></img><br></br>
++						<img src="#{spacer}" width="1" height="10" alt="" class="#{cssId}-combobox-shadow-style"></img><br></br>
+ 					</td>
+ 					<td class="rich-combobox-shadow-br">
+-						<img src="#{spacer}" width="10" height="10" alt="" style="border:0"></img><br></br>
++						<img src="#{spacer}" width="10" height="10" alt="" class="#{cssId}-combobox-shadow-style"></img><br></br>
+ 					</td>
+ 				</tr>
+ 			</table>
+@@ -254,7 +269,7 @@
+ 	<c:scriptObject var="options">
+ 		<c:scriptOption variables="userStyles, listOptions, fields, value" />
+ 	</c:scriptObject>
+-	<script type="text/javascript">
++	<script type="text/javascript" nonce="#{cspValue}">
+ 		new Richfaces.ComboBox("#{clientId}"
+ 			<c:if test="#{not empty options}">
+ 			, <f:writeAsScript value="#{options}" />

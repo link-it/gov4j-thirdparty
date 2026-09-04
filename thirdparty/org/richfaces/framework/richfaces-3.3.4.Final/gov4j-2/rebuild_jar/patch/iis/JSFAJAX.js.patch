@@ -1,0 +1,151 @@
+--- richfaces-ui-3.3.4.Final/framework/impl/src/main/javascript/ajaxjsf/JSFAJAX.js	2013-07-10 17:23:42.000000000 +0200
++++ richfaces-ui-3.3.4.Final/framework/impl/src/main/javascript/ajaxjsf/JSFAJAX.js	2017-06-07 11:02:13.312837308 +0200
+@@ -1,5 +1,48 @@
+ // Global Variables
+ // var timeout = null;
++// IE with IIS fix
++var _force_get= false;
++
++function abilitaModifica(){
++	if(isIE()){
++		_force_get = true;
++	}
++}
++
++function disabilitaModifica(){
++	if(isIE()){
++		_force_get = false;
++	}
++}
++			
++function IEVersione (){
++	var ua = window.navigator.userAgent;
++	
++	var msie = ua.indexOf('MSIE ');
++	if (msie > 0) {
++	  // IE 10 or older => return version number
++	  return parseInt(ua.substring(msie + 5, ua.indexOf('.', msie)), 10);
++	}
++	
++	var trident = ua.indexOf('Trident/');
++	if (trident > 0) {
++	  // IE 11 => version
++	  var rv = ua.indexOf('rv:');
++	  return parseInt(ua.substring(rv + 3, ua.indexOf('.', rv)), 10);
++	}
++	
++	var edge = ua.indexOf('Edge/');
++	if (edge > 0) {
++	  // Edge (IE 12+) => version
++	  return parseInt(ua.substring(edge + 5, ua.indexOf('.', edge)), 10);
++	}
++	
++	return -1;
++}
++			
++function isIE(){
++	return IEVersione() > -1;
++}
+ 
+ // TODO - use sarissa for standard XMLHttpRequest Support.
+ 
+@@ -135,7 +178,17 @@
+     // Query use utf-8 encoding for prepare urlencode data, force request content-type and charset.
+     var contentType = "application/x-www-form-urlencoded; charset=UTF-8";
+ 	this._request.setRequestHeader( "Content-Type", contentType); 
++	// IE with IIS fix
++	if(this.IEVersion() > -1 && _force_get){
++		if(this._query.getQueryString()){
++			if(this._query.getQueryString().length <= 2083)
++				this._request.setRequestHeader( "Content-length" );
++		}
++	}
++	_force_get = false;
+     } catch(e){
++	// IE with IIS fix
++	_force_get = false;
+     	// Opera 7-8 - force get
+     	LOG.debug("XmlHttpRequest not support setRequestHeader - use GET instead of POST");
+     	this._request.open('GET', this._query.getActionUrl("")+"?"+this._query.getQueryString() , true);
+@@ -357,6 +410,48 @@
+ 			    }
+ 		    }
+ 	},
++
++	IEVersion: function() {
++		var ua = window.navigator.userAgent;
++
++		var msie = ua.indexOf('MSIE ');
++		if (msie > 0) {
++		  // IE 10 or older => return version number
++		  return parseInt(ua.substring(msie + 5, ua.indexOf('.', msie)), 10);
++		}
++
++		var trident = ua.indexOf('Trident/');
++		if (trident > 0) {
++		  // IE 11 => version
++		  var rv = ua.indexOf('rv:');
++		  return parseInt(ua.substring(rv + 3, ua.indexOf('.', rv)), 10);
++		}
++
++		var edge = ua.indexOf('Edge/');
++		if (edge > 0) {
++		  // Edge (IE 12+) => version
++		  return parseInt(ua.substring(edge + 5, ua.indexOf('.', edge)), 10);
++		}
++
++		return -1;
++	},
++	  
++	serializeXmlNode: function(xmlNode, v) {
++		try {
++			if (typeof window.XMLSerializer != "undefined" && v && (v > 10 || v == -1)) {
++				return (new window.XMLSerializer()).serializeToString(xmlNode);
++			} else if (typeof xmlNode.xml != "undefined") {
++				return xmlNode.xml;
++			} else {
++				console.log("Node xml: property missing.");
++				return '';
++			}
++		}
++		catch(e) {
++			console.log("Node serialization failed " + e.message);
++		}
++	},
++
+ 	
+ 	/**
+ 	 * Update DOM element with given ID by element with same ID in parsed responseXML
+@@ -391,7 +486,18 @@
+ 						Sarissa.clearChildNodes(oldnode);
+ 	   		        }
+    		        }
+-   		        oldnode.outerHTML = new XMLSerializer().serializeToString(newnode);
++				var v = this.IEVersion();
++				var _serialized = this.serializeXmlNode(newnode, v);
++				if(v != 11) {
++					oldnode.outerHTML = _serialized;
++				} else {
++					var _node = newnode.cloneNode(true);
++					var _children = _node.childElements();
++					for(var i = 0; i<_children.length; i++){
++						oldnode.appendChild(_children[i]);
++					}
++				}
++
+ 			} else {
+     // need to check for firstChild due to opera 8 bug with hasChildNodes
+ 				Sarissa.clearChildNodes(oldnode);
+@@ -1041,8 +1147,11 @@
+         	  }
+         	  // Replace client-side hidden inputs for JSF View state.
+         	  var idsSpan = req.getElementById("ajax-view-state");
+-	          LOG.debug("Hidden JSF state fields: "+idsSpan);
+         	  if(idsSpan != null){
++			if(typeof idsSpan.xml != "undefined") {
++				LOG.debug("Hidden JSF state fields: "+idsSpan.xml);
++			}
++
+         	  	// For a portal case, replace content in the current window only.
+ 			        var namespace = options.parameters['org.ajax4jsf.portlet.NAMESPACE'];
+ 			        LOG.debug("Namespace for hidden view-state input fields is "+namespace);

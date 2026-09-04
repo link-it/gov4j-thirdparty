@@ -1,0 +1,12 @@
+--- richfaces-ui-3.3.4.Final.orig/ui/layout/src/main/java/org/richfaces/renderkit/AbstractPageRenderer.java	2022-11-10 19:29:53.624282104 +0100
++++ richfaces-ui-3.3.4.Final/ui/layout/src/main/java/org/richfaces/renderkit/AbstractPageRenderer.java	2022-11-10 21:58:56.623864586 +0100
+@@ -72,6 +72,9 @@
+ 		doctypes.put("html-3.2", new String[] {
+ 				"<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 3.2 Final//EN\">\n",
+ 				"text/html", null });
++		
++		// HTML5
++		doctypes.put("html5", new String[] { "<!DOCTYPE html>\n", "text/html", null });
+ 	}
+ 
+ 	public String prolog(FacesContext context, UIComponent component)

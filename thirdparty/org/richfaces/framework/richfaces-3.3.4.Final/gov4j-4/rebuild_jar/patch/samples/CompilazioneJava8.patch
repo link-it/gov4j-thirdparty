@@ -1,0 +1,10 @@
+--- richfaces-ui-3.3.4.Final.orig/samples/richfaces-demo/pom.xml	2022-10-29 08:40:34.891356429 +0200
++++ richfaces-ui-3.3.4.Final/samples/richfaces-demo/pom.xml	2022-10-29 09:06:17.156131825 +0200
+@@ -61,6 +61,7 @@
+       <plugin>
+         <groupId>org.codehaus.mojo</groupId>
+         <artifactId>exec-maven-plugin</artifactId>
++        <version>1.1</version>
+         <executions>
+           <execution>
+             <id>tlddoc</id>

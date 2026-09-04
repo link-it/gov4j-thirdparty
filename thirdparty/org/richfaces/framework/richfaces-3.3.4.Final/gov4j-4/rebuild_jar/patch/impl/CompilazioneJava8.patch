@@ -1,0 +1,22 @@
+--- richfaces-ui-3.3.4.Final.orig/framework/impl/pom.xml	2022-10-29 08:40:34.935356742 +0200
++++ richfaces-ui-3.3.4.Final/framework/impl/pom.xml	2022-10-29 09:04:05.138557336 +0200
+@@ -158,10 +158,10 @@
+ 							</aggregations>
+ 							<resources>
+ 								<resource>
+-									<directory>target/javascript</directory>
++									<directory>${project.build.directory}/javascript</directory>
+ 								</resource>
+ 								<resource>
+-									<directory>src/main/resources</directory>
++									<directory>${project.basedir}/src/main/resources</directory>
+ 								</resource>
+ 							</resources>
+ 						</configuration>
+@@ -297,4 +297,4 @@
+ 			<version>3.3.4.Final</version>
+ 		</dependency>
+ 	</dependencies>
+-</project>
+\ No newline at end of file
++</project>

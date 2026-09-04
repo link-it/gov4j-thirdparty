@@ -1,0 +1,19 @@
+# Il problema da risolvere riguarda le applicazioni che sono protette tramite autenticazione NTLM e che vengono accedute tramite IE:
+
+https://stackoverflow.com/questions/34077185/ntlm-authentication-fails-with-ie-works-with-chrome-and-firefox
+
+# Nel caso specifico delle nostre applicazioni il framework Richfaces consente di effettuare la navigazione tra le pagine anche utilizzando delle POST Ajax. 
+
+# All'interno di IE l'esecuzione di questo protocollo di autenticazione prevede che quando si accede per la prima volta ad una URL dell'applicazione, il browser esegue un accesso anonimo a cui segue una fase di (NEGOTIATE) per controllare se si dispone dei permessi necessari per la risorsa richiesta.
+
+https://blogs.msdn.microsoft.com/asiatech/2012/03/28/ie-always-prompts-for-authentication-when-browsing-through-proxy-server/
+
+# Quando si prova ad accedere ad una nuova risorsa effettuando una GET non sorgono problemi;
+# Quando invece si esegue una POST Ajax la sequenza delle chiamate effettuate genera un problema:
+# Il browser perde il payload della POST originale alla fine della fase di NEGOTIATE, inviando al server una payload vuoto che causa la perdita dello stato dell'applicazione.
+
+# Tra le soluzioni che risolvono il problema:
+#
+# - Configurare via registro tutte le macchine windows con IE per non utilizzare la NEGOTIATE;
+# - Applicare la soluzione presente in 'patch/iis' , che forza l'utilizzo del metodo GET quando si prova ad accedere sezioni non ancora visitate dell'applicazione. 
+

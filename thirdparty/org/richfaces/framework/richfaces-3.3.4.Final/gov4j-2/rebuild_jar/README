@@ -1,0 +1,347 @@
+# Passi necessari per generare la versione con patch della libreria richfaces-impl-3.3.4.Final e richfaces-ui-3.3.4.Final.
+
+# Preparare l'ambiente per la generazione delle nuove versioni dei jar.
+
+1) unzip richfaces-ui-3.3.4.Final-src.zip
+
+# Quest'ultima operazione crea tutta la struttura del progetto richfaces.
+# Note:
+# - il progetto impl si trova nel path "richfaces-ui-3.3.4.Final/framework/impl/";
+# - il file da modificare si chiama AJAX.js e viene generato dalla procedura di build a partire dai file che si trovano nella directory
+# "richfaces-ui-3.3.4.Final/framework/impl/src/main/javascript/ajaxjsf/";
+# - questa build consente di applicare due patch:
+# 1 - Standard: risolve tutti i problemi relativi all'utilizzo di IE con versioni > 8 ;
+# 2 - IIS: estende la patch standard risolvendo il problema dell'esecuzione di applicazioni realizzate con framework Richfaces ed eseguite su un ambiente protetto con autenticazione NTLM (vedi file README.IIS).
+
+2) applicare una delle due seguenti patch, a seconda se il jar che si vuole ottenere deve risolvere anche i problemi descritti in README.IIS: 
+
+2a) Patch Standard:
+	patch -p0 < patch/standard/JSFAJAX.js.patch;
+
+2b) Patch IIS:
+	patch -p0 < patch/iis/JSFAJAX.js.patch;
+
+
+# Note 2:
+# - il progetto ui si trova nel path "richfaces-ui-3.3.4.Final/ui/";
+# Sono state implementate delle migliorie per allineare la console di monitoraggio con quella di gestione, i file da patchare sono:
+# - "richfaces-ui-3.3.4.Final/ui/combobox/src/main/resources/org/richfaces/renderkit/html/scripts/combobox.js"
+# - "richfaces-ui-3.3.4.Final/ui/combobox/src/main/resources/org/richfaces/renderkit/html/scripts/combolist.js"
+# - "richfaces-ui-3.3.4.Final/ui/suggestionbox/src/main/resources/org/richfaces/renderkit/html/scripts/suggestionbox.js"
+# alla fine delle istruzioni di build dovremo prelevare dal jar "richfaces-ui-3.3.4.Final" il file "org/richfaces/ui.pack.js" contentente il js minimizzato da aggiornare
+# per l'evoluzione delle funzionalita' javascript per i componenti Combobox e Suggestionbox applicare la reguente patch
+
+3a) Patch ComboBox
+	patch -p0 < patch/ui/RichfacesUI-Combobox.patch;
+
+3b) Patch Autocomplete
+	patch -p0 < patch/ui/RichfacesUI-Suggestionbox.patch;
+
+# La compilazione per generare i jar aggiornati e' la seguente
+
+4) cd richfaces-ui-3.3.4.Final/
+
+# Ci troviamo all'interno della struttura completa di tutto il progetto richfaces, andiamo a generare solo le parti necessarie:
+
+4) vi pom.xml
+5) aggiornare la url del repository dei plugin: 
+
+	    <pluginRepositories>
+	      <pluginRepository>
+		<id>atlassian-m2-repository</id>
+		<name>Atlassian Maven 2.x Repository</name>
+		<url>https://maven.atlassian.com/content/repositories/atlassian-public/</url>
+	      </pluginRepository>
+	    </pluginRepositories>
+
+6) salvare le modifiche.
+7) vi framework/pom.xml
+8) escludere il modulo dei test java:
+
+	<modules>
+		<!--
+			<module>api-parent</module>
+			<module>impl-parent</module>
+		-->
+		<module>api</module>
+		<module>impl</module>
+
+		<!--
+		<module>test</module> 
+		<module>jsf-test</module>
+		-->
+	</modules>
+
+9) salvare le modifiche.
+
+# Eseguire la compilazione del progetto:
+
+# N.B. --> Utilizzare mvn versione 3.6.1 e jdk 1.8
+
+10) mvn clean install -N -Dmaven.test.skip=true
+
+11) cd cdk
+
+12) mvn  clean install -Dmaven.test.skip=true
+
+13) cd ..
+
+14) cd framework
+
+15) mvn  clean install -Dmaven.test.skip=true
+
+Quando si ottiene errore passare poi a mvn versione 3.0.5 e jdk 1.7
+e usare questa combinazione per compilare il framework
+
+NOTA: Reiniziare dal punto 10) ma prima creare a mano queste dipendenze se non esistono:
+
+- mkdir /home/poli/.m2/repository/org/apache/maven/plugins/maven-plugin-plugin/2.9
+  pushd /home/poli/.m2/repository/org/apache/maven/plugins/maven-plugin-plugin/2.9
+  wget https://repo1.maven.org/maven2/org/apache/maven/plugins/maven-plugin-plugin/2.9/maven-plugin-plugin-2.9.pom
+  wget https://repo1.maven.org/maven2/org/apache/maven/plugins/maven-plugin-plugin/2.9/maven-plugin-plugin-2.9.jar
+  popd
+
+- mkdir /home/poli/.m2/repository/org/apache/maven/plugin-tools/maven-plugin-tools-api/2.9/
+  pushd /home/poli/.m2/repository/org/apache/maven/plugin-tools/maven-plugin-tools-api/2.9/
+  wget https://repo1.maven.org/maven2/org/apache/maven/plugin-tools/maven-plugin-tools-api/2.9/maven-plugin-tools-api-2.9.jar
+  wget https://repo1.maven.org/maven2/org/apache/maven/plugin-tools/maven-plugin-tools-api/2.9/maven-plugin-tools-api-2.9.pom
+  popd
+
+- mkdir /home/poli/.m2/repository/org/apache/maven/plugin-tools/maven-plugin-tools/2.9/
+  pushd /home/poli/.m2/repository/org/apache/maven/plugin-tools/maven-plugin-tools/2.9/
+  wget https://repo1.maven.org/maven2/org/apache/maven/plugin-tools/maven-plugin-tools/2.9/maven-plugin-tools-2.9.pom
+  popd
+
+- mkdir /home/poli/.m2/repository/org/apache/maven/plugin-tools/maven-plugin-tools-java/2.9/
+  pushd /home/poli/.m2/repository/org/apache/maven/plugin-tools/maven-plugin-tools-java/2.9/
+  wget https://repo1.maven.org/maven2/org/apache/maven/plugin-tools/maven-plugin-tools-java/2.9/maven-plugin-tools-java-2.9.jar
+  wget https://repo1.maven.org/maven2/org/apache/maven/plugin-tools/maven-plugin-tools-java/2.9/maven-plugin-tools-java-2.9.pom
+  popd
+
+- mkdir /home/poli/.m2/repository/org/apache/maven/plugin-tools/maven-plugin-tools-beanshell/2.9/
+  pushd /home/poli/.m2/repository/org/apache/maven/plugin-tools/maven-plugin-tools-beanshell/2.9/
+  wget https://repo1.maven.org/maven2/org/apache/maven/plugin-tools/maven-plugin-tools-beanshell/2.9/maven-plugin-tools-beanshell-2.9.jar
+  wget https://repo1.maven.org/maven2/org/apache/maven/plugin-tools/maven-plugin-tools-beanshell/2.9/maven-plugin-tools-beanshell-2.9.pom
+  popd
+
+- mkdir /home/poli/.m2/repository/org/apache/maven/plugins/maven-source-plugin/2.0.4
+  pushd /home/poli/.m2/repository/org/apache/maven/plugins/maven-source-plugin/2.0.4
+  wget https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-source-plugin/2.0.4/maven-source-plugin-2.0.4.jar
+  wget https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-source-plugin/2.0.4/maven-source-plugin-2.0.4.pom 
+  popd
+
+- mkdir /home/poli/.m2/repository/org/apache/maven/plugins/maven-resources-plugin/2.3
+  pushd /home/poli/.m2/repository/org/apache/maven/plugins/maven-resources-plugin/2.3
+  wget https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-resources-plugin/2.3/maven-resources-plugin-2.3.pom
+  wget https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-resources-plugin/2.3/maven-resources-plugin-2.3.jar
+  popd
+
+- mkdir /home/poli/.m2/repository/org/apache/maven/plugins/maven-compiler-plugin/2.0.2
+  pushd /home/poli/.m2/repository/org/apache/maven/plugins/maven-compiler-plugin/2.0.2
+  wget https://repo1.maven.org/maven2/org/apache/maven/plugins/maven-compiler-plugin/2.0.2/maven-compiler-plugin-2.0.2.pom
+  wget https://repo1.maven.org/maven2/org/apache/maven/plugins/maven-compiler-plugin/2.0.2/maven-compiler-plugin-2.0.2.jar
+  popd
+
+- mkdir /home/poli/.m2/repository/org/apache/maven/plugins/maven-plugins/8
+  pushd /home/poli/.m2/repository/org/apache/maven/plugins/maven-plugins/8
+  wget https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-plugins/8/maven-plugins-8.pom
+  popd
+
+- mkdir /home/poli/.m2/repository/org/apache/maven/plugins/maven-install-plugin/2.2
+  pushd /home/poli/.m2/repository/org/apache/maven/plugins/maven-install-plugin/2.2
+  wget https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-install-plugin/2.2/maven-install-plugin-2.2.jar
+  wget https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-install-plugin/2.2/maven-install-plugin-2.2.pom
+  popd
+
+- mkdir /home/poli/.m2/repository/org/apache/maven/shared/file-management/1.2
+  pushd /home/poli/.m2/repository/org/apache/maven/shared/file-management/1.2
+  wget https://repo1.maven.org/maven2/org/apache/maven/shared/file-management/1.2/file-management-1.2.pom
+  wget https://repo1.maven.org/maven2/org/apache/maven/shared/file-management/1.2/file-management-1.2.jar
+  popd
+
+- mkdir /home/poli/.m2/repository/com/thoughtworks/qdox/qdox/1.11/
+  pushd /home/poli/.m2/repository/com/thoughtworks/qdox/qdox/1.11/
+  wget https://repo1.maven.org/maven2/com/thoughtworks/qdox/qdox/1.11/qdox-1.11.jar
+  wget https://repo1.maven.org/maven2/com/thoughtworks/qdox/qdox/1.11/qdox-1.11.pom
+  popd
+
+- mkdir /home/poli/.m2/repository/org/slf4j/slf4j-api/1.4.2
+  pushd /home/poli/.m2/repository/org/slf4j/slf4j-api/1.4.2
+  wget https://repo1.maven.org/maven2/org/slf4j/slf4j-api/1.4.2/slf4j-api-1.4.2.pom
+  wget https://repo1.maven.org/maven2/org/slf4j/slf4j-api/1.4.2/slf4j-api-1.4.2.jar
+  popd
+
+- mkdir /home/poli/.m2/repository/org/slf4j/slf4j-parent/1.4.2
+  pushd /home/poli/.m2/repository/org/slf4j/slf4j-parent/1.4.2
+  wget https://repo1.maven.org/maven2/org/slf4j/slf4j-parent/1.4.2/slf4j-parent-1.4.2.pom
+  popd
+
+- mkdir /home/poli/.m2/repository/org/slf4j/slf4j-simple/1.4.2
+  pushd /home/poli/.m2/repository/org/slf4j/slf4j-simple/1.4.2
+  wget https://repo1.maven.org/maven2/org/slf4j/slf4j-simple/1.4.2/slf4j-simple-1.4.2.pom
+  wget https://repo1.maven.org/maven2/org/slf4j/slf4j-simple/1.4.2/slf4j-simple-1.4.2.jar
+  popd
+
+- mkdir /home/poli/.m2/repository/org/codehaus/plexus/plexus-interpolation/1.6
+  pushd /home/poli/.m2/repository/org/codehaus/plexus/plexus-interpolation/1.6
+  wget https://repo1.maven.org/maven2/org/codehaus/plexus/plexus-interpolation/1.6/plexus-interpolation-1.6.jar
+  wget https://repo1.maven.org/maven2/org/codehaus/plexus/plexus-interpolation/1.6/plexus-interpolation-1.6.pom
+  popd
+
+- mkdir /home/poli/.m2/repository/org/codehaus/plexus/plexus-compiler-api/1.5.3
+  pushd /home/poli/.m2/repository/org/codehaus/plexus/plexus-compiler-api/1.5.3
+  wget https://repo1.maven.org/maven2/org/codehaus/plexus/plexus-compiler-api/1.5.3/plexus-compiler-api-1.5.3.pom
+  wget https://repo1.maven.org/maven2/org/codehaus/plexus/plexus-compiler-api/1.5.3/plexus-compiler-api-1.5.3.jar
+  popd
+
+- mkdir /home/poli/.m2/repository/org/codehaus/plexus/plexus-compiler-manager/1.5.3
+  pushd /home/poli/.m2/repository/org/codehaus/plexus/plexus-compiler-manager/1.5.3
+  wget https://repo1.maven.org/maven2/org/codehaus/plexus/plexus-compiler-manager/1.5.3/plexus-compiler-manager-1.5.3.pom
+  wget https://repo1.maven.org/maven2/org/codehaus/plexus/plexus-compiler-manager/1.5.3/plexus-compiler-manager-1.5.3.jar
+  popd
+
+- mkdir /home/poli/.m2/repository/org/codehaus/plexus/plexus-compiler-javac/1.5.3
+  pushd /home/poli/.m2/repository/org/codehaus/plexus/plexus-compiler-javac/1.5.3
+  wget https://repo1.maven.org/maven2/org/codehaus/plexus/plexus-compiler-javac/1.5.3/plexus-compiler-javac-1.5.3.pom
+  wget https://repo1.maven.org/maven2/org/codehaus/plexus/plexus-compiler-javac/1.5.3/plexus-compiler-javac-1.5.3.jar
+  popd
+
+- mkdir /home/poli/.m2/repository/org/codehaus/plexus/plexus-compilers/1.5.3
+  pushd /home/poli/.m2/repository/org/codehaus/plexus/plexus-compilers/1.5.3
+  wget https://repo1.maven.org/maven2/org/codehaus/plexus/plexus-compilers/1.5.3/plexus-compilers-1.5.3.pom
+  popd
+
+- mkdir /home/poli/.m2/repository/org/codehaus/plexus/plexus-compiler/1.5.3
+  pushd /home/poli/.m2/repository/org/codehaus/plexus/plexus-compiler/1.5.3
+  wget https://repo1.maven.org/maven2/org/codehaus/plexus/plexus-compiler/1.5.3/plexus-compiler-1.5.3.pom
+  popd
+
+16) cd ..
+
+
+# A questo punto La nuova versione della libreria impl si trovera' sotto framework/impl/target
+
+17) Nel caso di patch Standard eseguire i seguenti comandi:
+	
+cp framework/impl/target/richfaces-impl-3.3.4.Final.jar ../richfaces-impl-3.3.4.Final-gov4j-2.jar;
+
+cd ..	
+unzip richfaces-impl-3.3.4.Final-gov4j-2.jar -d JAR
+cp patch/standard/JSFAJAX.js.patch JAR
+rm richfaces-impl-3.3.4.Final-gov4j-2.jar
+cd JAR
+jar -cfM ../richfaces-impl-3.3.4.Final-gov4j-2.jar *
+cd ..
+rm -rf JAR
+
+cp richfaces-impl-3.3.4.Final-gov4j-2.jar ../../jar/faces/richfaces-impl-3.3.4.Final-gov4j-2.jar;
+
+
+18) Nel caso di patch IIS invece:
+
+     cp framework/impl/target/richfaces-impl-3.3.4.Final.jar ../richfaces-impl-3.3.4.Final_IIS-gov4j-2.jar
+
+
+# La compilazione dalla libreria ui prosegue:
+
+19) cd richfaces-ui-3.3.4.Final/ui
+
+20) vi pom.xml
+21) escludere la dipendenza dei test :
+
+<!-- 		<dependency> -->
+<!-- 			<groupId>org.richfaces.framework</groupId> -->
+<!-- 			<artifactId>richfaces-test</artifactId> -->
+<!-- 			<version>3.3.4.Final</version> -->
+<!-- 			<scope>test</scope> -->
+<!-- 		</dependency> -->
+
+22) salvare le modifiche.
+
+# ci sono da correggere alcuni errori di compilazione, giusto per far generare il jar dal quale estrarremo il js finale.
+
+23) vi state/src/main/java/org/richfaces/ui/application/StateApplication.java
+24) alla riga 64 sostituire:
+
+                this.exprFactory = null;
+//                              new StateExpressionFactory(){
+//                      @Override
+//                      public ExpressionFactory getDefaultFactory() {
+//                              return parent.getExpressionFactory();
+//                      }
+//              };
+
+25) salvare le modifiche.
+
+26) vi state/src/main/java/org/richfaces/ui/application/StateExpressionFactory.java
+27) commentare tutti i metodi presenti nella classe tranne l'ultimo:
+
+
+        /**
+         * @return the defaultFactory
+         */
+        public abstract ExpressionFactory getDefaultFactory() ;
+
+28) salvare le modifiche.
+
+# compilazione del progetto ui
+
+NOTA: prima impostare nella shell:
+export MAVEN_OPTS="-Xmx1024m -XX:MaxPermSize=1024m"
+
+29) mvn clean install -Dmaven.test.skip=true
+
+# a questo punto abbiamo completato la generazione delle risorse necessarie al jar ui
+
+30) cd assembly
+
+# N.B. --> utilizzare mvn versione 2.2.1 o la build schianta
+
+31) vi pom.xml
+32) indicare la versione di questo plugin :
+<!-- append extracted sources , for pack with library -->
+	<plugin>
+		<groupId>org.codehaus.mojo</groupId>
+		<artifactId>build-helper-maven-plugin</artifactId>
+
+		<version>1.4</version> 
+
+		<executions>
+
+33) mvn clean install -Dmaven.test.skip=true
+
+# il nuovo jar si trova in target/dist/richfaces-ui-3.3.4.Final.jar
+# estraiamo il file js necessario
+
+34) mkdir build
+
+35) cd build
+
+36) unzip ../target/dist/richfaces-ui-3.3.4.Final.jar org/richfaces/ui.pack.js
+
+# Copia del vecchio vecchio file ui:
+
+37) cp ../../../../richfaces-ui-3.3.4.Final.jar richfaces-ui-3.3.4.Final-gov4j-2.jar 
+
+# aggiorno i file necessari
+
+38) cp ../../../../patch/ui/* .
+    zip -r richfaces-ui-3.3.4.Final-gov4j-2.jar org/
+    zip -r richfaces-ui-3.3.4.Final-gov4j-2.jar RichfacesUI-Combobox.patch
+    zip -r richfaces-ui-3.3.4.Final-gov4j-2.jar RichfacesUI-Suggestionbox.patch
+
+39a) cp richfaces-ui-3.3.4.Final-gov4j-2.jar ../../../../
+39b) cp richfaces-ui-3.3.4.Final-gov4j-2.jar ../../../../../../jar/faces/richfaces-ui-3.3.4.Final-gov4j-2.jar
+
+# Pulizia delle risorse utilizzate:
+
+40) cd ../../../../
+41) rm -rf richfaces-ui-3.3.4.Final/;
+
+
+
+
+
+
+
+

@@ -1,0 +1,10 @@
+Elenco patch create per il componente ComboBox
+
+1) 
+Sono state implementate delle migliorie per allineare la console di monitoraggio con quella di gestione, i file da patchare sono:
+- "richfaces-ui-3.3.4.Final/ui/combobox/src/main/resources/org/richfaces/renderkit/html/scripts/combobox.js"
+- "richfaces-ui-3.3.4.Final/ui/combobox/src/main/resources/org/richfaces/renderkit/html/scripts/combolist.js"
+
+alla fine delle istruzioni di build dovremo prelevare dal jar "richfaces-ui-3.3.4.Final" il file "org/richfaces/ui.pack.js" contentente il js minimizzato da aggiornare per l'evoluzione delle funzionalita' javascript per i componenti Combobox e Suggestionbox
+
+2) Applicate modifiche per la risoluzione delle vulnerabilita' della console tramite l'utilizzo degli headers Content-Security-Policy, il codice e' stato modificato per non generare html che viola le regole previste.

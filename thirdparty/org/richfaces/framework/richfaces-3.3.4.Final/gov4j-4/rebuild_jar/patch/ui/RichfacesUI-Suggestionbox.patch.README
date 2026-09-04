@@ -1,0 +1,6 @@
+elenco patch create per il componente SuggestionBox.
+
+Sono state implementate delle migliorie per allineare la console di monitoraggio con quella di gestione, i file da patchare sono:
+- "richfaces-ui-3.3.4.Final/ui/suggestionbox/src/main/resources/org/richfaces/renderkit/html/scripts/suggestionbox.js"
+
+alla fine delle istruzioni di build dovremo prelevare dal jar "richfaces-ui-3.3.4.Final" il file "org/richfaces/ui.pack.js" contentente il js minimizzato da aggiornare per l'evoluzione delle funzionalita' javascript per i componenti Combobox e Suggestionbox

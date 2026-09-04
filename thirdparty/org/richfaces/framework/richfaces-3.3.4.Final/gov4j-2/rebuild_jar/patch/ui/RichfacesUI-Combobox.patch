@@ -1,0 +1,147 @@
+--- richfaces-ui-3.3.4.Final/ui/combobox/src/main/resources/org/richfaces/renderkit/html/scripts/combobox.js	2013-07-10 18:04:52.000000000 +0200
++++ richfaces-ui-3.3.4.Final/ui/combobox/src/main/resources/org/richfaces/renderkit/html/scripts/combobox.js	2020-04-10 12:46:41.869716535 +0200
+@@ -365,10 +365,10 @@
+ 	},
+ 	
+ 	doDirectSuggestion: function(value) {
+-		var startInd = this.field.value.length; 
+-		var endInd = value.length;
+-		this.field.value = value;
+-		Richfaces.ComboBox.textboxSelect(this.field, startInd, endInd);
++//		var startInd = this.field.value.length; 
++//		var endInd = value.length;
++//		this.field.value = value;
++//		Richfaces.ComboBox.textboxSelect(this.field, startInd, endInd);
+ 	},
+ 	
+ 	wasTextDeleted : function(event) {
+--- richfaces-ui-3.3.4.Final/ui/combobox/src/main/resources/org/richfaces/renderkit/html/scripts/combolist.js	2013-07-10 18:04:52.000000000 +0200
++++ richfaces-ui-3.3.4.Final/ui/combobox/src/main/resources/org/richfaces/renderkit/html/scripts/combolist.js	2020-04-10 16:13:59.903945272 +0200
+@@ -63,6 +63,7 @@
+ 		for (var i = 0; i < this.itemsText.length; i++) {
+ 			items.push(this.createItem(this.itemsText[i], this.classes.item.normal));
+ 		}
++		
+ 		this.createNewList(items);
+ 	},
+ 	
+@@ -372,8 +373,9 @@
+ 		var items = new Array();
+ 		for (var i = 0; i < this.itemsText.length; i++) {
+ 			var itText = this.itemsText[i];
+-			if (itText.substr(0, text.length).toLowerCase() == text.toLowerCase()) { //FIXME: to optimaize
+-				items.push(this.createItem(itText, this.classes.item.normal));
++			// if (itText.substr(0, text.length).toLowerCase() == text.toLowerCase()) { //FIXME: to optimaize
++			if (itText.toUpperCase().indexOf(text.toUpperCase()) > -1) { // 2020/04/02 Ricerca su tutto il testo
++				items.push(this.createItemWithHighLight(itText, text, this.classes.item.normal));
+ 			}
+ 		}
+ 		return items;
+@@ -389,7 +391,7 @@
+ 		for (var i = 0; i < items.length; i++) {
+ 			var item = items[i]
+ 			var itText = item.innerHTML.unescapeHTML();
+-			if (itText.substr(0, substr.length).toLowerCase() == substr.toLowerCase()) { //FIXME: to optimaize
++			if (itText.toUpperCase().indexOf(substr.toUpperCase()) > -1) { // 2020/04/02 Ricerca su tutto il testo
+ 				return item;
+ 			}
+ 		}
+@@ -416,6 +418,17 @@
+ 		return "<span class=\"" + className+ "\">" + escapedText + "</span>";
+ 	},
+ 	
++	createItemWithHighLight : function(text, substr, className) {
++		var escapedText = text.escapeHTML();
++		
++		if(substr && substr.length > 0) {
++			var strongText = this.createHighlightItem(escapedText, substr);
++			return "<span class=\"" + className+ "\">" + strongText + "</span>";	
++		}
++		
++		return "<span class=\"" + className+ "\">" + escapedText + "</span>";
++	},
++	
+ 	createIframe : function(parentElem, width, comboboxId, classes) {
+ 		var iframe = document.createElement("iframe");
+ 		
+@@ -488,7 +501,79 @@
+     		left: (so.left - to.left + left) + 'px', 
+     		top: (so.top - to.top + top + vOffset) + 'px'
+     	});
+-    }
++    },
++    
++    createHighlightItem: function(test, subString){
++	  var tokens = this.occurrences(test,test.toUpperCase(), subString.toUpperCase());
++	  
++	  var html = '';
++	  for(var i=0;i<tokens.length;i++){
++		  var token = tokens[i];
++		  if(token.highlight) { 
++			  html += "<strong>";
++		  }
++		  html += token.originText;
++		  if(token.highlight) {
++			  html += "</strong>";
++			  }
++		  }
++		  
++		  return html;
++	  },
++    	  
++    occurrences: function (originTest, test, subString) {
++		  var split = [];
++		  test += "";
++	  subString += "";
++	  if (subString.length <= 0) return split;
++
++	  var pos = 0, nuovaPos = 0, step = subString.length;
++
++	  while (true) {
++//    			  console.log('Pos: ' + pos);
++		  nuovaPos = test.indexOf(subString, pos);
++//    			  console.log('NuovaPos: ' + nuovaPos);
++		  var tokenString = '';
++		  var originTokenString = '';
++		  var highlight = false;
++		  if (nuovaPos >= 0) {
++			  if(nuovaPos == pos) { // metch del token highlight true
++				  tokenString = test.substr(pos, step);
++				  originTokenString = originTest.substr(pos, step);
++				  pos += step;
++				  highlight = true;
++			  } else {
++				  tokenString = test.substr(pos, (nuovaPos - pos));
++				  originTokenString = originTest.substr(pos, (nuovaPos - pos));
++				  pos = nuovaPos;
++			  }
++			  if(tokenString) {
++//    					  console.log('Token: ' + tokenString);
++//    					  console.log('Highlight: ' + highlight);
++				  var item = {};
++				  item.text = tokenString;
++				  item.highlight = highlight;
++				  item.originText = originTokenString;
++				  split.push(item);
++			  }
++		  } else {
++			  tokenString = test.substr(pos);
++			  originTokenString = originTest.substr(pos);
++			  if(tokenString) {
++//    					  console.log('Ultimo Token: ' + tokenString);
++//    					  console.log('Highlight: ' + highlight);
++				  var item = {};
++				  item.text = tokenString;
++				  item.highlight = highlight;
++				  item.originText = originTokenString;
++				  split.push(item);
++			  }
++			  break;
++		  }
++	  }
++	   
++	  return split;
++	}
+ }
+ 
+ Richfaces.ComboBoxList.getElemXY = function(elem) {

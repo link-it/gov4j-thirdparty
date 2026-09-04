@@ -1,0 +1,6 @@
+- follow the instructions in rebuild_jar/README; the build applies one of two alternative
+  AJAX.js patches, and rebuild_jar/README.IIS explains when the IIS variant is needed
+- then run buildArtifact.sh to assemble the artifacts
+- to rebuild the artifacts, go into the richfaces-impl and richfaces-ui directories and run 'mvn clean package'
+- to publish them on Maven Central run 'mvn clean deploy' instead: this is restricted to
+  Link.it maintainers, as it requires the GPG signing key and the Maven Central token

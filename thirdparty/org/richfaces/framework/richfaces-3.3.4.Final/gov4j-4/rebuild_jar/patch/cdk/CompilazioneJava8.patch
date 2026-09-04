@@ -1,0 +1,64 @@
+--- richfaces-ui-3.3.4.Final.orig/cdk/maven-cdk-plugin/pom.xml	2022-10-29 08:40:34.851356144 +0200
++++ richfaces-ui-3.3.4.Final/cdk/maven-cdk-plugin/pom.xml	2022-10-29 08:51:26.383764727 +0200
+@@ -83,6 +83,10 @@
+ 					</models>
+ 				</configuration>
+ 			</plugin>
++			<plugin>
++				<groupId>org.apache.maven.plugins</groupId>
++				<artifactId>maven-plugin-plugin</artifactId>
++			</plugin>
+ 		</plugins>
+ 	</build>
+-</project>
+\ No newline at end of file
++</project>
+--- richfaces-ui-3.3.4.Final.orig/cdk/maven-cdk-plugin/src/main/java/org/ajax4jsf/builder/mojo/AssemblyAttachedLibraryMojo.java	2022-10-29 08:40:34.854356165 +0200
++++ richfaces-ui-3.3.4.Final/cdk/maven-cdk-plugin/src/main/java/org/ajax4jsf/builder/mojo/AssemblyAttachedLibraryMojo.java	2022-10-29 08:58:25.571168989 +0200
+@@ -83,9 +83,9 @@
+  */
+ public class AssemblyAttachedLibraryMojo extends AbstractCDKMojo {
+ 
+-	private static final String TEMPLATES_PREFIX = "/templates/";
++	private static final String TEMPLATES_PREFIX = "templates/";
+ 
+-	private static final String TEMPLATES12_PREFIX = "/templates12/";
++	private static final String TEMPLATES12_PREFIX = "templates12/";
+ 
+ 	private static final String FACES_CONFIG_TEMPLATE = "faces-config.vm";
+ 
+--- richfaces-ui-3.3.4.Final.orig/cdk/maven-cdk-plugin/src/main/java/org/ajax4jsf/builder/mojo/AssemblyLibraryMojo.java	2022-10-29 08:40:34.854356165 +0200
++++ richfaces-ui-3.3.4.Final/cdk/maven-cdk-plugin/src/main/java/org/ajax4jsf/builder/mojo/AssemblyLibraryMojo.java	2022-10-29 08:59:12.731346685 +0200
+@@ -83,9 +83,9 @@
+  */
+ public class AssemblyLibraryMojo extends AbstractCDKMojo {
+ 
+-	private static final String TEMPLATES_PREFIX = "/templates/";
++	private static final String TEMPLATES_PREFIX = "templates/";
+ 
+-	private static final String TEMPLATES12_PREFIX = "/templates12/";
++	private static final String TEMPLATES12_PREFIX = "templates12/";
+ 
+ 	private static final String FACES_CONFIG_TEMPLATE = "faces-config.vm";
+ 
+--- richfaces-ui-3.3.4.Final.orig/cdk/pom.xml	2022-10-29 08:40:34.845356101 +0200
++++ richfaces-ui-3.3.4.Final/cdk/pom.xml	2022-10-29 09:00:33.747668097 +0200
+@@ -23,6 +23,11 @@
+ 						<target>1.5</target>
+ 					</configuration>
+ 				</plugin>
++				<plugin>
++					<groupId>org.apache.maven.plugins</groupId>
++					<artifactId>maven-plugin-plugin</artifactId>
++					<version>2.2</version>
++				</plugin>
+ 			</plugins>
+ 		</pluginManagement>
+ 	</build>
+@@ -66,4 +71,4 @@
+ 		</profile>
+ 	</profiles>
+ 
+-</project>
+\ No newline at end of file
++</project>

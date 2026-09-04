@@ -1,0 +1,3 @@
+Viene modificato il file AJAX.js e viene generato dalla procedura di build a partire dai file che si trovano nella directory in richfaces-ui-3.3.4.Final/framework/impl/src/main/javascript/ajaxjsf/
+
+La patch risolve tutti i problemi relativi all'utilizzo di IE con versioni > 8

@@ -1,0 +1,24 @@
+--- richfaces-ui-3.3.4.Final.orig/pom.xml	2022-10-29 09:23:33.629274068 +0200
++++ richfaces-ui-3.3.4.Final/pom.xml	2022-10-29 09:23:34.151276696 +0200
+@@ -139,7 +139,7 @@
+       <pluginRepository>
+         <id>atlassian-m2-repository</id>
+         <name>Atlassian Maven 2.x Repository</name>
+-        <url>http://repository.atlassian.com/maven2</url>
++        <url>https://maven.atlassian.com/content/repositories/atlassian-public/</url>
+       </pluginRepository>
+     </pluginRepositories>	
+ 	<distributionManagement>
+--- richfaces-ui-3.3.4.Final.orig/framework/pom.xml	2022-10-29 09:23:13.038170400 +0200
++++ richfaces-ui-3.3.4.Final/framework/pom.xml	2022-10-29 09:23:13.700173734 +0200
+@@ -137,8 +137,10 @@
+ 		-->
+ 		<module>api</module>
+ 		<module>impl</module>
++		<!--
+ 		<module>test</module>
+ 		<module>jsf-test</module>
++		-->
+ 	</modules>
+ 	
+ </project>
