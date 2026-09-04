@@ -5,25 +5,25 @@
 
 	<modelVersion>4.0.0</modelVersion>
 
-	<groupId>org.gov4j.thirdparty.GROUP_ID</groupId>
-	<artifactId>ARTIFACT_ID</artifactId>
-	<version>LIB_VERSION</version>
+	<groupId>org.gov4j.thirdparty.org.apache.axis2</groupId>
+	<artifactId>addressing</artifactId>
+	<version>1.1</version>
 	<packaging>jar</packaging>
 
 	<properties>
-		<original.groupId>GROUP_ID</original.groupId>
-		<original.artifactId>ARTIFACT_ID</original.artifactId>
-		<original.version>LIB_VERSION</original.version>
+		<original.groupId>org.apache.axis2</original.groupId>
+		<original.artifactId>addressing</original.artifactId>
+		<original.version>1.1</original.version>
 	</properties>
 
-	<name>PROJECT_NAME</name>
-	<description>Libreria GROUP_ID:ARTIFACT_ID:LIB_VERSION non disponibile nei repository Maven pubblici.</description>
-	<url>https://gov4j.org/maven/GROUP_NAME/ARTIFACT_ID/LIB_VERSION</url>
+	<name>addressing-1.1.jar</name>
+	<description>Libreria org.apache.axis2:addressing:1.1 non disponibile nei repository Maven pubblici.</description>
+	<url>https://gov4j.org/maven/axis2/addressing/1.1</url>
 
 	<licenses>
 		<license>
-			<name>LICENSE_NAME</name>
-			<url>LICENSE_URL</url>
+			<name>Apache License, Version 2.0</name>
+			<url>http://www.apache.org/licenses/LICENSE-2.0</url>
 		</license>
 	</licenses>
 
@@ -37,9 +37,9 @@
 	</developers>
 
 	<scm>
-		<connection>scm:git:https://github.com/link-it/gov4j-thirdparty.git</connection>
-		<developerConnection>scm:git:git@github.com:link-it/gov4j-thirdparty.git</developerConnection>
-		<url>https://github.com/link-it/gov4j-thirdparty/tree/main/SCM_PATH</url>
+		<connection>scm:none</connection>
+		<developerConnection>scm:none</developerConnection>
+		<url>scm:none</url>
 	</scm>
   
 	<build>
@@ -49,7 +49,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-resources-plugin</artifactId>
-				<version>3.5.0</version>
+				<version>3.3.1</version>
 				<configuration>
 					<encoding>UTF-8</encoding>
 				</configuration>
@@ -83,7 +83,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-jar-plugin</artifactId>
-				<version>3.5.0</version>
+				<version>3.4.2</version>
 				<!--
 				<configuration>
 					<archive>
@@ -140,7 +140,7 @@
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>flatten-maven-plugin</artifactId>
-				<version>1.7.3</version>
+				<version>1.6.0</version>
 				<executions>
 					<execution>
 						<id>flatten</id>
@@ -163,7 +163,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-gpg-plugin</artifactId>
-				<version>3.2.8</version>
+				<version>3.2.7</version>
 				<executions>
 					<execution>
 						<id>sign-artifacts</id>
@@ -179,7 +179,7 @@
 			<plugin>
 				<groupId>org.sonatype.central</groupId>
 				<artifactId>central-publishing-maven-plugin</artifactId>
-				<version>0.10.0</version>
+				<version>0.6.0</version>
 				<extensions>true</extensions>
 				<configuration>
 					<publishingServerId>central</publishingServerId>

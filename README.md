@@ -104,14 +104,20 @@ POM.
 
 [Browse them on Maven Central](https://central.sonatype.com/search?namespace=org.gov4j.thirdparty)
 
-Mirrors come in three kinds, matching the three templates under `template/`:
+Mirrors come in three kinds. The first two are the ones this repository documents, and
+match the two templates under `template/`:
 
 - **recompiled** — the upstream source is patched and rebuilt. The `-sources.jar` contains
   the full patched source of the module, and the jar itself embeds the `.patch` files, the
   modified `.java` sources and a README per patch.
 - **repackaged** — the upstream jar is modified without recompiling. The jar embeds
   `README.repackage` describing what was changed.
-- **republished** — a library missing from public repositories, republished unmodified.
+- **republished** — a library that has disappeared from public repositories, republished
+  with no modification at all. There is no patch and nothing to rebuild, so for these the
+  repository holds only the `pom.xml` used to publish each artifact, plus a `README.build`
+  pointing to Maven Central where the jar can be downloaded. Their published jars are
+  byte-identical to the originals except for the `META-INF/maven` entries that packaging
+  adds.
 
 ## Licensing
 

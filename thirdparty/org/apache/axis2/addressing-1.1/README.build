@@ -1,0 +1,7 @@
+- this library is not available from public Maven repositories: it is republished
+  here unmodified, under the org.gov4j.thirdparty.* namespaces
+- no patch is applied and there is nothing to rebuild: the published jar differs from
+  the original only by the META-INF/maven entries that packaging adds
+- this directory holds only the pom.xml used to publish it; the artifacts themselves
+  are available from Maven Central:
+    https://central.sonatype.com/artifact/org.gov4j.thirdparty.org.apache.axis2/addressing/1.1
