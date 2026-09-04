@@ -1,0 +1,11 @@
+ NOTA: Usare java 8 e maven 3.6.1 o superiore
+
+git clone https://github.com/json-path/JsonPath.git
+cd JsonPath
+git checkout json-path-2.9.0
+patch -p0 < concat.patch
+gradle build jar
+cd ..
+
+
+

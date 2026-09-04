@@ -1,0 +1,3 @@
+Per risolvere il problema segnalato eseguendo la classe di test tools/utils/src/org/openspcoop2/utils/json/JsonPathTest.java in cui il concat non funziona se si utilizza su elementi non stringhe (es. interi)
+Fino alla versione 2.4.0 il concat funzionava anche su valori differenti da stringhe. È stato ripristinato tale comportamento dalla patch prendendo il codice della classe:
+https://github.com/json-path/JsonPath/blob/json-path-2.4.0/json-path/src/main/java/com/jayway/jsonpath/internal/function/text/Concatenate.java

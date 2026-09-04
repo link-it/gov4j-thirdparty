@@ -1,0 +1,33 @@
+diff --git json-path/src/main/java/com/jayway/jsonpath/internal/function/text/Concatenate.java json-path/src/main/java/com/jayway/jsonpath/internal/function/text/Concatenate.java
+index d499afe..9933723 100644
+--- json-path/src/main/java/com/jayway/jsonpath/internal/function/text/Concatenate.java
++++ json-path/src/main/java/com/jayway/jsonpath/internal/function/text/Concatenate.java
+@@ -25,8 +25,26 @@ public class Concatenate implements PathFunction {
+             }
+         }
+         if (parameters != null) {
+-            for (String value : Parameter.toList(String.class, ctx, parameters)) {
+-                result.append(value);
++            /*for (String value : Parameter.toList(String.class, ctx, parameters)) {
++		result.append(value);
++            }*/
++            for (Parameter param : parameters) {
++		//System.out.println("PARAM '"+param+"' ["+param.getValue()+"]");
++		Object value = param.getValue();
++                if (value != null) {
++                    if (ctx.configuration().jsonProvider().isArray(value)) {
++			List<String> values = new java.util.ArrayList<String>();
++                        Parameter.consume(String.class, ctx, values, param.getValue());
++			if(!values.isEmpty()){
++			    for (String v : values){
++				result.append(v);
++			    }
++			}
++                    }
++                    else{
++		        result.append(value.toString());			
++                    }
++                }
+             }
+         }
+         return result.toString();
