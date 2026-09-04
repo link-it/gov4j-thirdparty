@@ -1,0 +1,13 @@
+ NOTA: Usare java 11 e maven 3.6.1 o superiore
+
+git clone https://bitbucket.org/atlassian/swagger-request-validator.git swagger-request-validator
+cd swagger-request-validator
+git checkout swagger-request-validator-2.41.0
+patch -p0 < patch1.patch
+cd swagger-request-validator-core
+mvn clean install
+mvn javadoc:javadoc
+cd ../..
+
+
+

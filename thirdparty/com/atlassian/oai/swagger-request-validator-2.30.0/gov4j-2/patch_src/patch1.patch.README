@@ -1,0 +1,12 @@
+Modificata la classe com.atlassian.oai.validator.schema.SchemaValidator dove è stato reso pubblica la lista di transformers così da poter rimuovere l'AdditionalPropertiesInjectionTransformer che aggiunge 'additionalProperties: false' negli schemi. 
+
+Quest'intervento è pilotabile mediante un'opzione, vedi l'oggetto OpenapiValidatorConfig di GovWay.
+
+Alcuni interventi dove è stata riportata la segnalazione
+- https://bitbucket.org/atlassian/swagger-request-validator/issues/369/make-the
+- https://bitbucket.org/atlassian/swagger-request-validator/issues/336/oneof-and-anyof-validations-violate
+- https://bitbucket.org/atlassian/swagger-request-validator/issues/293/specify-the-schemavalidator-when-creating
+L'intervento è stato fatto con utente 'FullName'
+
+Altri link:
+- https://bitbucket.org/atlassian/swagger-request-validator/issues/271/composition-with-allof-anyof-or-oneof

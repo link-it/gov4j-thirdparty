@@ -1,0 +1,53 @@
+diff --git swagger-request-validator-core/src/main/java/com/atlassian/oai/validator/schema/SchemaValidator.java swagger-request-validator-core/src/main/java/com/atlassian/oai/validator/schema/SchemaValidator.java
+index e29d7286..c3b1919a 100644
+--- swagger-request-validator-core/src/main/java/com/atlassian/oai/validator/schema/SchemaValidator.java
++++ swagger-request-validator-core/src/main/java/com/atlassian/oai/validator/schema/SchemaValidator.java
+@@ -23,6 +23,7 @@ import com.google.common.collect.Iterables;
+ import io.swagger.v3.core.util.Json;
+ import io.swagger.v3.oas.models.Components;
+ import io.swagger.v3.oas.models.OpenAPI;
++import io.swagger.v3.oas.models.media.ComposedSchema;
+ import io.swagger.v3.oas.models.media.DateTimeSchema;
+ import io.swagger.v3.oas.models.media.Schema;
+ import org.slf4j.Logger;
+@@ -223,6 +224,40 @@ public class SchemaValidator {
+                 "integer".equalsIgnoreCase(schema.getType())) {
+             return createNumericNode(value);
+         }
++        
++        if (schema instanceof ComposedSchema) {
++            final ComposedSchema schema2 = (ComposedSchema) schema;
++            // Supportiamo solo schemi composti formati da tipi tutti uguali
++
++            if (schema2.getAnyOf() != null && !schema2.getAnyOf().isEmpty()) {
++                final String firstType = schema2.getAnyOf().get(0).getType();
++                if ("string".equals(firstType)) {
++                    return createStringNode(value);
++                }
++                if ("number".equalsIgnoreCase(firstType) || "integer".equalsIgnoreCase(firstType)) {
++                    return createNumericNode(value);
++                }
++            }
++            if (schema2.getOneOf() != null && !schema2.getOneOf().isEmpty()) {
++                final String firstType = schema2.getOneOf().get(0).getType();
++                if ("string".equals(firstType)) {
++                    return createStringNode(value);
++                }
++                if ("number".equalsIgnoreCase(firstType) || "integer".equalsIgnoreCase(firstType)) {
++                    return createNumericNode(value);
++                }
++            }
++            if (schema2.getAllOf() != null && !schema2.getAllOf().isEmpty()) {
++                final String firstType = schema2.getAllOf().get(0).getType();
++                if ("string".equals(firstType)) {
++                    return createStringNode(value);
++                }
++                if ("number".equalsIgnoreCase(firstType) || "integer".equalsIgnoreCase(firstType)) {
++                    return createNumericNode(value);
++                }
++            }
++        }
++        
+         return Json.mapper().readTree(value);
+     }
+ 

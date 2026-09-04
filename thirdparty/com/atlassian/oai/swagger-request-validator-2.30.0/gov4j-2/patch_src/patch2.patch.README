@@ -1,0 +1,2 @@
+Modificata la classe com.atlassian.oai.validator.schema.SchemaValidator, nella funzione readContent(), che data la stringa del parametro (http, query, path, cookie) fornisce un Nodo Json da validare.
+La funzione usa lo schema per decidere quale tipo nodo creare: aggiunto, in caso di schema composto, di scegliere il primo tipo che trova nella lista dei sottoschemi.

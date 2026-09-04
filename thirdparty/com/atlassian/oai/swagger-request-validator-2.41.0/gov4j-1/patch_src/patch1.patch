@@ -1,0 +1,13 @@
+diff --git swagger-request-validator-core/src/main/java/com/atlassian/oai/validator/schema/SchemaValidator.java swagger-request-validator-core/src/main/java/com/atlassian/oai/validator/schema/SchemaValidator.java
+index e29d7286..a7ce6224 100644
+--- swagger-request-validator-core/src/main/java/com/atlassian/oai/validator/schema/SchemaValidator.java
++++ swagger-request-validator-core/src/main/java/com/atlassian/oai/validator/schema/SchemaValidator.java
+@@ -68,7 +68,7 @@ public class SchemaValidator {
+      * <p>
+      * Order is important here - the mutations from one transformation are passed through to the subsequent transformers.
+      */
+-    private final List<SchemaTransformer> transformers = asList(
++    public List<SchemaTransformer> transformers = asList(
+             SchemaDefinitionsInjectionTransformer.getInstance(),
+             SchemaRefInjectionTransformer.getInstance(),
+             AdditionalPropertiesInjectionTransformer.getInstance(),
