@@ -1,0 +1,12 @@
+ NOTA: Utilizzare Java 1.5 e ant 1.7.0/1.8.0
+
+wget https://downloads.apache.org/axis/axis/java/1.4/axis-src-1_4.tar.gz
+tar xzf axis-src-1_4.tar.gz
+patch -p0 < return_code.patch
+patch -p0 < soap12.patch
+cd axis-1_4/
+ant clean compile javadocs
+cd ..
+
+
+

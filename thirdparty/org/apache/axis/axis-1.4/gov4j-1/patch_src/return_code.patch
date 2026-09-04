@@ -1,0 +1,15 @@
+Index: axis-1_4/src/org/apache/axis/transport/http/AxisServlet.java
+===================================================================
+--- axis-1_4/src/org/apache/axis/transport/http/AxisServlet.java	(revision 7142)
++++ axis-1_4/src/org/apache/axis/transport/http/AxisServlet.java	(working copy)
+@@ -777,7 +777,9 @@
+             sendResponse(contentType, res, responseMsg);
+         } else {
+             // No content, so just indicate accepted
+-            res.setStatus(202);
++	    // PATCH, controllo lasciato all'handler
++            //res.setStatus(202);
++	    // PATCH
+         }
+         
+         if (isDebug) {

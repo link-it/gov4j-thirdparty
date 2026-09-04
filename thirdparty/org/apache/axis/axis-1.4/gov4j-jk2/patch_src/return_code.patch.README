@@ -1,0 +1,2 @@
+La patch riguarda la modifica della classe src/org/apache/axis/transport/http/AxisServlet.java dove si imposta il return code a 202. 
+Tale codice viene commentato, in modo che il return code sia impostabile a livello di handler axis

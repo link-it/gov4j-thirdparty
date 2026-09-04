@@ -1,0 +1,413 @@
+--- axis-1_4/src/org/apache/axis/i18n/ProjectResourceBundle.java	2022-10-05 12:20:44.490944602 +0200
++++ axis-1_4/src/org/apache/axis/i18n/ProjectResourceBundle.java	2023-08-24 14:43:52.280754567 +0200
+@@ -360,7 +360,7 @@
+     /**
+      * Clears the internal cache
+      */
+-    public static void clearCache()
++    public static void clearInternalCache()
+     {
+         bundleCache.clear();
+     }
+--- axis-1_4/src/org/apache/axis/message/CommentImpl.java	2022-10-05 12:20:44.548944904 +0200
++++ axis-1_4/src/org/apache/axis/message/CommentImpl.java	2023-08-24 16:02:35.911281626 +0200
+@@ -40,6 +40,37 @@
+         return true;
+     }
+ 
++    public Object getUserData(String key) {
++        return null;
++    }
++    public Object setUserData(String key, Object data, org.w3c.dom.UserDataHandler handler) { return null; }
++    public Object getFeature(String feature, String version) {
++        return null;
++    }
++    public boolean isEqualNode(org.w3c.dom.Node arg) {
++        return false;
++    }
++    public String lookupNamespaceURI(String prefix) {
++        return null;
++    }
++    public String lookupPrefix(String namespaceURI) {
++        return null;
++    }
++    public boolean isDefaultNamespace(String namespaceURI) {
++        return false;
++    }
++    public boolean isSameNode(org.w3c.dom.Node other) {
++        return false;
++    }
++    public void setTextContent(String textContent) throws DOMException {}
++    public String getTextContent(){ return null; }
++    public short compareDocumentPosition(org.w3c.dom.Node other) throws DOMException { return -1; }
++    public String getBaseURI() { return null; }
++    public Text replaceWholeText(String content) throws DOMException { return null; }
++    public String getWholeText() { return null; }
++    public boolean isElementContentWhitespace(){ return false; }
++
++
+     public org.w3c.dom.Text splitText(int offset) throws DOMException {
+         int length = textRep.getLength();
+         // take the first part, and save the second part for new Text
+--- axis-1_4/src/org/apache/axis/message/SOAPFault.java	2022-10-05 12:20:44.552944925 +0200
++++ axis-1_4/src/org/apache/axis/message/SOAPFault.java	2023-08-24 16:02:31.048240710 +0200
+@@ -62,6 +62,41 @@
+         this.fault = fault;
+     }
+     
++    public Object getUserData(String key) {
++        return null;
++    }
++    public Object setUserData(String key, Object data, org.w3c.dom.UserDataHandler handler) { return null; }
++    public Object getFeature(String feature, String version) {
++        return null;
++    }
++    public boolean isEqualNode(org.w3c.dom.Node arg) {
++        return false;
++    }
++    public String lookupNamespaceURI(String prefix) {
++        return null;
++    }
++    public String lookupPrefix(String namespaceURI) {
++        return null;
++    }
++    public boolean isDefaultNamespace(String namespaceURI) {
++        return false;
++    }
++    public boolean isSameNode(org.w3c.dom.Node other) {
++        return false;
++    }
++    public void setTextContent(String textContent) throws org.w3c.dom.DOMException {}
++    public String getTextContent(){ return null; }
++    public short compareDocumentPosition(org.w3c.dom.Node other) throws org.w3c.dom.DOMException { return -1; }
++    public String getBaseURI() { return null; }
++    public Text replaceWholeText(String content) throws org.w3c.dom.DOMException { return null; }
++    public String getWholeText() { return null; }
++    public boolean isElementContentWhitespace(){ return false; }
++
++    public void setIdAttribute(String name, boolean isId){}
++    public void setIdAttributeNode(org.w3c.dom.Attr idAttr, boolean isId){}
++    public void setIdAttributeNS(String namespaceURI, String localName, boolean isId){}
++    public org.w3c.dom.TypeInfo getSchemaTypeInfo(){return null;}
++
+     public void outputImpl(SerializationContext context)
+             throws Exception
+     {
+--- axis-1_4/src/org/apache/axis/message/NodeImpl.java	2022-10-05 12:20:44.552944925 +0200
++++ axis-1_4/src/org/apache/axis/message/NodeImpl.java	2023-08-24 16:02:22.938172474 +0200
+@@ -79,6 +79,36 @@
+         name = text.getLocalName();
+     }
+ 
++public Object getUserData(String key) {
++        return null;
++    }
++    public Object setUserData(String key, Object data, org.w3c.dom.UserDataHandler handler) { return null; }
++    public Object getFeature(String feature, String version) {
++        return null;
++    }
++    public boolean isEqualNode(org.w3c.dom.Node arg) {
++        return false;
++    }
++    public String lookupNamespaceURI(String prefix) {
++        return null;
++    }
++    public String lookupPrefix(String namespaceURI) {
++        return null;
++    }
++    public boolean isDefaultNamespace(String namespaceURI) {
++        return false;
++    }
++    public boolean isSameNode(org.w3c.dom.Node other) {
++        return false;
++    }
++    public void setTextContent(String textContent) throws DOMException {}
++    public String getTextContent(){ return null; }
++    public short compareDocumentPosition(org.w3c.dom.Node other) throws DOMException { return -1; }
++    public String getBaseURI() { return null; }
++    public Text replaceWholeText(String content) throws DOMException { return null; }
++    public String getWholeText() { return null; }
++    public boolean isElementContentWhitespace(){ return false; }
++
+     /**
+      * A code representing the type of the underlying object, as defined above.
+      */
+--- axis-1_4/src/org/apache/axis/message/MessageElement.java	2022-10-05 12:20:44.549944910 +0200
++++ axis-1_4/src/org/apache/axis/message/MessageElement.java	2023-08-24 16:01:48.355881519 +0200
+@@ -323,6 +323,11 @@
+         }
+     }
+ 
++public void setIdAttribute(String name, boolean isId){}
++    public void setIdAttributeNode(org.w3c.dom.Attr idAttr, boolean isId){}
++    public void setIdAttributeNS(String namespaceURI, String localName, boolean isId){}
++    public org.w3c.dom.TypeInfo getSchemaTypeInfo(){return null;}
++
+     /**
+      * Retrieve the DeserializationContext associated with this MessageElement
+      *
+--- axis-1_4/src/org/apache/axis/message/SOAPDocumentImpl.java	2022-10-05 12:20:44.551944920 +0200
++++ axis-1_4/src/org/apache/axis/message/SOAPDocumentImpl.java	2023-08-24 16:13:11.284627783 +0200
+@@ -74,6 +74,90 @@
+         soapPart = sp;
+     }
+ 
++public org.w3c.dom.Node renameNode(org.w3c.dom.Node n,
++                String namespaceURI,
++                String qualifiedName)
++         throws org.w3c.dom.DOMException{ return null; }
++public void normalizeDocument(){}
++public org.w3c.dom.DOMConfiguration getDomConfig(){return null;}
++public void setDocumentURI(String documentURI){}
++public String getDocumentURI(){return null;}
++public void setXmlVersion(String xmlVersion) throws org.w3c.dom.DOMException{}
++public String getXmlVersion(){return null;}
++public void setXmlStandalone(boolean xmlStandalone) throws org.w3c.dom.DOMException{}
++public boolean getXmlStandalone(){return false;}
++public String getXmlEncoding(){return null;}
++public String getInputEncoding(){return null;}
++
++public Object getUserData(String key) {
++        return null;
++    }
++    public Object setUserData(String key, Object data, org.w3c.dom.UserDataHandler handler) { return null; }
++    public Object getFeature(String feature, String version) {
++        return null;
++    }
++    public boolean isEqualNode(org.w3c.dom.Node arg) {
++        return false;
++    }
++    public String lookupNamespaceURI(String prefix) {
++        return null;
++    }
++    public String lookupPrefix(String namespaceURI) {
++        return null;
++    }
++    public boolean isDefaultNamespace(String namespaceURI) {
++        return false;
++    }
++    public boolean isSameNode(org.w3c.dom.Node other) {
++        return false;
++    }
++    public void setTextContent(String textContent) throws DOMException {}
++    public String getTextContent(){ return null; }
++    public short compareDocumentPosition(org.w3c.dom.Node other) throws DOMException { return -1; }
++    public String getBaseURI() { return null; }
++    public Text replaceWholeText(String content) throws DOMException { return null; }
++    public String getWholeText() { return null; }
++    public boolean isElementContentWhitespace(){ return false; }
++
++    public  boolean getStandalone()
++    {
++        throw new UnsupportedOperationException("Not yet implemented.71");
++    }
++
++
++    public  void setStandalone(boolean flag)
++    {
++        throw new UnsupportedOperationException("Not yet implemented.72");
++    }
++
++    public  boolean getStrictErrorChecking()
++    {
++        throw new UnsupportedOperationException("Not yet implemented.73");
++    }
++
++
++    public  void setStrictErrorChecking(boolean flag)
++    {
++        throw new UnsupportedOperationException("Not yet implemented. 74");
++    }
++
++
++    public  String getVersion()
++    {
++        throw new UnsupportedOperationException("Not yet implemented. 75");
++    }
++
++
++    public  void setVersion(String s)
++    {
++        throw new UnsupportedOperationException("Not yet implemented.76");
++    }
++ public  Node adoptNode(Node node)
++    throws DOMException
++    {
++        throw new UnsupportedOperationException("Not yet implemented.77");
++    }
++
+     /**
+      * @todo : link with SOAP
+      * 
+--- axis-1_4/src/org/apache/axis/SOAPPart.java	2022-10-05 12:20:44.703945713 +0200
++++ axis-1_4/src/org/apache/axis/SOAPPart.java	2023-08-24 16:09:23.322709350 +0200
+@@ -190,6 +190,51 @@
+     }
+ 
+ 
++public org.w3c.dom.Node renameNode(org.w3c.dom.Node n,
++                String namespaceURI,
++                String qualifiedName)
++         throws org.w3c.dom.DOMException{ return null; }
++public void normalizeDocument(){}
++public org.w3c.dom.DOMConfiguration getDomConfig(){return null;}
++public void setDocumentURI(String documentURI){}
++public String getDocumentURI(){return null;}
++public void setXmlVersion(String xmlVersion) throws org.w3c.dom.DOMException{}
++public String getXmlVersion(){return null;}
++public void setXmlStandalone(boolean xmlStandalone) throws org.w3c.dom.DOMException{}
++public boolean getXmlStandalone(){return false;}
++public String getXmlEncoding(){return null;}
++public String getInputEncoding(){return null;}
++
++public Object getUserData(String key) {
++        return null;
++    }
++    public Object setUserData(String key, Object data, org.w3c.dom.UserDataHandler handler) { return null; }
++    public Object getFeature(String feature, String version) {
++        return null;
++    }
++    public boolean isEqualNode(org.w3c.dom.Node arg) {
++        return false;
++    }
++    public String lookupNamespaceURI(String prefix) {
++        return null;
++    }
++    public String lookupPrefix(String namespaceURI) {
++        return null;
++    }
++    public boolean isDefaultNamespace(String namespaceURI) {
++        return false;
++    }
++    public boolean isSameNode(org.w3c.dom.Node other) {
++        return false;
++    }
++    public void setTextContent(String textContent) throws DOMException {}
++    public String getTextContent(){ return null; }
++    public short compareDocumentPosition(org.w3c.dom.Node other) throws DOMException { return -1; }
++    public String getBaseURI() { return null; }
++    public Text replaceWholeText(String content) throws DOMException { return null; }
++    public String getWholeText() { return null; }
++    public boolean isElementContentWhitespace(){ return false; }
++
+     /**
+      * Get the <code>Message</code> for this <code>Part</code>.
+      *
+--- axis-1_4/src/org/apache/axis/types/UnsignedInt.java	2022-10-05 12:20:44.309943658 +0200
++++ axis-1_4/src/org/apache/axis/types/UnsignedInt.java	2023-08-24 16:10:20.215188068 +0200
+@@ -107,7 +107,7 @@
+     // implement java.lang.comparable interface
+     public int compareTo(Object obj) {
+       if (lValue != null)
+-        return lValue.compareTo(obj);
++        return lValue.compareTo((Long)obj);
+       else
+         if (equals(obj) == true)
+             return 0;  // null == null
+--- axis-1_4/src/org/apache/axis/types/UnsignedLong.java	2022-10-05 12:20:44.310943663 +0200
++++ axis-1_4/src/org/apache/axis/types/UnsignedLong.java	2023-08-24 16:11:15.888656615 +0200
+@@ -101,7 +101,7 @@
+     // implement java.lang.comparable interface
+     public int compareTo(Object obj) {
+         if (lValue != null)
+-            return lValue.compareTo(obj);
++            return lValue.compareTo((BigInteger) obj);
+         else if (equals(obj) == true)
+             return 0;  // null == null
+         else
+--- axis-1_4/src/org/apache/axis/components/image/JDK13IO.java	2022-10-05 12:20:44.874946604 +0200
++++ axis-1_4/src/org/apache/axis/components/image/JDK13IO.java	2023-08-24 16:17:35.516851534 +0200
+@@ -18,7 +18,6 @@
+ 
+ import org.apache.axis.utils.Messages;
+ import org.apache.axis.utils.IOUtils;
+-import sun.awt.image.codec.JPEGImageEncoderImpl;
+ 
+ import java.awt.Component;
+ import java.awt.Graphics;
+@@ -62,8 +61,9 @@
+ 
+         // Write the image to the output stream
+         if ("image/jpeg".equals(mimeType)) {
+-            JPEGImageEncoderImpl j = new JPEGImageEncoderImpl(os);
+-            j.encode(rendImage);
++            //JPEGImageEncoderImpl j = new JPEGImageEncoderImpl(os);
++            //j.encode(rendImage);
++	    javax.imageio.ImageIO.write(rendImage, "name", os);
+         }
+         else {
+             throw new IOException(Messages.getMessage("jpegOnly", mimeType));
+--- axis-1_4/tools/org/apache/axis/tools/ant/foreach/ParamSet.java	2022-10-05 12:20:37.791909673 +0200
++++ axis-1_4/tools/org/apache/axis/tools/ant/foreach/ParamSet.java	2023-08-24 16:18:20.792232571 +0200
+@@ -83,9 +83,9 @@
+         and then <item>s. The ordering of the buildfile is
+         not guaranteed. */
+         Vector values = new Vector();
+-        Enumeration enum = filesets.elements();
+-        while (enum.hasMoreElements()) {
+-            FileSet fileSet = (FileSet) enum.nextElement();
++        Enumeration en = filesets.elements();
++        while (en.hasMoreElements()) {
++            FileSet fileSet = (FileSet) en.nextElement();
+             File base = fileSet.getDir(project);
+             DirectoryScanner scanner = fileSet.getDirectoryScanner(project);
+             if (TYPE_DIR != type) {
+@@ -103,9 +103,9 @@
+                 }
+             }
+         }
+-        enum = items.elements();
+-        while (enum.hasMoreElements()) {
+-            ParamItem item = (ParamItem) enum.nextElement();
++        en = items.elements();
++        while (en.hasMoreElements()) {
++            ParamItem item = (ParamItem) en.nextElement();
+             values.addElement(item.getValue());
+         }
+         return values.elements();
+--- axis-1_4/tools/build.xml	2022-10-05 12:20:37.801909725 +0200
++++ axis-1_4/tools/build.xml	2023-08-24 16:20:29.923319337 +0200
+@@ -106,7 +106,7 @@
+     <fileset dir="${tools.dir}"
+       includes="*-tasks.properties"/>
+     <fileset dir="${tools.dir}" includes="org/**/*.xml"/>
+-    <fileset dir="${tools.dir}" file="log4j.properties"/>
++    <fileset dir="${tools.dir}" includes="log4j.properties"/>
+   </copy>
+   
+   <tstamp/>
+--- axis-1_4/xmls/properties.xml	2022-10-05 12:20:44.075942438 +0200
++++ axis-1_4/xmls/properties.xml	2023-08-24 15:46:08.009972732 +0200
+@@ -14,7 +14,7 @@
+ 
+ <!-- debug flag for ant javac, values are "on" and "off" -->
+ <property name="debug" value="on" />
+-<property name="nowarn" value="off" />
++<property name="nowarn" value="on" />
+ 
+ <property name="axis.version" value="1.4" />
+ <!-- This should be the version # above with dots replaced by underscores -->
+@@ -28,9 +28,9 @@
+ 
+ <!-- what gets pulled in to the binaries: everything -->
+ <property name="debuglevel" value="lines,vars,source" />
+-<property name="deprecation" value="true" />
+-<property name="source" value="1.3" />
+-<property name="target" value="1.3" />
++<property name="deprecation" value="false" />
++<property name="source" value="1.8" />
++<property name="target" value="1.8" />
+ 
+ <!-- directories -->
+ <property name="src.dir" location="${axis.home}/src"/>
+--- axis-1_4/build.xml	2022-10-05 12:20:37.779909610 +0200
++++ axis-1_4/build.xml	2023-08-24 15:45:17.019544093 +0200
+@@ -163,7 +163,7 @@
+       <exclude name="**/org/apache/axis/encoding/ser/xbeans/*.java" unless="xmlbeans.present"/>
+       <exclude name="**/org/apache/axis/test/AxisTestBase.java" unless="junit.present"/>
+       <exclude name="**/org/apache/axis/transport/mail/*.java" unless="commons-net.present"/>
+-      <bootclasspath refid="boot.classpath"/>
++      <classpath refid="boot.classpath"/>
+     </javac>
+     <copy file="${src.dir}/org/apache/axis/server/server-config.wsdd"
+           toDir="${build.dest}/org/apache/axis/server"/>

@@ -1,0 +1,218 @@
+Index: axis-1_4/src/org/apache/axis/Message.java
+===================================================================
+--- axis-1_4/src/org/apache/axis/Message.java	(revision 21125)
++++ axis-1_4/src/org/apache/axis/Message.java	(working copy)
+@@ -349,9 +349,15 @@
+             // must take an org.apache.axis.Message!
+             Constructor attachImplConstr = attachImpl.getConstructors()[0];
+             try {
+-                mAttachments = (Attachments) attachImplConstr.newInstance(
++		if(contentType!=null){
++			this.soap12 = new Boolean ((SOAPConstants.SOAP12_CONSTANTS.getContentType().equals(contentType)) || contentType.contains("type=\""+SOAPConstants.SOAP12_CONSTANTS.getContentType())); 
++		}
++		        mAttachments = (Attachments) attachImplConstr.newInstance(
+                         new Object[] { initialContents,
+                                        contentType, contentLocation});
++		if(mAttachments instanceof org.apache.axis.attachments.AttachmentsImpl){
++			((org.apache.axis.attachments.AttachmentsImpl)mAttachments).setSoap12(this.soap12);
++		}
+ 
+                 //If it can't support it, it wont have a root part.
+                 mSOAPPart = (SOAPPart) mAttachments.getRootPart();
+@@ -458,22 +464,26 @@
+      * @throws AxisFault if there was an error deducing the content type from
+      *              this message
+      */
++    private Boolean soap12 = null;
+     public String getContentType(SOAPConstants sc) throws AxisFault {
+         boolean soap12 = false;
+         
+         if(sc != null) {
+-            if(sc == SOAPConstants.SOAP12_CONSTANTS) {
++            //if(sc == SOAPConstants.SOAP12_CONSTANTS) {
++	    if(sc.getContentType()!=null && sc.getContentType().equals(SOAPConstants.SOAP12_CONSTANTS.getContentType())){
+                 soap12 = true;
+             }
+         } else {
+             // Support of SOAP 1.2 HTTP binding
+             SOAPEnvelope envelope = getSOAPEnvelope();
+             if (envelope != null) {
+-                if (envelope.getSOAPConstants() == SOAPConstants.SOAP12_CONSTANTS) {
++                //if (envelope.getSOAPConstants() == SOAPConstants.SOAP12_CONSTANTS) {
++		if(envelope.getSOAPConstants()!=null && envelope.getSOAPConstants().getContentType().equals(SOAPConstants.SOAP12_CONSTANTS.getContentType())){
+                     soap12 = true;
+                 }
+             }
+         }
++        this.soap12 = new Boolean(soap12);
+ 
+         String encoding = XMLUtils.getEncoding(this, msgContext);;
+         String ret = sc.getContentType() + "; charset=" + encoding.toLowerCase();
+@@ -486,6 +496,9 @@
+         if (getSendType() != Attachments.SEND_TYPE_NONE && mAttachments != null &&
+                 0 != mAttachments.getAttachmentCount()) {
+             ret = mAttachments.getContentType();
++	    if (soap12) {
++		ret = ret.replace(SOAPConstants.SOAP11_CONSTANTS.getContentType(),SOAPConstants.SOAP12_CONSTANTS.getContentType());
++	    }
+         }
+         return ret;
+     }
+@@ -542,7 +555,28 @@
+             }
+         } else {
+             try {
+-                mAttachments.writeContentToStream(os);
++
++		boolean soap12 = false;
++
++	        if(this.soap12 != null) {
++			soap12 = this.soap12.booleanValue();
++		} else {
++			// Support of SOAP 1.2 HTTP binding
++			SOAPEnvelope envelope = getSOAPEnvelope();
++			if (envelope != null) {
++				if(envelope.getSOAPConstants()!=null && envelope.getSOAPConstants().getContentType().equals(SOAPConstants.SOAP12_CONSTANTS.getContentType())){
++					soap12 = true;
++				}
++			}
++		}
++
++		this.soap12 = new Boolean(soap12);
++
++		if(mAttachments instanceof org.apache.axis.attachments.AttachmentsImpl){
++			((org.apache.axis.attachments.AttachmentsImpl)mAttachments).writeContentToStream(os,soap12);
++		}else{
++	                mAttachments.writeContentToStream(os);
++		}
+             } catch (java.lang.Exception e) {
+                 log.error(Messages.getMessage("exception00"), e);
+             }
+Index: axis-1_4/src/org/apache/axis/attachments/AttachmentsImpl.java
+===================================================================
+--- axis-1_4/src/org/apache/axis/attachments/AttachmentsImpl.java	(revision 21125)
++++ axis-1_4/src/org/apache/axis/attachments/AttachmentsImpl.java	(working copy)
+@@ -36,6 +36,12 @@
+  * AttachmentParts.
+  */
+ public class AttachmentsImpl implements Attachments {
++
++	private Boolean soap12 = new Boolean(false);
++	public void setSoap12(Boolean soap12){
++		this.soap12 = soap12;
++	}
++
+     protected static Log log =
+             LogFactory.getLog(AttachmentsImpl.class.getName());
+ 
+@@ -436,7 +442,7 @@
+         try {
+               if(sendtype == SEND_TYPE_MIME || sendtype == SEND_TYPE_MTOM)
+                  return org.apache.axis.attachments.MimeUtils.getContentLength(
+-                                multipart != null ? multipart : (multipart = org.apache.axis.attachments.MimeUtils.createMP(soapPart.getAsString(), orderedAttachments, getSendType())));
++                                multipart != null ? multipart : (multipart = org.apache.axis.attachments.MimeUtils.createMP(soapPart.getAsString(), orderedAttachments, getSendType(), (this.soap12!=null ? this.soap12.booleanValue() : false ))));
+               else if (sendtype == SEND_TYPE_DIME)return createDimeMessage().getTransmissionSize();
+         } catch (Exception e) {
+             throw AxisFault.makeFault(e);
+@@ -482,7 +488,10 @@
+      *
+      * @throws org.apache.axis.AxisFault
+      */
+-    public void writeContentToStream(java.io.OutputStream os)
++    public void writeContentToStream(java.io.OutputStream os) throws org.apache.axis.AxisFault {
++	this.writeContentToStream(os,false);
++    }
++    public void writeContentToStream(java.io.OutputStream os,boolean soap12)
+             throws org.apache.axis.AxisFault {
+         int sendtype= this.sendtype == SEND_TYPE_NOTSET ?
+                           SEND_TYPE_DEFAULT : this.sendtype;
+@@ -495,7 +504,7 @@
+                 ? multipart
+                 : (multipart =
+                    org.apache.axis.attachments.MimeUtils.createMP(
+-                        soapPart.getAsString(), orderedAttachments, getSendType())));
++                        soapPart.getAsString(), orderedAttachments, getSendType(), soap12)));
+ 
+         for (java.util.Iterator i = orderedAttachments.iterator();
+              i.hasNext();) {
+@@ -532,7 +541,7 @@
+                   : (multipart =
+                   org.apache.axis.attachments.MimeUtils.createMP(
+                           soapPart.getAsString(),
+-                          orderedAttachments, getSendType())));
++                          orderedAttachments, getSendType(),(this.soap12!=null ? this.soap12.booleanValue() : false ))));
+         else return org.apache.axis.Message.MIME_APPLICATION_DIME;
+     }
+ 
+Index: axis-1_4/src/org/apache/axis/attachments/MimeUtils.java
+===================================================================
+--- axis-1_4/src/org/apache/axis/attachments/MimeUtils.java	(revision 21125)
++++ axis-1_4/src/org/apache/axis/attachments/MimeUtils.java	(working copy)
+@@ -26,6 +26,7 @@
+ import org.apache.axis.utils.Messages;
+ import org.apache.axis.utils.SessionUtils;
+ import org.apache.commons.logging.Log;
++import org.apache.axis.soap.SOAPConstants;
+ 
+ import java.util.Properties;
+ 
+@@ -170,7 +171,9 @@
+     // fixme: the fields in filter are not protected - they can be over-written
+     /** Field filter           */
+     public static String[] filter = new String[]{"Message-ID", "Mime-Version",
+-                                                 "Content-Type"};
++                                                 "Content-Type",
++						 "Date" // Aggiunto per fix con Wildfly14 che aggiungeva un header Date e una riga vuota che causava l'errore: class com.sun.xml.messaging.saaj.packaging.mime.MessagingException: Missing End Boundary for Mime Package : EOF while skipping headers
++						};
+ 
+     /**
+      * This routine will the multi part type and write it out to a stream.
+@@ -237,9 +240,14 @@
+      * @throws org.apache.axis.AxisFault
+      */
+     public static javax.mail.internet.MimeMultipart createMP(
++	String env, java.util.Collection parts, int sendType)
++		throws org.apache.axis.AxisFault {
++	return createMP(env,parts,sendType,false);
++    }
++    public static javax.mail.internet.MimeMultipart createMP(
+             String env,
+             java.util.Collection parts,
+-            int sendType)
++            int sendType, boolean soap12)
+             throws org.apache.axis.AxisFault {
+ 
+         javax.mail.internet.MimeMultipart multipart = null;
+@@ -247,12 +255,17 @@
+         try {
+             String rootCID = SessionUtils.generateSessionId();
+ 
++	    String baseType = SOAPConstants.SOAP11_CONSTANTS.getContentType(); 
++	    if(soap12){
++		baseType = SOAPConstants.SOAP12_CONSTANTS.getContentType();
++	    }
++
+             if(sendType == Attachments.SEND_TYPE_MTOM) {
+                 multipart = new javax.mail.internet.MimeMultipart(
+-                        "related;type=\"application/xop+xml\"; start=\"<" + rootCID + ">\"; start-info=\"text/xml; charset=utf-8\"");
++                        "related;type=\"application/xop+xml\"; start=\"<" + rootCID + ">\"; start-info=\""+baseType+"; charset=utf-8\"");
+             } else {
+                 multipart = new javax.mail.internet.MimeMultipart(
+-                        "related; type=\"text/xml\"; start=\"<" + rootCID + ">\"");
++                        "related; type=\""+baseType+"\"; start=\"<" + rootCID + ">\"");
+             }
+ 
+             javax.mail.internet.MimeBodyPart messageBodyPart =
+@@ -261,10 +274,10 @@
+             messageBodyPart.setText(env, "UTF-8");
+             if(sendType == Attachments.SEND_TYPE_MTOM){
+                 messageBodyPart.setHeader("Content-Type",
+-                    "application/xop+xml; charset=utf-8; type=\"text/xml; charset=utf-8\"");
++                    "application/xop+xml; charset=utf-8; type=\""+baseType+"; charset=utf-8\"");
+             } else {
+                 messageBodyPart.setHeader("Content-Type",
+-                        "text/xml; charset=UTF-8");
++                        ""+baseType+"; charset=UTF-8");
+             }
+             messageBodyPart.setHeader("Content-Id", "<" + rootCID + ">");
+             messageBodyPart.setHeader(

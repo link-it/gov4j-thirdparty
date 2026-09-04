@@ -1,0 +1,7 @@
+wget https://repo1.maven.org/maven2/org/apache/axis/axis-jaxrpc/1.4/axis-jaxrpc-1.4.jar
+unzip -q axis-jaxrpc-1.4.jar -d JAR
+cd JAR
+rm -f javax/xml/namespace/QName.class
+jar -cfM ../axis-jaxrpc-1.4-gov4j-1.jar *
+cd ..
+rm -rf JAR

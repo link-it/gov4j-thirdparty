@@ -1,0 +1,41 @@
+--- axis-1_4/src/org/apache/axis/transport/http/AxisServlet.java	2025-03-10 16:17:18.883572607 +0100
++++ axis-1_4/src/org/apache/axis/transport/http/AxisServlet.java	2025-03-10 16:22:00.719093814 +0100
+@@ -30,7 +30,7 @@
+ import jakarta.servlet.ServletException;
+ import jakarta.servlet.http.HttpServletRequest;
+ import jakarta.servlet.http.HttpServletResponse;
+-import jakarta.servlet.http.HttpUtils;
++//non più disponibile in jakarta servlet api 6.0.0 import jakarta.servlet.http.HttpUtils;
+ import javax.xml.soap.MimeHeader;
+ import javax.xml.soap.MimeHeaders;
+ import javax.xml.soap.SOAPException;
+@@ -277,7 +277,8 @@
+                     // API and to support servlet 2.2 (aka WebSphere 4)
+                     // we need to leave this in for a while longer. tomj 10/14/2004
+                     //
+-                    String url = HttpUtils.getRequestURL(request).toString();
++                    // non più disponibile in jakarta servlet api 6.0.0 String url = HttpUtils.getRequestURL(request).toString();
++                    String url = request.getRequestURL().toString();
+ 
+                     msgContext.setProperty(MessageContext.TRANS_URL, url);
+ 
+@@ -649,7 +650,8 @@
+                 /**********************************************************/
+             }
+             msgContext.setRequestMessage(requestMsg);
+-            String url = HttpUtils.getRequestURL(req).toString();
++            // non più disponibile in jakarta servlet api 6.0.0 String url = HttpUtils.getRequestURL(req).toString();
++            String url = req.getRequestURL().toString();
+             msgContext.setProperty(MessageContext.TRANS_URL, url);
+             // put character encoding of request to message context
+             // in order to reuse it during the whole process.
+@@ -1199,7 +1201,8 @@
+                                 getOption(queryHandler));
+                         Method pluginMethod = plugin.getDeclaredMethod("invoke",
+                                 new Class[] {msgContext.getClass()});
+-                        String url = HttpUtils.getRequestURL(request).toString();
++                        // non più disponibile in jakarta servlet api 6.0.0 String url = HttpUtils.getRequestURL(request).toString();
++                        String url = request.getRequestURL().toString();
+ 
+                         // Place various useful servlet-related objects in
+                         // the MessageContext object being delivered to the

@@ -1,0 +1,3 @@
+Tutti i riferimenti al package 'javax.servlet.' sono stati sostituiti con 'jakarta.servlet.'
+
+La compilazione è stata effettuata con java 11 e quindi è stato modificato il metodo dentro la classe org/apache/axis/i18n/ProjectResourceBundle.java poichè non era possibile sovrascriverlo.

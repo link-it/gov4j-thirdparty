@@ -1,0 +1,6 @@
+- Gestito SOAP12
+- Inoltre all'interno della patch è stato gestito anche il problema che nasceva in wildfly14.
+  In tale application server, a causa dell'introduzione di mailapi 1.6.x (e la non più presenza della versione 1.5.x) 
+  con il writeTo di un messaggio axis con attachments, veniva serializzato negli header http del messaggio una riga vuota e poi
+  un header "Date". La riga vuota tra gli header causava l'errore:
+		class com.sun.xml.messaging.saaj.packaging.mime.MessagingException: Missing End Boundary for Mime Package : EOF while skipping headers

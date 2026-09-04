@@ -1,0 +1,22 @@
+ NOTA: Utilizzare Java 11
+
+wget https://downloads.apache.org/axis/axis/java/1.4/axis-src-1_4.tar.gz
+tar xzf axis-src-1_4.tar.gz
+patch -p0 < return_code.patch
+patch -p0 < soap12.patch
+patch -p0 < jakarta_characters.patch
+patch -p0 < jakarta.patch
+bash replaceJakarta.sh axis-1_4/src/
+patch -p0 < jakarta_api_6.0.0.patch
+cd axis-1_4/lib/
+wget https://repo1.maven.org/maven2/jakarta/servlet/jakarta.servlet-api/6.0.0/jakarta.servlet-api-6.0.0.jar
+wget https://repo1.maven.org/maven2/org/jboss/openjdk-orb/openjdk-orb-jakarta/8.1.9.Final/openjdk-orb-jakarta-8.1.9.Final.jar
+cd ../../
+mv axis-1_4/src/org/apache/axis/enum/ axis-1_4/src/org/apache/axis/enumerations/
+find axis-1_4/src/org/apache/axis/enumerations/ -type f -exec perl -pi -e "s#org.apache.axis.enum#org.apache.axis.enumerations#g" {} \;
+cd axis-1_4/
+ant clean compile javadocs
+cd ..
+
+
+
