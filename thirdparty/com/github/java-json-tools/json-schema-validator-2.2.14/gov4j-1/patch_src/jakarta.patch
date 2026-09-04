@@ -1,0 +1,23 @@
+--- json-schema-validator-repo/project.gradle	2020-05-27 18:24:39.000000000 +0200
++++ json-schema-validator-repo/project.gradle	2023-08-09 15:43:52.411602354 +0200
+@@ -33,6 +33,7 @@
+  * List of dependencies
+  */
+ dependencies {
++    compile(group: "jakarta.mail", name: "jakarta.mail-api", version: "2.1.2");
+     compile(group: "com.google.guava", name: "guava", version: "28.2-android");
+     compile(group: "com.github.java-json-tools", name: "jackson-coreutils-equivalence", version: "1.0");
+     compile(group: "com.github.java-json-tools", name: "json-schema-core", version: "1.2.14");
+--- json-schema-validator-repo/src/main/java/com/github/fge/jsonschema/format/common/EmailAttribute.java	2020-05-27 18:24:39.000000000 +0200
++++ json-schema-validator-repo/src/main/java/com/github/fge/jsonschema/format/common/EmailAttribute.java	2023-08-09 15:42:24.767851523 +0200
+@@ -27,8 +27,8 @@
+ import com.github.fge.jsonschema.processors.data.FullData;
+ import com.github.fge.msgsimple.bundle.MessageBundle;
+ 
+-import javax.mail.internet.AddressException;
+-import javax.mail.internet.InternetAddress;
++import jakarta.mail.internet.AddressException;
++import jakarta.mail.internet.InternetAddress;
+ 
+ /**
+  * Validator for the {@code email} format attribute.

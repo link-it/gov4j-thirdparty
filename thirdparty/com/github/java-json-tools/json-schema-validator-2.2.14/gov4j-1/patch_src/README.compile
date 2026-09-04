@@ -1,0 +1,13 @@
+ NOTA: Usare java 11
+
+git clone https://github.com/java-json-tools/json-schema-validator.git json-schema-validator-repo
+cd json-schema-validator-repo
+git checkout v2.2.14
+cd ..
+patch -p0 < jakarta.patch
+cd json-schema-validator-repo
+gradlew build jar
+cd ..
+
+
+
