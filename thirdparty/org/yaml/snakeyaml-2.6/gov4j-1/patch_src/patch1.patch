@@ -1,0 +1,160 @@
+diff --git src/main/java/org/yaml/snakeyaml/LoaderOptions.java src/main/java/org/yaml/snakeyaml/LoaderOptions.java
+index fda63cf7..f2cb577b 100644
+--- src/main/java/org/yaml/snakeyaml/LoaderOptions.java
++++ src/main/java/org/yaml/snakeyaml/LoaderOptions.java
+@@ -21,31 +21,144 @@ import org.yaml.snakeyaml.inspector.UnTrustedTagInspector;
+  */
+ public class LoaderOptions {
+ 
+-  private boolean allowDuplicateKeys = true;
++  public static class DefaultValues {
++    private boolean allowDuplicateKeys = true;
++    private boolean warnOnDuplicateKeys = true;    
++    private boolean wrappedToRootException = false;
++    private int maxAliasesForCollections = 50; // to prevent YAML at
++    // https://en.wikipedia.org/wiki/Billion_laughs_attack
++    private boolean allowRecursiveKeys = false;
++    private boolean processComments = false;
++    private boolean enumCaseSensitive = true;
++    private int nestingDepthLimit = 50;
++    private int codePointLimit = 3 * 1024 * 1024; // 3 MB
++    private boolean mergeOnCompose = false;
++    /**
++     * Secure by default - no custom classes are allowed
++     */
++    private TagInspector tagInspector = new UnTrustedTagInspector();
++
++    public boolean isAllowDuplicateKeys() {
++      return allowDuplicateKeys;
++    }
++
++    public void setAllowDuplicateKeys(boolean allowDuplicateKeys) {
++      this.allowDuplicateKeys = allowDuplicateKeys;
++    }
++    
++    public boolean isWarnOnDuplicateKeys() {
++      return warnOnDuplicateKeys;
++    }
++
++    public void setWarnOnDuplicateKeys(boolean warnOnDuplicateKeys) {
++      this.warnOnDuplicateKeys = warnOnDuplicateKeys;
++    }    
++
++    public boolean isWrappedToRootException() {
++      return wrappedToRootException;
++    }
++
++    public void setWrappedToRootException(boolean wrappedToRootException) {
++      this.wrappedToRootException = wrappedToRootException;
++    }
++
++    public int getMaxAliasesForCollections() {
++      return maxAliasesForCollections;
++    }
++
++    public void setMaxAliasesForCollections(int maxAliasesForCollections) {
++      this.maxAliasesForCollections = maxAliasesForCollections;
++    }
++
++    public boolean isAllowRecursiveKeys() {
++      return allowRecursiveKeys;
++    }
++
++    public void setAllowRecursiveKeys(boolean allowRecursiveKeys) {
++      this.allowRecursiveKeys = allowRecursiveKeys;
++    }
++
++    public boolean isProcessComments() {
++      return processComments;
++    }
++
++    public void setProcessComments(boolean processComments) {
++      this.processComments = processComments;
++    }
++
++    public boolean isEnumCaseSensitive() {
++      return enumCaseSensitive;
++    }
++
++    public void setEnumCaseSensitive(boolean enumCaseSensitive) {
++      this.enumCaseSensitive = enumCaseSensitive;
++    }
++
++    public int getNestingDepthLimit() {
++      return nestingDepthLimit;
++    }
++
++    public void setNestingDepthLimit(int nestingDepthLimit) {
++      this.nestingDepthLimit = nestingDepthLimit;
++    }
++
++    public int getCodePointLimit() {
++      return codePointLimit;
++    }
++
++    public void setCodePointLimit(int codePointLimit) {
++      this.codePointLimit = codePointLimit;
++    }
++
++    public boolean isMergeOnCompose() {
++      return mergeOnCompose;
++    }
++
++    public void setmergeOnCompose(boolean mergeOnCompose) {
++      this.mergeOnCompose = mergeOnCompose;
++    }
++
++    public TagInspector getTagInspector() {
++      return tagInspector;
++    }
++
++    public void setTagInspector(TagInspector tagInspector) {
++      this.tagInspector = tagInspector;
++    }
+ 
+-  private boolean warnOnDuplicateKeys = true;
++  }
++
++  private static DefaultValues defaultValues = new DefaultValues();
++
++  public static DefaultValues getDefaultValues() {
++    return defaultValues;
++  }
++
++  private boolean allowDuplicateKeys = defaultValues.isAllowDuplicateKeys();
++
++  private boolean warnOnDuplicateKeys = defaultValues.isWarnOnDuplicateKeys();
+ 
+-  private boolean wrappedToRootException = false;
++  private boolean wrappedToRootException = defaultValues.isWrappedToRootException();
+ 
+-  private int maxAliasesForCollections = 50; // to prevent YAML at
++  private int maxAliasesForCollections = defaultValues.getMaxAliasesForCollections();
+ 
+   // https://en.wikipedia.org/wiki/Billion_laughs_attack
+-  private boolean allowRecursiveKeys = false;
++  private boolean allowRecursiveKeys = defaultValues.isAllowRecursiveKeys();
+ 
+-  private boolean processComments = false;
++  private boolean processComments = defaultValues.isProcessComments();
+ 
+-  private boolean enumCaseSensitive = true;
++  private boolean enumCaseSensitive = defaultValues.isEnumCaseSensitive();
+ 
+-  private int nestingDepthLimit = 50;
++  private int nestingDepthLimit = defaultValues.getNestingDepthLimit();
+ 
+-  private int codePointLimit = 3 * 1024 * 1024; // 3 MB
++  private int codePointLimit = defaultValues.getCodePointLimit();
+ 
+-  private boolean mergeOnCompose = false;
++  private boolean mergeOnCompose = defaultValues.isMergeOnCompose();
+ 
+   /**
+    * Secure by default - no custom classes are allowed
+    */
+-  private TagInspector tagInspector = new UnTrustedTagInspector();
++  private TagInspector tagInspector = defaultValues.getTagInspector();
+ 
+   /**
+    * getter

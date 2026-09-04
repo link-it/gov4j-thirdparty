@@ -1,0 +1,100 @@
+diff --git src/main/java/org/yaml/snakeyaml/LoaderOptions.java src/main/java/org/yaml/snakeyaml/LoaderOptions.java
+index 78583587..a9dfbcdc 100644
+--- src/main/java/org/yaml/snakeyaml/LoaderOptions.java
++++ src/main/java/org/yaml/snakeyaml/LoaderOptions.java
+@@ -15,15 +15,86 @@ package org.yaml.snakeyaml;
+ 
+ public class LoaderOptions {
+ 
+-  private boolean allowDuplicateKeys = true;
+-  private boolean wrappedToRootException = false;
+-  private int maxAliasesForCollections = 50; // to prevent YAML at
+-  // https://en.wikipedia.org/wiki/Billion_laughs_attack
+-  private boolean allowRecursiveKeys = false;
+-  private boolean processComments = false;
+-  private boolean enumCaseSensitive = true;
+-  private int nestingDepthLimit = 50;
+-  private int codePointLimit = 3 * 1024 * 1024; // 3 MB
++  public static class DefaultValues {
++    private boolean allowDuplicateKeys = true;
++    private boolean wrappedToRootException = false;
++    private int maxAliasesForCollections = 50; // to prevent YAML at
++    // https://en.wikipedia.org/wiki/Billion_laughs_attack
++    private boolean allowRecursiveKeys = false;
++    private boolean processComments = false;
++    private boolean enumCaseSensitive = true;
++    private int nestingDepthLimit = 50;
++    private int codePointLimit = 3 * 1024 * 1024; // 3 MB
++
++    public boolean isAllowDuplicateKeys() {
++      return allowDuplicateKeys;
++    }
++    public void setAllowDuplicateKeys(boolean allowDuplicateKeys) {
++      this.allowDuplicateKeys = allowDuplicateKeys;
++    }
++
++    public boolean isWrappedToRootException() {
++      return wrappedToRootException;
++    }
++    public void setWrappedToRootException(boolean wrappedToRootException) {
++      this.wrappedToRootException = wrappedToRootException;
++    }
++
++    public int getMaxAliasesForCollections() {
++      return maxAliasesForCollections;
++    }
++    public void setMaxAliasesForCollections(int maxAliasesForCollections) {
++      this.maxAliasesForCollections = maxAliasesForCollections;
++    }
++
++    public boolean isAllowRecursiveKeys() {
++      return allowRecursiveKeys;
++    }
++    public void setAllowRecursiveKeys(boolean allowRecursiveKeys) {
++      this.allowRecursiveKeys = allowRecursiveKeys;
++    }
++
++    public boolean isProcessComments() {
++      return processComments;
++    }
++    public void setProcessComments(boolean processComments) {
++      this.processComments = processComments;
++    }
++
++    public boolean isEnumCaseSensitive() {
++      return enumCaseSensitive;
++    }
++    public void setEnumCaseSensitive(boolean enumCaseSensitive) {
++      this.enumCaseSensitive = enumCaseSensitive;
++    }
++
++    public int getNestingDepthLimit() {
++      return nestingDepthLimit;
++    }
++    public void setNestingDepthLimit(int nestingDepthLimit) {
++      this.nestingDepthLimit = nestingDepthLimit;
++    }
++
++    public int getCodePointLimit() {
++      return codePointLimit;
++    }
++    public void setCodePointLimit(int codePointLimit) {
++      this.codePointLimit = codePointLimit;
++    }
++  }
++  private static DefaultValues defaultValues = new DefaultValues();
++  public static DefaultValues getDefaultValues() {
++    return defaultValues;
++  }
++
++  private boolean allowDuplicateKeys = defaultValues.isAllowDuplicateKeys();
++  private boolean wrappedToRootException = defaultValues.isWrappedToRootException();
++  private int maxAliasesForCollections = defaultValues.getMaxAliasesForCollections();
++  private boolean allowRecursiveKeys = defaultValues.isAllowRecursiveKeys();
++  private boolean processComments = defaultValues.isProcessComments();
++  private boolean enumCaseSensitive = defaultValues.isEnumCaseSensitive();
++  private int nestingDepthLimit = defaultValues.getNestingDepthLimit();
++  private int codePointLimit = defaultValues.getCodePointLimit();
+ 
+   public final boolean isAllowDuplicateKeys() {
+     return allowDuplicateKeys;

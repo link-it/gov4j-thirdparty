@@ -1,0 +1,14 @@
+ NOTA: Usare java 11 e maven 3.6.1 o superiore
+
+git clone https://bitbucket.org/snakeyaml/snakeyaml.git snakeyaml_gitrepo
+cd snakeyaml_gitrepo
+git checkout snakeyaml-2.6
+patch -p0 < patch1.patch
+
+cd snakeyaml_gitrepo
+mvn clean install
+mvn javadoc:javadoc 
+cd ..
+
+
+

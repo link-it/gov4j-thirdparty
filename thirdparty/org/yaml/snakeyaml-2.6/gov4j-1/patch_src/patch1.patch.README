@@ -1,0 +1,104 @@
+La classe org.yaml.snakeyaml.LoaderOptions definisce molti limiti sul documento yaml da caricare.
+Ad esempio si può vedere come il default sia impostato sul numero di caratteri presenti nello yaml e quindi di fatto alla dimensione stessa massima dello yaml:
+    private int codePointLimit = 3 * 1024 * 1024; // 3 MB
+Non tutti questi limiti sono modificabili sulle librerie 3 parti che utilizzano le classi di snake per caricare i documenti:
+- swagger-parser-v3: per la quale abbiamo creato una patch per impostare il codePointLimit
+- jackson: nel com.fasterxml.jackson.dataformat.yaml.YAMLParser non sembra esistere la possibilità di impostare il limite
+
+Per questo motivo, la patch consente di modificare i valori di default come set/get statici, in modo che i valori impostati siano poi ereditati da tutte le librerie 3parti che usano snake.
+
+
+Un esempio di errore che veniva sollevato con la classe swagger-parser-v3 è il seguente:
+
+17:40:53.287 [main] ERROR io.swagger.v3.parser.util.DeserializationUtils - Error parsing content
+com.fasterxml.jackson.dataformat.yaml.JacksonYAMLParseException: The incoming YAML document exceeds the limit: 3145728 code points.
+ at [Source: (StringReader); line: 68855, column: 18]
+	at com.fasterxml.jackson.dataformat.yaml.YAMLParser.nextToken(YAMLParser.java:409) ~[jackson-dataformat-yaml-2.13.4.jar:2.13.4]
+	at com.fasterxml.jackson.databind.deser.std.BaseNodeDeserializer._deserializeContainerNoRecursion(JsonNodeDeserializer.java:506) ~[jackson-databind-2.13.4.jar:2.13.4]
+	at com.fasterxml.jackson.databind.deser.std.JsonNodeDeserializer.deserialize(JsonNodeDeserializer.java:84) ~[jackson-databind-2.13.4.jar:2.13.4]
+	at com.fasterxml.jackson.databind.deser.std.JsonNodeDeserializer.deserialize(JsonNodeDeserializer.java:20) ~[jackson-databind-2.13.4.jar:2.13.4]
+	at com.fasterxml.jackson.databind.deser.DefaultDeserializationContext.readRootValue(DefaultDeserializationContext.java:323) ~[jackson-databind-2.13.4.jar:2.13.4]
+	at com.fasterxml.jackson.databind.ObjectMapper._readTreeAndClose(ObjectMapper.java:4716) ~[jackson-databind-2.13.4.jar:2.13.4]
+	at com.fasterxml.jackson.databind.ObjectMapper.readTree(ObjectMapper.java:3076) ~[jackson-databind-2.13.4.jar:2.13.4]
+	at io.swagger.v3.parser.util.DeserializationUtils.readYamlTree(DeserializationUtils.java:232) [swagger-parser-v3-2.1.2-gov4j-1.jar:2.1.2]
+	at io.swagger.v3.parser.util.DeserializationUtils.deserializeIntoTree(DeserializationUtils.java:143) [swagger-parser-v3-2.1.2-gov4j-1.jar:2.1.2]
+	at io.swagger.v3.parser.OpenAPIV3Parser.readContents(OpenAPIV3Parser.java:165) [swagger-parser-v3-2.1.2-gov4j-1.jar:2.1.2]
+	at io.swagger.v3.parser.OpenAPIV3Parser.readContents(OpenAPIV3Parser.java:104) [swagger-parser-v3-2.1.2-gov4j-1.jar:2.1.2]
+	at org.openspcoop2.utils.openapi.AbstractOpenapiApiReader._init(AbstractOpenapiApiReader.java:174) [bin/:?]
+	at org.openspcoop2.utils.openapi.AbstractOpenapiApiReader._init(AbstractOpenapiApiReader.java:214) [bin/:?]
+	at org.openspcoop2.utils.openapi.AbstractOpenapiApiReader._init(AbstractOpenapiApiReader.java:234) [bin/:?]
+	at org.openspcoop2.utils.openapi.AbstractOpenapiApiReader.init(AbstractOpenapiApiReader.java:221) [bin/:?]
+	at org.openspcoop2.utils.openapi.validator.TestInterfaceBigger.main(TestInterfaceBigger.java:87) [bin/:?]
+Caused by: org.yaml.snakeyaml.error.YAMLException: The incoming YAML document exceeds the limit: 3145728 code points.
+	at org.yaml.snakeyaml.scanner.ScannerImpl.fetchMoreTokens(ScannerImpl.java:335) ~[snakeyaml-1.32.jar:?]
+	at org.yaml.snakeyaml.scanner.ScannerImpl.checkToken(ScannerImpl.java:256) ~[snakeyaml-1.32.jar:?]
+	at org.yaml.snakeyaml.parser.ParserImpl$ParseBlockSequenceEntryKey.produce(ParserImpl.java:548) ~[snakeyaml-1.32.jar:?]
+	at org.yaml.snakeyaml.parser.ParserImpl.peekEvent(ParserImpl.java:171) ~[snakeyaml-1.32.jar:?]
+	at org.yaml.snakeyaml.parser.ParserImpl.getEvent(ParserImpl.java:181) ~[snakeyaml-1.32.jar:?]
+	at com.fasterxml.jackson.dataformat.yaml.YAMLParser.nextToken(YAMLParser.java:403) ~[jackson-dataformat-yaml-2.13.4.jar:2.13.4]
+	... 15 more
+Exception in thread "main" org.openspcoop2.utils.rest.ProcessingException: org.openspcoop2.utils.rest.ProcessingException: Parse failed: - The incoming YAML document exceeds the limit: 3145728 code points.
+	at org.openspcoop2.utils.openapi.AbstractOpenapiApiReader._init(AbstractOpenapiApiReader.java:193)
+	at org.openspcoop2.utils.openapi.AbstractOpenapiApiReader._init(AbstractOpenapiApiReader.java:214)
+	at org.openspcoop2.utils.openapi.AbstractOpenapiApiReader._init(AbstractOpenapiApiReader.java:234)
+	at org.openspcoop2.utils.openapi.AbstractOpenapiApiReader.init(AbstractOpenapiApiReader.java:221)
+	at org.openspcoop2.utils.openapi.validator.TestInterfaceBigger.main(TestInterfaceBigger.java:87)
+Caused by: org.openspcoop2.utils.rest.ProcessingException: Parse failed: - The incoming YAML document exceeds the limit: 3145728 code points.
+	at org.openspcoop2.utils.openapi.AbstractOpenapiApiReader.parseResult(AbstractOpenapiApiReader.java:129)
+	at org.openspcoop2.utils.openapi.AbstractOpenapiApiReader._init(AbstractOpenapiApiReader.java:177)
+	... 4 more
+
+
+Un esempio di errore che veniva sollevato con jackson è il seguente:
+
+org.openspcoop2.utils.UtilsException: Unrecognized token 'openapi': was expecting (JSON String, Number, Array, Object or token 'null', 'true' or 'false')
+ at [Source: (StringReader); line: 1, column: 8]
+	at org.openspcoop2.utils.json.AbstractUtils.getAsNode(AbstractUtils.java:71)
+	at org.openspcoop2.utils.json.AbstractUtils.isValid(AbstractUtils.java:228)
+	at org.openspcoop2.utils.json.JSONUtils.isJson(JSONUtils.java:216)
+	at org.openspcoop2.utils.json.YAMLUtils.isYaml(YAMLUtils.java:218)
+	at org.openspcoop2.utils.openapi.AbstractOpenapiApiReader._init(AbstractOpenapiApiReader.java:152)
+	at org.openspcoop2.utils.openapi.AbstractOpenapiApiReader._init(AbstractOpenapiApiReader.java:214)
+	at org.openspcoop2.utils.openapi.AbstractOpenapiApiReader._init(AbstractOpenapiApiReader.java:234)
+	at org.openspcoop2.utils.openapi.AbstractOpenapiApiReader.init(AbstractOpenapiApiReader.java:221)
+	at org.openspcoop2.utils.openapi.validator.TestInterfaceBigger.main(TestInterfaceBigger.java:89)
+Caused by: com.fasterxml.jackson.core.JsonParseException: Unrecognized token 'openapi': was expecting (JSON String, Number, Array, Object or token 'null', 'true' or 'false')
+ at [Source: (StringReader); line: 1, column: 8]
+	at com.fasterxml.jackson.core.JsonParser._constructError(JsonParser.java:2391)
+	at com.fasterxml.jackson.core.base.ParserMinimalBase._reportError(ParserMinimalBase.java:745)
+	at com.fasterxml.jackson.core.json.ReaderBasedJsonParser._reportInvalidToken(ReaderBasedJsonParser.java:2961)
+	at com.fasterxml.jackson.core.json.ReaderBasedJsonParser._handleOddValue(ReaderBasedJsonParser.java:2002)
+	at com.fasterxml.jackson.core.json.ReaderBasedJsonParser.nextToken(ReaderBasedJsonParser.java:802)
+	at com.fasterxml.jackson.databind.ObjectMapper._readTreeAndClose(ObjectMapper.java:4703)
+	at com.fasterxml.jackson.databind.ObjectMapper.readTree(ObjectMapper.java:3076)
+	at org.openspcoop2.utils.json.AbstractUtils.getAsNode(AbstractUtils.java:69)
+	... 8 more
+org.openspcoop2.utils.UtilsException: The incoming YAML document exceeds the limit: 3145728 code points.
+ at [Source: (StringReader); line: 68855, column: 18]
+	at org.openspcoop2.utils.json.AbstractUtils.getAsNode(AbstractUtils.java:71)
+	at org.openspcoop2.utils.json.AbstractUtils.isValid(AbstractUtils.java:228)
+	at org.openspcoop2.utils.json.YAMLUtils.isYaml(YAMLUtils.java:218)
+	at org.openspcoop2.utils.openapi.AbstractOpenapiApiReader._init(AbstractOpenapiApiReader.java:152)
+	at org.openspcoop2.utils.openapi.AbstractOpenapiApiReader._init(AbstractOpenapiApiReader.java:214)
+	at org.openspcoop2.utils.openapi.AbstractOpenapiApiReader._init(AbstractOpenapiApiReader.java:234)
+	at org.openspcoop2.utils.openapi.AbstractOpenapiApiReader.init(AbstractOpenapiApiReader.java:221)
+	at org.openspcoop2.utils.openapi.validator.TestInterfaceBigger.main(TestInterfaceBigger.java:89)
+Caused by: com.fasterxml.jackson.dataformat.yaml.JacksonYAMLParseException: The incoming YAML document exceeds the limit: 3145728 code points.
+ at [Source: (StringReader); line: 68855, column: 18]
+	at com.fasterxml.jackson.dataformat.yaml.YAMLParser.nextToken(YAMLParser.java:409)
+	at com.fasterxml.jackson.databind.deser.std.BaseNodeDeserializer._deserializeContainerNoRecursion(JsonNodeDeserializer.java:506)
+	at com.fasterxml.jackson.databind.deser.std.JsonNodeDeserializer.deserialize(JsonNodeDeserializer.java:84)
+	at com.fasterxml.jackson.databind.deser.std.JsonNodeDeserializer.deserialize(JsonNodeDeserializer.java:20)
+	at com.fasterxml.jackson.databind.deser.DefaultDeserializationContext.readRootValue(DefaultDeserializationContext.java:323)
+	at com.fasterxml.jackson.databind.ObjectMapper._readTreeAndClose(ObjectMapper.java:4716)
+	at com.fasterxml.jackson.databind.ObjectMapper.readTree(ObjectMapper.java:3076)
+	at org.openspcoop2.utils.json.AbstractUtils.getAsNode(AbstractUtils.java:69)
+	... 7 more
+Caused by: org.yaml.snakeyaml.error.YAMLException: The incoming YAML document exceeds the limit: 3145728 code points.
+	at org.yaml.snakeyaml.scanner.ScannerImpl.fetchMoreTokens(ScannerImpl.java:335)
+	at org.yaml.snakeyaml.scanner.ScannerImpl.checkToken(ScannerImpl.java:256)
+	at org.yaml.snakeyaml.parser.ParserImpl$ParseBlockSequenceEntryKey.produce(ParserImpl.java:548)
+	at org.yaml.snakeyaml.parser.ParserImpl.peekEvent(ParserImpl.java:171)
+	at org.yaml.snakeyaml.parser.ParserImpl.getEvent(ParserImpl.java:181)
+	at com.fasterxml.jackson.dataformat.yaml.YAMLParser.nextToken(YAMLParser.java:403)
+	... 14 more
