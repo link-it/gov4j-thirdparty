@@ -1,0 +1,99 @@
+diff --git src/main/java/com/github/erosb/kappa/operation/validator/util/convert/style/FormStyleConverter.java src/main/java/com/github/erosb/kappa/operation/validator/util/convert/style/FormStyleConverter.java
+index ec1c9dd..4c139f4 100644
+--- src/main/java/com/github/erosb/kappa/operation/validator/util/convert/style/FormStyleConverter.java
++++ src/main/java/com/github/erosb/kappa/operation/validator/util/convert/style/FormStyleConverter.java
+@@ -39,11 +39,23 @@ public class FormStyleConverter {
+ 
+     JsonNode result;
+     String type = param.getSchema().getSupposedType(context);
++    List<Schema> anyOfSchemas = param.getSchema().getAnyOfSchemas();
++    List<Schema> oneOfSchemas = param.getSchema().getOneOfSchemas();
++    List<Schema> allOfSchemas = param.getSchema().getAllOfSchemas();
+     if (OAI3SchemaKeywords.TYPE_ARRAY.equals(type)) {
+       result = getArrayValues(context, param, paramPairs.get(paramName));
+       visitedParams.add(paramName);
+     } else if (OAI3SchemaKeywords.TYPE_OBJECT.equals(type)) {
+       result = getObjectValues(context, param, paramName, paramPairs, visitedParams);
++    } else if (anyOfSchemas != null && !anyOfSchemas.isEmpty()) {
++      result = getPrimitiveOfValue(context, param, paramPairs.get(paramName), anyOfSchemas);
++      visitedParams.add(paramName);
++    } else if (oneOfSchemas != null && !oneOfSchemas.isEmpty()) {
++      result = getPrimitiveOfValue(context, param, paramPairs.get(paramName), oneOfSchemas);
++      visitedParams.add(paramName);
++    } else if (allOfSchemas != null && !allOfSchemas.isEmpty()) {
++      result = getPrimitiveOfValue(context, param, paramPairs.get(paramName), allOfSchemas);
++      visitedParams.add(paramName);
+     } else {
+       result = getPrimitiveValue(context, param, paramPairs.get(paramName));
+       visitedParams.add(paramName);
+@@ -51,6 +63,21 @@ public class FormStyleConverter {
+     return result;
+   }
+ 
++  private JsonNode getPrimitiveOfValue(OAIContext context, AbsParameter<?> param, Collection<String> paramValues, List<Schema> ofSchemas) {
++    if (paramValues == null) {
++      return null;
++    }
++    String value = getParamValue(paramValues);
++    for (Schema schema : ofSchemas) {
++      JsonNode n = TypeConverter.instance().convertPrimitive(context, schema, value);
++      if (n != null) {
++        // converto con il primo tipo che trovo. Si supportano strutture solamente con tipi uguali
++        return n;
++      }
++    }
++    return null;
++  }
++
+   private JsonNode getArrayValues(OAIContext context, AbsParameter<?> param, Collection<String> paramValues) {
+     if (paramValues == null) {
+       return null;
+diff --git src/main/java/com/github/erosb/kappa/operation/validator/util/convert/style/StyleConverter.java src/main/java/com/github/erosb/kappa/operation/validator/util/convert/style/StyleConverter.java
+index 1e80c18..a14fbeb 100644
+--- src/main/java/com/github/erosb/kappa/operation/validator/util/convert/style/StyleConverter.java
++++ src/main/java/com/github/erosb/kappa/operation/validator/util/convert/style/StyleConverter.java
+@@ -9,6 +9,7 @@ import com.github.erosb.kappa.parser.model.v3.Schema;
+ import com.github.erosb.kappa.operation.validator.util.convert.TypeConverter;
+ 
+ import java.util.Collection;
++import java.util.List;
+ import java.util.Map;
+ 
+ interface StyleConverter {
+@@ -22,6 +23,10 @@ interface StyleConverter {
+ 
+     String style = param.getSchema().getSupposedType(context);
+     Schema schema = param.getSchema();
++    List<Schema> anyOfSchemas = param.getSchema().getAnyOfSchemas();
++    List<Schema> oneOfSchemas = param.getSchema().getOneOfSchemas();
++    List<Schema> allOfSchemas = param.getSchema().getAllOfSchemas();
++
+     if (OAI3SchemaKeywords.TYPE_OBJECT.equals(style)) {
+       return TypeConverter.instance().convertObject(context, schema, paramValues);
+     } else if (OAI3SchemaKeywords.TYPE_ARRAY.equals(style)) {
+@@ -29,8 +34,25 @@ interface StyleConverter {
+       return (value instanceof Collection)
+         ? TypeConverter.instance().convertArray(context, schema.getItemsSchema(), (Collection<Object>) value)
+         : JsonNodeFactory.instance.nullNode();
++    } else if (anyOfSchemas != null && !anyOfSchemas.isEmpty()) {
++      return convertOf(context, anyOfSchemas, paramValues.get(paramName));
++    } else if (oneOfSchemas != null && !oneOfSchemas.isEmpty()) {
++      return convertOf(context, oneOfSchemas, paramValues.get(paramName));
++    } else if (allOfSchemas != null && !allOfSchemas.isEmpty()) {
++      return convertOf(context, allOfSchemas, paramValues.get(paramName));
+     } else {
+       return TypeConverter.instance().convertPrimitive(context, schema, paramValues.get(paramName));
+     }
+   }
++
++  default JsonNode convertOf(OAIContext context, List<Schema> ofSchemas, Object rawValue) {
++    for (Schema s : ofSchemas) {
++      JsonNode n = TypeConverter.instance().convertPrimitive(context, s, rawValue);
++      if (n != null) {
++        // converto con il primo tipo che trovo. Si supportano strutture solamente con tipi uguali
++        return n;
++      }
++    }
++    return null;
++  }
+ }

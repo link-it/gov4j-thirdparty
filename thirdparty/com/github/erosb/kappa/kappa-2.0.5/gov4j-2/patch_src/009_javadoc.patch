@@ -1,0 +1,129 @@
+diff --git src/main/java/com/github/erosb/kappa/core/exception/ResolutionException.java src/main/java/com/github/erosb/kappa/core/exception/ResolutionException.java
+--- src/main/java/com/github/erosb/kappa/core/exception/ResolutionException.java
++++ src/main/java/com/github/erosb/kappa/core/exception/ResolutionException.java
+@@ -2,7 +2,7 @@
+ 
+ /**
+  * Exception for resolution representation.
+- * <p/>
++ * <p>
+  * Resolution means that an expected resource has not been found or
+  * cannot be reached.
+  */
+diff --git src/main/java/com/github/erosb/kappa/core/model/v3/OAI3Context.java src/main/java/com/github/erosb/kappa/core/model/v3/OAI3Context.java
+--- src/main/java/com/github/erosb/kappa/core/model/v3/OAI3Context.java
++++ src/main/java/com/github/erosb/kappa/core/model/v3/OAI3Context.java
+@@ -15,7 +15,7 @@
+ 
+ /**
+  * Open API v3 context.
+- * <p/>
++ * <p>
+  * This class handles references and base URL.
+  */
+ public class OAI3Context implements OAIContext {
+diff --git src/main/java/com/github/erosb/kappa/operation/validator/model/impl/Body.java src/main/java/com/github/erosb/kappa/operation/validator/model/impl/Body.java
+--- src/main/java/com/github/erosb/kappa/operation/validator/model/impl/Body.java
++++ src/main/java/com/github/erosb/kappa/operation/validator/model/impl/Body.java
+@@ -76,7 +76,7 @@
+    * @param body The given body stream. The current implementation will use the system default character set to decode it into
+    *             string while parsing as json.
+    * @return The constructed body.
+-   * @see {@link Charset#defaultCharset()}
++   * @see Charset#defaultCharset()
+    */
+   public static Body from(InputStream body) {
+     requireNonNull(body, BODY_REQUIRED_ERR_MSG);
+diff --git src/main/java/com/github/erosb/kappa/operation/validator/util/convert/ParameterConverter.java src/main/java/com/github/erosb/kappa/operation/validator/util/convert/ParameterConverter.java
+--- src/main/java/com/github/erosb/kappa/operation/validator/util/convert/ParameterConverter.java
++++ src/main/java/com/github/erosb/kappa/operation/validator/util/convert/ParameterConverter.java
+@@ -45,13 +45,13 @@
+  * -------------------------------------------------------------------------------------------------------------------------------------------------
+  * | style          | explode | URI template | Primitive value id = 5 | Array id = [3, 4, 5]  | Object id = {"role": "admin", "firstName": "Alex"} |
+  * |----------------|---------|--------------|------------------------|-----------------------|----------------------------------------------------|
+- * | form *         | true *  | /users{?id*} | /users?id=5            | /users?id=3&id=4&id=5 | /users?role=admin&firstName=Alex                   |
++ * | form *         | true *  | /users{?id*} | /users?id=5            | /users?id=3&amp;id=4&amp;id=5 | /users?role=admin&amp;firstName=Alex                   |
+  * | form           | false   | /users{?id}  | /users?id=5            | /users?id=3,4,5       | /users?id=role,admin,firstName,Alex                |
+- * | spaceDelimited | true    | /users{?id*} | n/a                    | /users?id=3&id=4&id=5 | n/a                                                |
++ * | spaceDelimited | true    | /users{?id*} | n/a                    | /users?id=3&amp;id=4&amp;id=5 | n/a                                                |
+  * | spaceDelimited | false   | n/a          | n/a                    | /users?id=3%204%205   | n/a                                                |
+- * | pipeDelimited  | true    | /users{?id*} | n/a                    | /users?id=3&id=4&id=5 | n/a                                                |
++ * | pipeDelimited  | true    | /users{?id*} | n/a                    | /users?id=3&amp;id=4&amp;id=5 | n/a                                                |
+  * | pipeDelimited  | false   | n/a          | n/a                    | /users?id=34|5|       | n/a                                                |
+- * | deepObject     | true    | n/a          | n/a                    | n/a                   | /users?id[role]=admin&id[firstName]=Alex           |
++ * | deepObject     | true    | n/a          | n/a                    | n/a                   | /users?id[role]=admin&amp;id[firstName]=Alex           |
+  * -------------------------------------------------------------------------------------------------------------------------------------------------
+  * <p>
+  * -- HEADER :
+@@ -74,7 +74,7 @@
+  * <p>
+  * ---------------------------------------------------------
+  * RFC 3986 section 2.2 Reserved Characters (January 2005)
+- * !	*	'	(	)	;	:	@	&	=	+	$	,	/	?	#	[	]
++ * !	*	'	(	)	;	:	@	&amp;	=	+	$	,	/	?	#	[	]
+  * ---------------------------------------------------------
+  * <p>
+  * <p>
+diff --git src/main/java/com/github/erosb/kappa/operation/validator/validation/RequestValidator.java src/main/java/com/github/erosb/kappa/operation/validator/validation/RequestValidator.java
+--- src/main/java/com/github/erosb/kappa/operation/validator/validation/RequestValidator.java
++++ src/main/java/com/github/erosb/kappa/operation/validator/validation/RequestValidator.java
+@@ -61,7 +61,7 @@
+ 
+   /**
+    * Compile the given request and fill the validators to associate with.
+-   * <p/>
++   * <p>
+    * In no server URL has been defined in the Document,
+    * any path fragment from the request prior to the
+    * path operation template will lead to a failure in path lookup.<br/>
+@@ -112,7 +112,7 @@
+ 
+   /**
+    * Validate the request from its given URL.
+-   * <p/>
++   * <p>
+    * In no server URL has been defined in the Document,
+    * any path fragment from the request prior to the
+    * path operation template will lead to a failure in path lookup.<br/>
+@@ -130,7 +130,7 @@
+    * Validate the response from the validators associated with the request.
+    * The request is not validated except for the path and operation,
+    * use {@link #validate(Request)} instead to validate the request.
+-   * <p/>
++   * <p>
+    * In no server URL has been defined in the Document,
+    * any path fragment from the request prior to the
+    * path operation template will lead to a failure in path lookup.<br/>
+diff --git src/main/java/com/github/erosb/kappa/schema/validator/v3/ValidationOptions.java src/main/java/com/github/erosb/kappa/schema/validator/v3/ValidationOptions.java
+--- src/main/java/com/github/erosb/kappa/schema/validator/v3/ValidationOptions.java
++++ src/main/java/com/github/erosb/kappa/schema/validator/v3/ValidationOptions.java
+@@ -8,7 +8,7 @@
+ 
+   /**
+    * By default, in JSON schema v0, all schemas allow additional properties.
+-   * <p/>
++   * <p>
+    * Setting this to {@code true} invert the behaviour.
+    */
+   public static final byte ADDITIONAL_PROPS_RESTRICT = 1;
+diff --git kappa-vertx-adapter/src/main/java/com/github/erosb/kappa/operation/validator/adapters/server/vertx/v3/OpenApi3RouterFactory.java kappa-vertx-adapter/src/main/java/com/github/erosb/kappa/operation/validator/adapters/server/vertx/v3/OpenApi3RouterFactory.java
+--- kappa-vertx-adapter/src/main/java/com/github/erosb/kappa/operation/validator/adapters/server/vertx/v3/OpenApi3RouterFactory.java
++++ kappa-vertx-adapter/src/main/java/com/github/erosb/kappa/operation/validator/adapters/server/vertx/v3/OpenApi3RouterFactory.java
+@@ -24,7 +24,7 @@
+    *
+    * @param vertx The current Vert.x instance.
+    * @param url   location of your spec. It can be an absolute path, a local path or remote url (with HTTP protocol)
+-   * @return future When specification is loaded, this future will be called with AsyncResult<OpenApi3RouterFactory>
++   * @return future When specification is loaded, this future will be called with {@code AsyncResult<OpenApi3RouterFactory>}
+    */
+   static Future<OpenApi3RouterFactory> create(Vertx vertx, URL url) {
+     Promise<OpenApi3RouterFactory> promise = Promise.promise();
+@@ -37,7 +37,7 @@
+    *
+    * @param vertx   The current Vert.x instance.
+    * @param url     location of your spec. It can be an absolute path, a local path or remote url (with HTTP protocol)
+-   * @param handler When specification is loaded, this handler will be called with AsyncResult<OpenApi3RouterFactory>
++   * @param handler When specification is loaded, this handler will be called with {@code AsyncResult<OpenApi3RouterFactory>}
+    */
+   static void create(Vertx vertx,
+                      URL url,

@@ -1,0 +1,220 @@
+diff --git src/main/java/com/github/erosb/kappa/core/model/OAIContext.java src/main/java/com/github/erosb/kappa/core/model/OAIContext.java
+--- src/main/java/com/github/erosb/kappa/core/model/OAIContext.java
++++ src/main/java/com/github/erosb/kappa/core/model/OAIContext.java
+@@ -4,6 +4,8 @@
+ import com.github.erosb.kappa.core.model.reference.ReferenceRegistry;
+ 
+ import java.net.URL;
++import java.util.Collections;
++import java.util.Map;
+ 
+ public interface OAIContext {
+   /**
+@@ -25,6 +27,17 @@
+   JsonNode getBaseDocument();
+ 
+   /**
++   * Documenti caricati durante la risoluzione dei $ref, indicizzati per URL serializzata
++   * (es. {@code file:/} per il base, {@code file:/foo.yaml} per gli allegati pre-registrati).
++   * Default: mappa vuota (le implementazioni che pre-caricano sub-document, come OAI3Context,
++   * possono ritornare il registry effettivo). Utilizzato da SKemaBackedJsonValidator per
++   * propagare gli allegati a json-sKema via SchemaLoaderConfig.additionalMappings.
++   */
++  default Map<String, JsonNode> getDocumentRegistry() {
++    return Collections.emptyMap();
++  }
++
++  /**
+    * Returns whether the multipart converter should pre-classify properties
+    * as binary/base64/non-binary based on the schema, to avoid loading file
+    * content as JSON on type mismatch.
+diff --git src/main/java/com/github/erosb/kappa/core/model/reference/AbstractReferenceResolver.java src/main/java/com/github/erosb/kappa/core/model/reference/AbstractReferenceResolver.java
+--- src/main/java/com/github/erosb/kappa/core/model/reference/AbstractReferenceResolver.java
++++ src/main/java/com/github/erosb/kappa/core/model/reference/AbstractReferenceResolver.java
+@@ -84,6 +84,16 @@
+     return baseDocument;
+   }
+ 
++  /**
++   * Documenti caricati e referenziati durante la fase di resolve, indicizzati per la loro URL serializzata
++   * (es. {@code file:/} per il base, {@code file:/foo.yaml} per gli allegati pre-registrati). Esposto per
++   * permettere ad altri layer (es. SKemaBackedJsonValidator) di registrare i sub-document presso json-sKema
++   * via {@code SchemaLoaderConfig.additionalMappings} quando il merge degli schemi non è abilitato.
++   */
++  public Map<String, JsonNode> getDocumentRegistry() {
++    return Collections.unmodifiableMap(documentRegistry);
++  }
++
+   protected abstract Collection<JsonNode> getReferencePaths(JsonNode document);
+ 
+   private void findReferences(URL url, JsonNode document) throws ResolutionException {
+diff --git src/main/java/com/github/erosb/kappa/core/model/v3/OAI3Context.java src/main/java/com/github/erosb/kappa/core/model/v3/OAI3Context.java
+--- src/main/java/com/github/erosb/kappa/core/model/v3/OAI3Context.java
++++ src/main/java/com/github/erosb/kappa/core/model/v3/OAI3Context.java
+@@ -25,6 +25,12 @@
+   private final URL baseUrl;
+   private final List<AuthOption> authOptions;
+   private final JsonNode baseDocument;
++  /**
++   * Registry dei documenti caricati durante {@link #resolveReferences(JsonNode, Map)}, indicizzato per URL
++   * serializzata. Copiato dal {@link ReferenceResolver} dopo la risoluzione: serve a layer downstream
++   * (SKemaBackedJsonValidator) per propagare gli allegati a json-sKema via additionalMappings.
++   */
++  private Map<String, JsonNode> documentRegistry = java.util.Collections.emptyMap();
+   private boolean multipartOptimization = false;
+ 
+   /**
+@@ -146,6 +152,16 @@
+     return baseUrl;
+   }
+ 
++  /**
++   * Esposizione del registry dei documenti caricati durante la risoluzione delle $ref.
++   * Le chiavi sono le URL serializzate (es. {@code file:/} per il base, {@code file:/foo.yaml} per gli allegati).
++   * Utilizzato da SKemaBackedJsonValidator per propagare gli allegati a json-sKema via additionalMappings
++   * (necessario quando mergeSpec=false).
++   */
++  public Map<String, JsonNode> getDocumentRegistry() {
++    return documentRegistry;
++  }
++
+   @Override
+   public boolean isMultipartOptimization() {
+     return multipartOptimization;
+@@ -164,6 +180,8 @@
+     // Standard JSON references
+     ReferenceResolver resolver = new ReferenceResolver(baseUrl, authOptions, baseDocument, $REF, referenceRegistry, documentRegistryParam);
+     resolver.resolve();
++    // Esposizione del registry verso layer downstream (vedi getDocumentRegistry).
++    this.documentRegistry = resolver.getDocumentRegistry();
+ 
+     // Mapping JSON references
+     ReferenceRegistry mappingRefsRegistry = new ReferenceRegistry(baseUrl);
+diff --git src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java
+--- src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java
++++ src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java
+@@ -26,6 +26,7 @@
+ import java.time.ZonedDateTime;
+ import java.time.format.DateTimeParseException;
+ import java.util.Iterator;
++import java.util.Map;
+ import java.util.regex.Pattern;
+ 
+ public class SKemaBackedJsonValidator
+@@ -169,8 +170,15 @@
+     JsonNode rawJson = TreeUtil.json.convertValue(schema, JsonNode.class);
+     if (rawJson instanceof ObjectNode) {
+       ObjectNode obj = (ObjectNode) rawJson;
+-      obj.set("components", context.getContext().getBaseDocument().get("components"));
++      // Fonde 'components' di tutti i documenti registrati in OAI3Context (master + allegati pre-registrati).
++      // Necessario quando mergeSpec=false: json-sKema non traccia il base URI nel follow di $ref cross-file,
++      // quindi $ref locali ('#/components/...') vengono risolti contro il rawJson e non contro il sub-document.
++      // Fondendo qui i components, tutti i $ref locali trovano il loro target nel rawJson.
++      obj.set("components", buildMergedComponents(context));
+     }
++    // Riscrive $ref cross-file ('teamdigitale-openapi_definitions.yaml#/components/...') in $ref locali
++    // ('#/components/...') sfruttando la fusione precedente. Anche 'abs$ref' viene gestito.
++    rewriteCrossFileRefs(rawJson);
+     // OpenAPI 3.0: traduce 'nullable: true' nel relativo costrutto JSON Schema
+     // 2020-12 'type: [..., "null"]' (rispettivamente: aggiunge "null" all'array
+     // se 'type' è un array, lo trasforma in array se è una stringa, lo lascia
+@@ -188,6 +196,99 @@
+     }
+   }
+ 
++  /**
++   * Costruisce un singolo nodo 'components' fondendo i 'components' di tutti i documenti registrati
++   * nell'OAI3Context (master + allegati). Il master ha precedenza in caso di chiavi duplicate.
++   */
++  private static JsonNode buildMergedComponents(ValidationContext<OAI3> context) {
++    ObjectNode merged = JsonNodeFactory.instance.objectNode();
++    JsonNode masterComponents = context.getContext().getBaseDocument().get("components");
++    Map<String, JsonNode> registry = context.getContext().getDocumentRegistry();
++    if (registry != null) {
++      for (JsonNode doc : registry.values()) {
++        JsonNode comps = doc.get("components");
++        if (comps != null && comps.isObject()) {
++          mergeComponentSection(merged, (ObjectNode) comps);
++        }
++      }
++    }
++    // Master per ultimo cosi' ha precedenza (sovrascrive eventuali duplicati dagli allegati).
++    if (masterComponents != null && masterComponents.isObject()) {
++      mergeComponentSection(merged, (ObjectNode) masterComponents);
++    }
++    return merged;
++  }
++
++  /** Merge depth-2: per ogni sezione (schemas, responses, parameters, ...) fonde le entry. */
++  private static void mergeComponentSection(ObjectNode merged, ObjectNode src) {
++    Iterator<Map.Entry<String, JsonNode>> sections = src.fields();
++    while (sections.hasNext()) {
++      Map.Entry<String, JsonNode> section = sections.next();
++      String sectionName = section.getKey();
++      JsonNode sectionValue = section.getValue();
++      if (!(sectionValue instanceof ObjectNode)) {
++        continue;
++      }
++      ObjectNode mergedSection;
++      if (merged.has(sectionName) && merged.get(sectionName) instanceof ObjectNode) {
++        mergedSection = (ObjectNode) merged.get(sectionName);
++      } else {
++        mergedSection = JsonNodeFactory.instance.objectNode();
++        merged.set(sectionName, mergedSection);
++      }
++      Iterator<Map.Entry<String, JsonNode>> entries = sectionValue.fields();
++      while (entries.hasNext()) {
++        Map.Entry<String, JsonNode> entry = entries.next();
++        mergedSection.set(entry.getKey(), entry.getValue());
++      }
++    }
++  }
++
++  /**
++   * Riscrive $ref cross-file (es. 'foo.yaml#/components/schemas/X') in $ref locali ('#/components/schemas/X'),
++   * grazie alla fusione di components in {@link #buildMergedComponents}. Tocca anche 'abs$ref' iniettato
++   * dal ReferenceResolver di kappa.
++   */
++  private static void rewriteCrossFileRefs(JsonNode node) {
++    if (node == null) {
++      return;
++    }
++    if (node.isObject()) {
++      ObjectNode obj = (ObjectNode) node;
++      stripPathFromRefField(obj, "$ref");
++      stripPathFromRefField(obj, "abs$ref");
++      Iterator<Map.Entry<String, JsonNode>> it = obj.fields();
++      while (it.hasNext()) {
++        rewriteCrossFileRefs(it.next().getValue());
++      }
++    } else if (node.isArray()) {
++      for (JsonNode el : node) {
++        rewriteCrossFileRefs(el);
++      }
++    }
++  }
++
++  private static void stripPathFromRefField(ObjectNode obj, String fieldName) {
++    JsonNode refNode = obj.get(fieldName);
++    if (refNode == null || !refNode.isTextual()) {
++      return;
++    }
++    String ref = refNode.textValue();
++    int idx = ref.indexOf('#');
++    if (idx <= 0) {
++      // ref puramente locale (#/...) o senza '#': nulla da riscrivere
++      return;
++    }
++    String pointer = ref.substring(idx); // include '#'
++    // Riscriviamo SOLO i ref che puntano a una sezione 'components/...' (caso OAS),
++    // perche' la fusione precedente li ha resi disponibili nel rawJson sotto 'components/...'.
++    // I ref a schemi top-level di un sub-document (es. '#/Id' in uno schema JSON Schema
++    // legacy) non sono fusi e devono restare invariati per non rompere la risoluzione.
++    if (pointer.startsWith("#/components/")) {
++      obj.set(fieldName, JsonNodeFactory.instance.textNode(pointer));
++    }
++  }
++
+   public boolean validate(IJsonValue jsonValue, ValidationData<?> validation) {
+     ValidatorConfig config = ValidatorConfig.builder()
+       .validateFormat(FormatValidationPolicy.ALWAYS)

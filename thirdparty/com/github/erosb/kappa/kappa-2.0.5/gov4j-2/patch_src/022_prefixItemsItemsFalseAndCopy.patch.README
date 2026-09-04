@@ -1,0 +1,36 @@
+Risolve due regressioni connesse al supporto di 'prefixItems' (OpenAPI 3.1 / JSON Schema 2020-12):
+
+PROBLEMA A: Schema.copy() perde 'prefixItemsSchemas'
+La patch 020 ha aggiunto il field POJO 'prefixItemsSchemas' (@JsonProperty("prefixItems")) ma il
+metodo Schema.copy() non lo replicava nella copia. BodyValidator.initValidator costruisce il
+validator a partire da 'mediaType.getSchema().copy()', quindi quando lo Schema body originale
+ha 'prefixItems' (es. tupla [string,int,bool]) il rawJson serializzato per json-sKema non lo
+include e la validazione per posizione viene saltata. Su body validi come ["a",1,true] non
+genera errori di tipo ma il successivo rewrite di 'items: false' non puo' applicarsi (vedi
+PROBLEMA B) e json-sKema emette {"body.<i>: false schema always fails"} su tutti gli indici.
+
+PROBLEMA B: json-sKema 0.30 applica 'items: false' anche agli indici coperti da 'prefixItems'
+La combinazione 'prefixItems: [...] + items: false' (tupla a lunghezza fissa) viene interpretata
+erroneamente: 'items: false' colpisce TUTTI gli elementi dell'array, anche quelli ammessi dai
+'prefixItems[i]', producendo "body.<i>: false schema always fails" su tuple formalmente valide.
+La semantica OAS 3.1 / JSON Schema 2020-12 prevede invece che 'items: false' si applichi solo
+agli indici extra (oltre len(prefixItems)); cio' equivale a 'maxItems: <len(prefixItems)>'.
+
+SOLUZIONE
+1) src/main/java/com/github/erosb/kappa/parser/model/v3/Schema.java
+   - Schema.copy() ora replica 'prefixItemsSchemas' (copy.setPrefixItemsSchemas(copyList(...))),
+     accanto a allOf/oneOf/anyOf. Senza questa modifica la copy() svuotava la tupla anche se il
+     POJO sorgente la dichiarava, facendo apparire al validator un semplice 'type: array' al posto
+     di una tupla a lunghezza fissa.
+
+2) src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java
+   - Aggiunto rewritePrefixItemsWithItemsFalse(rawJson): pre-processing ricorsivo che riconosce
+     la coppia 'prefixItems + items: false' e la riscrive in 'prefixItems + maxItems: <N>' (con
+     N = len(prefixItems)), preservando il maxItems esistente se gia' piu' restrittivo. La
+     rewrite viene applicata subito dopo rewriteNullable e prima di SchemaLoader.load().
+     Allineato come pattern alla rewriteNullable gia' presente (OAS 3.0 nullable -> 3.1 type
+     array).
+
+File modificati:
+  - src/main/java/com/github/erosb/kappa/parser/model/v3/Schema.java
+  - src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java

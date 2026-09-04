@@ -1,0 +1,48 @@
+Migra MultipartConverter di kappa da commons-fileupload 1.x a commons-fileupload2 (variante jakarta).
+
+PROBLEMA
+Il MultipartConverter introdotto dalle patch 004 (validationMultipartFormDataMixed) e successive utilizza
+le API di commons-fileupload 1.x (org.apache.commons.fileupload.FileUpload / FileItemIterator /
+FileItemStream / UploadContext / FileUploadException). In govway è disponibile in classpath solo
+commons-fileupload2 (org.apache.commons.fileupload2.*), perché openapi4j è già stato migrato con la
+sua patch 011_jakartaCommonsFileUpload2. Il caricamento del MultipartConverter di kappa fallisce
+con NoClassDefFoundError, mascherato a runtime come "Request content not conform to API specification:
+org/apache/commons/fileupload/FileUploadException" su tutte le richieste multipart validate da kappa.
+
+SOLUZIONE
+La patch è il porting diretto della 011_jakartaCommonsFileUpload2 di openapi4j applicata a kappa.
+
+Modifiche al sorgente
+(src/main/java/com/github/erosb/kappa/operation/validator/util/convert/MultipartConverter.java):
+  - sostituzione del wildcard import "org.apache.commons.fileupload.*" con gli import puntuali
+    org.apache.commons.fileupload2.core.{FileItemInput, FileItemInputIterator, FileUploadException}
+    e org.apache.commons.fileupload2.jakarta.JakartaServletFileUpload;
+  - aggiunta dell'import java.util.function.LongSupplier;
+  - sostituzione di UploadContext + UPLOAD_CONTEXT_INSTANCE (interfaccia funzionale + lambda) con
+    una classe top-level MCContext che estende AbstractRequestContext<String> di fileupload2 e
+    una helper MCContextUtils per esporre lo size-supplier richiesto dal constructor della superclasse;
+  - sostituzione del costruttore FileUpload + FileItemIterator + FileItemStream con
+    JakartaServletFileUpload + FileItemInputIterator + FileItemInput;
+  - rinomina di FileItemStream a FileItemInput nelle firme dei metodi mapValue, checkContentType e
+    convertToJsonNode;
+  - rinomina del metodo di lettura stream da item.openStream() a item.getInputStream() (5 occorrenze).
+
+Modifiche al build (build.gradle):
+  - rimozione delle dipendenze compileOnly/testImplementation su "commons-fileupload:commons-fileupload:1.5";
+  - aggiunta delle dipendenze "org.apache.commons:commons-fileupload2-core:2.0.0-M1",
+    "org.apache.commons:commons-fileupload2-jakarta:2.0.0-M1" e
+    "jakarta.servlet:jakarta.servlet-api:5.0.0".
+
+Note sull'ottimizzazione multipart
+La presente patch è puramente migrazione di libreria: NON modifica la logica di
+validateMultipartOptimization introdotta dalla patch 004. Si segnala però una limitazione di tale
+ottimizzazione, comune a kappa e openapi4j, da considerare lato configurazione:
+quando lo schema multipart dichiara SOLO proprietà di formato binary o base64 (es. un body
+multipart che porta esclusivamente un array di file binari), il loop di lettura termina prima di
+elaborare le parti binarie e il body costruito risulta non conforme allo schema. In questo
+scenario la richiesta viene respinta con esito di validazione fallita: l'ottimizzazione deve essere
+disattivata oppure lo schema deve dichiarare almeno una proprietà non-binaria/non-base64.
+
+File modificati:
+  - src/main/java/com/github/erosb/kappa/operation/validator/util/convert/MultipartConverter.java
+  - build.gradle

@@ -1,0 +1,61 @@
+diff --git src/main/java/com/github/erosb/kappa/operation/validator/validation/BodyValidator.java src/main/java/com/github/erosb/kappa/operation/validator/validation/BodyValidator.java
+--- src/main/java/com/github/erosb/kappa/operation/validator/validation/BodyValidator.java
++++ src/main/java/com/github/erosb/kappa/operation/validator/validation/BodyValidator.java
+@@ -5,6 +5,7 @@
+ import com.github.erosb.jsonsKema.IJsonValue;
+ import com.github.erosb.jsonsKema.JsonParseException;
+ import com.github.erosb.kappa.core.model.v3.OAI3;
++import com.github.erosb.kappa.core.model.v3.OAI3SchemaKeywords;
+ import com.github.erosb.kappa.core.validation.OpenApiValidationFailure;
+ import com.github.erosb.kappa.core.validation.OperationContextUriFactory;
+ import com.github.erosb.kappa.operation.validator.model.impl.Body;
+@@ -37,22 +38,34 @@
+     if (validator == null) {
+       return; // No schema specified for body
+     } else if (body == null) {
++      if (isBinarySchema()) {
++        return;
++      }
+       validator.validate(JsonNodeFactory.instance.nullNode(), uriFactory.httpEntity(), validation);
+       return;
+     }
+ 
++    // 'format: binary': body binario opaco. Il parsing del content-type viene comunque eseguito
++    // (per intercettare errori di sintassi su content-type strutturati come json/xml), ma la
++    // validazione di schema viene saltata. Allineato a openapi4j (TypeValidator skip su binary).
++    boolean skipSchemaValidation = isBinarySchema();
++
+     try {
+       if (ContentType.isJson(ContentType.getTypeOnly(rawContentType))) {
+         // path json: parsing tramite json-sKema (IJsonValue), invariato rispetto a upstream
+         IJsonValue jsonBody = body.contentAsNode(rawContentType, uriFactory.httpEntity());
+-        validator.validate(jsonBody, validation);
++        if (!skipSchemaValidation) {
++          validator.validate(jsonBody, validation);
++        }
+       } else {
+         // path non-json: dispatch xml/multipart/form-url/textToNode tramite ContentConverter,
+         // allineato al comportamento di openapi4j. Il metodo legacy Body.getContentAsNode
+         // delega a ContentConverter.convert e restituisce un Jackson JsonNode, che viene
+         // passato all'overload validate(JsonNode, URI, ValidationData) di SKemaBackedJsonValidator.
+         JsonNode bridged = body.getContentAsNode(context.getContext(), mediaType, rawContentType);
+-        validator.validate(bridged, uriFactory.httpEntity(), validation);
++        if (!skipSchemaValidation) {
++          validator.validate(bridged, uriFactory.httpEntity(), validation);
++        }
+       }
+     } catch (JsonParseException ex) {
+       validation.add(OpenApiValidationFailure.unparseableHttpEntity(ex, uriFactory.definitionHttpEntity()));
+@@ -62,6 +75,12 @@
+     }
+   }
+ 
++  private boolean isBinarySchema() {
++    return mediaType != null
++        && mediaType.getSchema() != null
++        && OAI3SchemaKeywords.FORMAT_BINARY.equals(mediaType.getSchema().getFormat());
++  }
++
+   private SKemaBackedJsonValidator initValidator() {
+     if (mediaType == null || mediaType.getSchema() == null) {
+       return null;

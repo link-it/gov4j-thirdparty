@@ -1,0 +1,69 @@
+--- src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java
++++ src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java
+@@ -185,6 +185,13 @@
+     // intatto se 'type' è assente). Senza questa traduzione json-sKema ignora
+     // 'nullable' e segnala come errore i valori null.
+     rewriteNullable(rawJson);
++    // OpenAPI 3.1: la combinazione 'prefixItems: [...] + items: false' (tupla a lunghezza fissa)
++    // viene applicata erroneamente da json-sKema 0.30: 'items: false' colpisce TUTTI gli indici
++    // (compresi quelli coperti da prefixItems) invece dei soli "extra", producendo falsi
++    // "body.<i>: false schema always fails" su elementi che invece il prefixItems[i] accetterebbe.
++    // Convertiamo 'items: false' in 'maxItems: <len(prefixItems)>' che ha semantica equivalente
++    // ed e' supportato correttamente da json-sKema.
++    rewritePrefixItemsWithItemsFalse(rawJson);
+     try {
+       this.schema = new SchemaLoader(new JsonParser(
+         rawJson.toPrettyString(),
+@@ -354,4 +361,42 @@
+       }
+     }
+   }
++
++  /**
++   * Workaround per il bug di json-sKema 0.30 sulla combinazione {@code prefixItems + items: false}:
++   * la libreria applica {@code items: false} a TUTTI gli indici dell'array, anche quelli coperti
++   * da {@code prefixItems}, producendo {@code body.<i>: false schema always fails} su tuple
++   * formalmente valide. La semantica OAS 3.1 / JSON Schema 2020-12 prevede invece che
++   * {@code items: false} si applichi solo agli indici extra (oltre la lunghezza di
++   * {@code prefixItems}); quindi e' equivalente a {@code maxItems: <len(prefixItems)>}, che
++   * json-sKema implementa correttamente. Sostituiamo la coppia ricorsivamente sull'intero schema.
++   */
++  private static void rewritePrefixItemsWithItemsFalse(JsonNode node) {
++    if (node == null) {
++      return;
++    }
++    if (node.isObject()) {
++      ObjectNode obj = (ObjectNode) node;
++      JsonNode prefixItems = obj.get("prefixItems");
++      JsonNode items = obj.get("items");
++      if (prefixItems != null && prefixItems.isArray()
++          && items != null && items.isBoolean() && !items.booleanValue()) {
++        int n = prefixItems.size();
++        obj.remove("items");
++        // mantieni il maxItems gia' presente se piu' restrittivo, altrimenti imposta quello derivato
++        JsonNode existingMax = obj.get("maxItems");
++        if (existingMax == null || !existingMax.isNumber() || existingMax.asInt() > n) {
++          obj.put("maxItems", n);
++        }
++      }
++      Iterator<JsonNode> it = obj.elements();
++      while (it.hasNext()) {
++        rewritePrefixItemsWithItemsFalse(it.next());
++      }
++    } else if (node.isArray()) {
++      for (JsonNode el : node) {
++        rewritePrefixItemsWithItemsFalse(el);
++      }
++    }
++  }
+ }
+--- src/main/java/com/github/erosb/kappa/parser/model/v3/Schema.java
++++ src/main/java/com/github/erosb/kappa/parser/model/v3/Schema.java
+@@ -917,6 +917,7 @@
+       copy.setAllOfSchemas(copyList(getAllOfSchemas()));
+       copy.setOneOfSchemas(copyList(getOneOfSchemas()));
+       copy.setAnyOfSchemas(copyList(getAnyOfSchemas()));
++      copy.setPrefixItemsSchemas(copyList(getPrefixItemsSchemas()));
+ 
+       copy.setNotSchema(copyField(getNotSchema()));
+       if (getItemsSchema() != null) {

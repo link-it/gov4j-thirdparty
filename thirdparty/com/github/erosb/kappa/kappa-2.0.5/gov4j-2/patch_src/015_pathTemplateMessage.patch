@@ -1,0 +1,28 @@
+diff --git src/main/java/com/github/erosb/kappa/core/validation/OpenApiValidationFailure.java src/main/java/com/github/erosb/kappa/core/validation/OpenApiValidationFailure.java
+--- src/main/java/com/github/erosb/kappa/core/validation/OpenApiValidationFailure.java
++++ src/main/java/com/github/erosb/kappa/core/validation/OpenApiValidationFailure.java
+@@ -12,8 +12,10 @@
+ 
+ public class OpenApiValidationFailure {
+ 
+-  public static PathValidationFailure noMatchingPathPatternFound(SourceLocation schemaLocation) {
+-    return new PathValidationFailure("Path template '%s' has not been found from value '%s'.", schemaLocation);
++  public static PathValidationFailure noMatchingPathPatternFound(String pathValue, SourceLocation schemaLocation) {
++    return new PathValidationFailure(
++      String.format("Path '%s' does not match any defined template.", pathValue),
++      schemaLocation);
+   }
+ 
+   public static RequestBodyValidationFailure missingRequiredBody(SourceLocation schemaLocation) {
+diff --git src/main/java/com/github/erosb/kappa/operation/validator/validation/OperationValidator.java src/main/java/com/github/erosb/kappa/operation/validator/validation/OperationValidator.java
+--- src/main/java/com/github/erosb/kappa/operation/validator/validation/OperationValidator.java
++++ src/main/java/com/github/erosb/kappa/operation/validator/validation/OperationValidator.java
+@@ -150,7 +150,7 @@
+     }
+     Pattern pathPattern = PathResolver.instance().findPathPattern(pathPatterns, matchPath);
+     if (pathPattern == null) {
+-      validation.add(OpenApiValidationFailure.noMatchingPathPatternFound(context.requestScopedUriFactory().definitionPaths()));
++      validation.add(OpenApiValidationFailure.noMatchingPathPatternFound(matchPath, context.requestScopedUriFactory().definitionPaths()));
+       return null;
+     }
+ 

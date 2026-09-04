@@ -1,0 +1,48 @@
+Aggiunge il metodo Schema.dereference(OAIContext) per dereferenziare $ref top-level di uno
+Schema POJO, e ne fa uso nei converter di parametri query 'form'/'deepObject' su 'object'
+(FormStyleConverter, DeepObjectStyleConverter). Risolve un falso negativo "Missing required
+parameter" per parametri dichiarati come 'schema: { $ref: "#/components/schemas/X" }' con
+'style: form, explode: true' (proprietà esplose come singoli query param) o 'style: deepObject'
+('param[role]=...&param[firstName]=...').
+
+PROBLEMA
+1) Schema POJO con $ref top-level: 'schema: { $ref: ... }' lascia il POJO con solo il campo
+   'ref' valorizzato; properties/types/items sono null. I converter usano direttamente
+   'param.getSchema().getProperties()' / 'param.getSchema().getProperty(propName)':
+   - FormStyleConverter.getExplodedObjectValues itera 'getProperties().entrySet()'  -> NPE
+     (analogo all'NPE multipart risolto dalla patch 019).
+   - FormStyleConverter.getNotExplodedObjectValues chiama 'getProperty(propName)' -> NPE.
+   - DeepObjectStyleConverter.convert chiama 'propSchema.getProperty(propName)' su un POJO
+     con properties=null -> null su tutti gli accessi.
+
+2) Il risultato e' che il binding object-explode non popola valori, FormStyleConverter ritorna
+   null e l'AbstractApiValidator di govway emette 'Required query parameter X not found' su
+   richieste legittime tipo '?role=admin&firstName=Alex' (form+explode) o
+   '?param[role]=admin&param[firstName]=Alex' (deepObject).
+
+SOLUZIONE
+1) Schema.java
+   - Aggiunto metodo pubblico 'Schema dereference(OAIContext context)' che, per uno schema
+     con $ref top-level, applica la stessa cascata di risoluzione gia' usata in
+     BodyValidator.resolveRef (patch 013) e MultipartConverter.resolveRefIfNeeded (patch 019):
+       * Schema.getReference(OAIContext) -> ReferenceRegistry;
+       * fallback ReferenceRegistry.getRef(baseUrl, ref);
+       * ultimo fallback: lookup diretto via JSON Pointer su OAI3Context.getBaseDocument()
+         + TreeUtil.json.treeToValue, necessario perche' kappa non popola il registry per tutti
+         i $ref interni alla spec.
+     Ritorna 'this' se lo schema non e' un $ref oppure se il ref non risolve.
+
+2) FormStyleConverter.java
+   - getExplodedObjectValues e getNotExplodedObjectValues invocano param.getSchema().dereference(context)
+     prima di accedere a getProperties()/getProperty(). Aggiunto null-check difensivo su
+     getProperties() per ritornare null (oppure passare null al convertPrimitive) se anche dopo
+     la dereferenza non ci sono properties.
+
+3) DeepObjectStyleConverter.java
+   - convert() invoca param.getSchema().dereference(context) e gestisce getProperty(propName)
+     con null-check, in modo che il binding di '?param[role]=...' sia popolato correttamente.
+
+File modificati:
+  - src/main/java/com/github/erosb/kappa/parser/model/v3/Schema.java
+  - src/main/java/com/github/erosb/kappa/operation/validator/util/convert/style/FormStyleConverter.java
+  - src/main/java/com/github/erosb/kappa/operation/validator/util/convert/style/DeepObjectStyleConverter.java

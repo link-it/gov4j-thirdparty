@@ -1,0 +1,50 @@
+diff --git src/main/java/com/github/erosb/kappa/operation/validator/validation/BodyValidator.java src/main/java/com/github/erosb/kappa/operation/validator/validation/BodyValidator.java
+--- src/main/java/com/github/erosb/kappa/operation/validator/validation/BodyValidator.java
++++ src/main/java/com/github/erosb/kappa/operation/validator/validation/BodyValidator.java
+@@ -1,5 +1,6 @@
+ package com.github.erosb.kappa.operation.validator.validation;
+ 
++import com.fasterxml.jackson.databind.JsonNode;
+ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+ import com.github.erosb.jsonsKema.IJsonValue;
+ import com.github.erosb.jsonsKema.JsonParseException;
+@@ -7,11 +8,13 @@
+ import com.github.erosb.kappa.core.validation.OpenApiValidationFailure;
+ import com.github.erosb.kappa.core.validation.OperationContextUriFactory;
+ import com.github.erosb.kappa.operation.validator.model.impl.Body;
++import com.github.erosb.kappa.operation.validator.util.ContentType;
+ import com.github.erosb.kappa.parser.model.v3.MediaType;
+ import com.github.erosb.kappa.parser.model.v3.Schema;
+ import com.github.erosb.kappa.schema.validator.SKemaBackedJsonValidator;
+ import com.github.erosb.kappa.schema.validator.ValidationContext;
+ import com.github.erosb.kappa.schema.validator.ValidationData;
++import java.io.IOException;
+ 
+ class BodyValidator {
+ 
+@@ -39,10 +42,23 @@
+     }
+ 
+     try {
+-      IJsonValue jsonBody = body.contentAsNode(rawContentType, uriFactory.httpEntity());
+-      validator.validate(jsonBody, validation);
++      if (ContentType.isJson(ContentType.getTypeOnly(rawContentType))) {
++        // path json: parsing tramite json-sKema (IJsonValue), invariato rispetto a upstream
++        IJsonValue jsonBody = body.contentAsNode(rawContentType, uriFactory.httpEntity());
++        validator.validate(jsonBody, validation);
++      } else {
++        // path non-json: dispatch xml/multipart/form-url/textToNode tramite ContentConverter,
++        // allineato al comportamento di openapi4j. Il metodo legacy Body.getContentAsNode
++        // delega a ContentConverter.convert e restituisce un Jackson JsonNode, che viene
++        // passato all'overload validate(JsonNode, URI, ValidationData) di SKemaBackedJsonValidator.
++        JsonNode bridged = body.getContentAsNode(context.getContext(), mediaType, rawContentType);
++        validator.validate(bridged, uriFactory.httpEntity(), validation);
++      }
+     } catch (JsonParseException ex) {
+       validation.add(OpenApiValidationFailure.unparseableHttpEntity(ex, uriFactory.definitionHttpEntity()));
++    } catch (IOException ex) {
++      JsonParseException wrap = new JsonParseException("could not parse HTTP entity: " + ex.getMessage(), null);
++      validation.add(OpenApiValidationFailure.unparseableHttpEntity(wrap, uriFactory.definitionHttpEntity()));
+     }
+   }
+ 

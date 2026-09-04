@@ -1,0 +1,16 @@
+Allinea BodyValidator al comportamento di openapi4j per schemi con 'format: binary'.
+
+PROBLEMA
+Quando lo spec dichiara il request/response body come 'type: string, format: binary' (es. file upload, contenuto binario opaco), kappa applica comunque il check di type/schema. Se il client invia un body JSON (oggetto), kappa fallisce con "body: expected type: string, actual: object". In OAS 'format: binary' indica un binary stream opaco e la validazione di schema non è applicabile al contenuto del body.
+
+SOLUZIONE
+In BodyValidator.validate, lo schema validation viene saltato quando lo schema del mediaType ha 'format: binary'. Il parsing del content-type (json/xml/...) viene comunque eseguito per intercettare errori di sintassi su content-type strutturati: per un body con content-type 'application/json' malformato, l'errore di parsing viene comunque restituito; solo il successivo schema validation viene saltato.
+
+Per body null, lo skip è completo (anche la chiamata validator.validate(null)).
+
+Comportamento già presente in openapi4j (1.0.7), dove TypeValidator skippa il check di type quando il format è binary mentre il parsing del body resta attivo.
+
+Nota: 'format: byte' (rappresentazione base64-encoded) NON è gestito qui poiché in OAS resta vincolato a 'type: string' (la stringa base64 è comunque una stringa); il behavior coincide con openapi4j.
+
+File modificati:
+  - src/main/java/com/github/erosb/kappa/operation/validator/validation/BodyValidator.java

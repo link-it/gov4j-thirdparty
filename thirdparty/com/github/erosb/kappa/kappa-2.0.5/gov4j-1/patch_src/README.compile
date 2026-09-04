@@ -1,0 +1,26 @@
+NOTA: usare java 21 e non avere alcun application server attivo.
+
+git clone https://github.com/erosb/kappa.git kappa-2.0.5
+cd kappa-2.0.5
+git checkout v2.0.5
+patch -p0 < 001_externalDocuments.patch
+patch -p0 < 002_xmlConverter.patch
+patch -p0 < 003_nullable.patch
+patch -p0 < 004_validationMultipartFormDataMixed.patch
+patch -p0 < 005_validationComplexTypeParameters.patch
+patch -p0 < 006_validationPath.patch
+patch -p0 < 007_validationDateTime.patch
+patch -p0 < 008_booleanSchemaItems.patch
+patch -p0 < 009_javadoc.patch
+patch -p0 < 010_validationBodyContentDispatch.patch
+patch -p0 < 011_validationBodyOptionalNoContent.patch
+patch -p0 < 012_validationBodyBinarySkip.patch
+patch -p0 < 013_validationDiscriminatorDispatch.patch
+patch -p0 < 014_formatHostname.patch
+patch -p0 < 015_pathTemplateMessage.patch
+patch -p0 < 016_externalDocumentsBridgeJsonSkema.patch
+patch -p0 < 017_jakartaCommonsFileUpload2.patch
+patch -p0 < 018_validationDiscriminatorNested.patch
+patch -p0 < 019_multipartTopLevelRef.patch
+./gradlew build jar javadoc
+cd ..

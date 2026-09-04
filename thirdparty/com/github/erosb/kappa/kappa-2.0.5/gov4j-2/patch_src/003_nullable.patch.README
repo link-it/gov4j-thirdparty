@@ -1,0 +1,21 @@
+Aggiunge il supporto al keyword 'nullable: true' di OpenAPI 3.0 quando lo schema viene passato al validator backed by json-sKema.
+
+PROBLEMA
+Kappa 2.0.5 delega la validazione dello schema a json-sKema 0.29.0 (validator JSON Schema 2020-12). 'nullable' non è un keyword JSON Schema, quindi json-sKema lo ignora silenziosamente e segnala come errore i valori 'null' su proprietà dichiarate, ad esempio, 'type: string' con 'nullable: true'.
+Errore tipico: per oggetti serializzati con valore null, il validator riportava la mancanza degli elementi obbligatori definiti per l'oggetto.
+
+In OpenAPI 3.1 questo problema non si pone perché si usa direttamente 'type: ["string", "null"]', ma per supportare descrittori OpenAPI 3.0 serve una traduzione esplicita.
+
+SOLUZIONE
+SKemaBackedJsonValidator pre-processa il JsonNode dello schema prima del SchemaLoader.load():
+  - se trova 'nullable: true' insieme a 'type: "X"' lo trasforma in 'type: ["X", "null"]'
+  - se trova 'nullable: true' insieme a 'type: ["X", ...]' aggiunge "null" all'array
+  - se trova 'nullable: true' senza 'type' rimuove solo il 'nullable' (json-sKema interpreta lo schema senza il vincolo di tipo)
+La trasformazione è ricorsiva su tutto il sotto-albero (incluso 'components' iniettato).
+
+Sostituisce in modo equivalente il punto 4 della patch 004 di openapi4j (1.0.7) per kappa 2.0.5.
+File modificati:
+  - src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java
+
+NOTA
+Le altre 3 sotto-fix della patch 004 originale (errore 1027 su discriminator, format 'binary', pattern con caratteri speciali \r\n\t) non sono più rilevanti: discriminator non è più validato dal modulo schema, 'binary' non è registrato come format in json-sKema (quindi viene ignorato e non emette errori), e Pattern.matcher.find() di json-sKema ha già la semantica conforme allo spec JSON Schema.

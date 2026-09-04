@@ -1,0 +1,10 @@
+Aggiunge il supporto al format 'hostname' (RFC 1123) in SKemaBackedJsonValidator.
+
+PROBLEMA
+json-sKema 0.30.0 fornisce nativamente i format validator per email, uri, uuid, ipv4, ipv6, date, date-time, time, duration ma NON per 'hostname', che è comunque uno dei format standard elencati in JSON Schema 2020-12. Con FormatValidationPolicy.ALWAYS gli altri format vengono validati, mentre 'hostname' viene di fatto trattato come una semplice annotazione (qualsiasi stringa è accettata).
+
+SOLUZIONE
+In SKemaBackedJsonValidator viene registrato un additionalFormatValidator per 'hostname' con la stessa regex usata da openapi4j (1.0.7), org/openapi4j/schema/validator/v3/FormatValidator.java#HOSTNAME_PATTERN. Etichette 1-63 caratteri alfanumerici/'-' separate da '.', non si può iniziare/finire con '-'.
+
+File modificati:
+  - src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java

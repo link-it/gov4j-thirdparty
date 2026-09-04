@@ -1,0 +1,48 @@
+Estende il discriminator-shortcut della patch 013 al caso di discriminator annidati all'interno
+dello schema del body (es. property nested in un multipart). Il walker pre-validazione percorre
+ricorsivamente lo schema parallelamente al body ed emette una failure esplicita per ogni
+violation, allineata al wording di openapi4j ("Schema selection can't be made for discriminator
+'<name>' with value '<value>'").
+
+PROBLEMA
+La patch 013 (validationDiscriminatorDispatch) gestisce solo il discriminator al livello TOP del
+mediaType.getSchema(): se la composizione 'oneOf'/'anyOf' + 'discriminator' è invece nested
+(es. body multipart con una part JSON 'metadati' che a sua volta contiene una property 'pet' con
+oneOf di sub-schema 'Cat'/'Dog' selezionati via discriminator 'pet_type'), il dispatch non scatta
+e la validazione standard di json-sKema produce:
+  - falsi positivi su body validi (più subschema matchano);
+  - diagnostici incidentali su altre violazioni (es. additionalProperties=false su parti extra),
+    che mascherano la causa effettiva del rifiuto.
+
+L'asimmetria è dovuta a un dettaglio del parsing kappa: per i sotto-schemi nested INLINE lo
+Schema POJO non popola i field 'discriminator'/'oneOfSchemas' (vengono prodotti tramite
+'new Schema(skema)' dal visitor di Schema.getProperties()): l'unica traccia rimane il bridge
+'skema' (json-sKema CompositeSchema), con il discriminator dentro
+'unprocessedProperties["discriminator"]' e gli alternative come sub-istanze OneOfSchema/AnyOfSchema.
+
+SOLUZIONE
+In BodyValidator.validate, prima della delegazione a SKemaBackedJsonValidator (sia path JSON sia
+path non-JSON via ContentConverter), viene chiamato validateAllDiscriminators(schema, body): un
+walking ricorsivo che attraversa lo schema in parallelo al body e per ogni nodo:
+  - dereferenzia $ref (resolveRef);
+  - legge 'discriminator' + 'oneOf'/'anyOf' dai field POJO; se mancanti, fallback su
+    extractDiscriminatorFromSkema (CompositeSchema.unprocessedProperties + scansione dei
+    sub-CompositeSchema OneOfSchema/AnyOfSchema);
+  - se il discriminator ha 'propertyName' E ci sono alternative valide (POJO o bridge), estrae
+    il valore del discriminator dal body e verifica:
+      * explicit: mapping.containsKey(value);
+      * implicit: confronto con il nome ricavato dall'ultimo segmento del pointer di
+        SourceLocation di ciascun alternative (es. "#/components/schemas/Cat2" -> "Cat2");
+  - se il valore non risolve, viene emessa una RequestBodyValidationFailure con path
+    "body.<dot-path>" e la validazione standard viene saltata (il count dei results delta in
+    BodyValidator distingue le nuove failure di discriminator).
+Il walking prosegue su properties, items, allOf, tracciando il path nel body e usando un
+IdentityHashMap visited per evitare loop.
+
+Lo Schema kappa originale espone solo setSkema(); per leggere il bridge dal BodyValidator senza
+violare l'incapsulamento viene aggiunto un getSkema() pubblico @JsonIgnore (campo già presente,
+solo nuovo accessor).
+
+File modificati:
+  - src/main/java/com/github/erosb/kappa/operation/validator/validation/BodyValidator.java
+  - src/main/java/com/github/erosb/kappa/parser/model/v3/Schema.java

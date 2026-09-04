@@ -1,0 +1,35 @@
+Aggiunge la possibilità di registrare documenti esterni e usarli al posto del filesystem durante la risoluzione delle $ref.
+
+L'API è esposta sia direttamente su OAI3Context (chi costruisce il context a mano) sia tramite OpenApi3Parser/OpenApiParser (chi usa il parser di alto livello).
+
+Si è intervenuti nel modulo 'core' (package core.model.v3, core.model.reference) e nel modulo 'parser' (entry-point del parsing).
+
+Porting della patch 001 di openapi4j (1.0.7) per kappa 2.0.5, con tre punti rispetto alla versione minimale dell'originale:
+
+1. Robustezza della chiave del registry. URL come chiave di HashMap non è affidabile: URL.equals/hashCode di Java fanno DNS lookup per http(s) e su file:// la canonical form non è stabile (file:/x vs file:///x produce equals true ma hashCode diverso). AbstractReferenceResolver indicizza ora documentRegistry per URL.toString(); l'API pubblica (Map<URL,JsonNode> nei costruttori) è invariata, la conversione avviene internamente.
+
+2. Propagazione completa ai tre resolver. OAI3Context.resolveReferences() costruisce TRE resolver (uno per $ref, uno per discriminator mapping, uno per operationRef). Il documentRegistryParam, se non null, viene passato a tutti e tre. MappingReferenceResolver ha un nuovo costruttore overload con il parametro. Senza questa propagazione il primo resolver onorava il pre-load ma il terzo (operationRef) re-iterava sullo stesso $ref con registry vuoto e lo caricava dal filesystem, vanificando il pre-load.
+
+3. Esposizione tramite il parser. OpenApiParser e OpenApi3Parser hanno nuovi overload `parse(URL, Map<URL,JsonNode>, boolean)` e `parse(URL, List<AuthOption>, Map<URL,JsonNode>, boolean)` (più la versione su File). Il metodo astratto `parse(URL, List<AuthOption>, boolean)` resta, ora come overload concreto che delega al nuovo metodo astratto a 4 argomenti che accetta il registry. OpenApi3Parser propaga il registry a OAI3Context. Senza questa esposizione l'utente non aveva modo di passare il registry quando usa il parser di alto livello (l'overload precedente costruiva sempre `new OAI3Context(url, authOptions)` senza registry).
+
+4. Pre-load order-independent. Il costruttore di AbstractReferenceResolver popolava il documentRegistry interno e scansionava i $ref dei pre-loaded nello stesso loop. Questo rendeva l'esito dipendente dall'ordine di iterazione del Map: se il documento A pre-caricato veniva processato prima di B, e A conteneva un $ref a B, la containsKey(B) ritornava false (B non era ancora stato put) e B veniva caricato dal filesystem nonostante fosse nel documentRegistryParam. Con HashMap il comportamento dipendeva dal seed di hashing; un workaround LinkedHashMap (insertion order coerente con la dipendenza) maschera ma è fragile. Ora il costruttore esegue due fasi separate: prima un loop che put tutti i pre-loaded nel documentRegistry interno, poi un secondo loop che chiama findReferences su ognuno. L'ordine di iterazione del documentRegistryParam non ha più impatto: qualsiasi Map (HashMap incluso) funziona.
+
+NOTA SULL'USO
+Il chiamante deve pre-registrare la URL così come $ref la risolverà (URL assoluta calcolata via new URL(baseUrl, refValue)). Una chiave generica come "file:/test_import.yaml", se il baseUrl è "file:/spec/openapi.yaml", non matcherà: il $ref produce "file:/spec/test_import.yaml". La patch risolve gli scarti di canonical-form (file:/x vs file:///x) ma NON inventa la URL "giusta": resta responsabilità del chiamante.
+
+CAMBI DI API
+- OpenApiParser:
+    public abstract O parse(URL, List<AuthOption>, boolean)         → ora concreto, delega
+    public abstract O parse(URL, List<AuthOption>, Map<URL,JsonNode>, boolean)  ← nuovo astratto
+    public          O parse(URL, Map<URL,JsonNode>, boolean)        ← nuovo overload
+    public          O parse(File, Map<URL,JsonNode>, boolean)       ← nuovo overload
+- OpenApi3Parser: implementa il nuovo astratto.
+- OAI3Context: 4 costruttori già aggiunti dalla versione precedente di questa patch.
+
+File modificati:
+  - src/main/java/com/github/erosb/kappa/core/model/reference/AbstractReferenceResolver.java
+  - src/main/java/com/github/erosb/kappa/core/model/reference/ReferenceResolver.java
+  - src/main/java/com/github/erosb/kappa/core/model/v3/MappingReferenceResolver.java
+  - src/main/java/com/github/erosb/kappa/core/model/v3/OAI3Context.java
+  - src/main/java/com/github/erosb/kappa/parser/OpenApiParser.java
+  - src/main/java/com/github/erosb/kappa/parser/OpenApi3Parser.java

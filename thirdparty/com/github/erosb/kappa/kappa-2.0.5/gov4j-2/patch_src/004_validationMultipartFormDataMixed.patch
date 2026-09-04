@@ -1,0 +1,255 @@
+diff --git src/main/java/com/github/erosb/kappa/core/model/OAIContext.java src/main/java/com/github/erosb/kappa/core/model/OAIContext.java
+index 67d2184..aca0590 100644
+--- src/main/java/com/github/erosb/kappa/core/model/OAIContext.java
++++ src/main/java/com/github/erosb/kappa/core/model/OAIContext.java
+@@ -23,4 +23,19 @@ public interface OAIContext {
+    * Get the base document of API description.
+    */
+   JsonNode getBaseDocument();
++
++  /**
++   * Returns whether the multipart converter should pre-classify properties
++   * as binary/base64/non-binary based on the schema, to avoid loading file
++   * content as JSON on type mismatch.
++   */
++  default boolean isMultipartOptimization() {
++    return false;
++  }
++
++  /**
++   * Enable/disable the multipart pre-classification optimization.
++   */
++  default void setMultipartOptimization(boolean v) {
++  }
+ }
+diff --git src/main/java/com/github/erosb/kappa/core/model/v3/OAI3Context.java src/main/java/com/github/erosb/kappa/core/model/v3/OAI3Context.java
+index 3b745e4..6d8db6f 100644
+--- src/main/java/com/github/erosb/kappa/core/model/v3/OAI3Context.java
++++ src/main/java/com/github/erosb/kappa/core/model/v3/OAI3Context.java
+@@ -25,6 +25,7 @@ public class OAI3Context implements OAIContext {
+   private final URL baseUrl;
+   private final List<AuthOption> authOptions;
+   private final JsonNode baseDocument;
++  private boolean multipartOptimization = false;
+ 
+   /**
+    * Creates a context from the given url.
+@@ -145,6 +146,16 @@ public class OAI3Context implements OAIContext {
+     return baseUrl;
+   }
+ 
++  @Override
++  public boolean isMultipartOptimization() {
++    return multipartOptimization;
++  }
++
++  @Override
++  public void setMultipartOptimization(boolean v) {
++    this.multipartOptimization = v;
++  }
++
+   private JsonNode resolveReferences(JsonNode baseDocument) throws ResolutionException {
+     return resolveReferences(baseDocument, null);
+   }
+diff --git src/main/java/com/github/erosb/kappa/core/model/v3/OAI3SchemaKeywords.java src/main/java/com/github/erosb/kappa/core/model/v3/OAI3SchemaKeywords.java
+index 8bcd4ad..fb4fd2d 100644
+--- src/main/java/com/github/erosb/kappa/core/model/v3/OAI3SchemaKeywords.java
++++ src/main/java/com/github/erosb/kappa/core/model/v3/OAI3SchemaKeywords.java
+@@ -52,6 +52,7 @@ public final class OAI3SchemaKeywords {
+   public static final String FORMAT_DOUBLE = "double";
+   public static final String FORMAT_BYTE = "byte";
+   public static final String FORMAT_BINARY = "binary";
++  public static final String FORMAT_BASE64 = "base64";
+   public static final String FORMAT_PASSWORD = "password";
+   public static final String FORMAT_DATE = "date";
+   public static final String FORMAT_DATE_TIME = "date-time";
+diff --git src/main/java/com/github/erosb/kappa/operation/validator/util/convert/MultipartConverter.java src/main/java/com/github/erosb/kappa/operation/validator/util/convert/MultipartConverter.java
+index ad7aaf3..fa96db5 100644
+--- src/main/java/com/github/erosb/kappa/operation/validator/util/convert/MultipartConverter.java
++++ src/main/java/com/github/erosb/kappa/operation/validator/util/convert/MultipartConverter.java
+@@ -17,7 +17,10 @@ import org.apache.commons.fileupload.*;
+ import java.io.ByteArrayInputStream;
+ import java.io.IOException;
+ import java.io.InputStream;
++import java.util.ArrayList;
++import java.util.Base64;
+ import java.util.HashMap;
++import java.util.List;
+ import java.util.Map;
+ 
+ class MultipartConverter {
+@@ -45,19 +48,120 @@ class MultipartConverter {
+ 
+     ObjectNode result = JsonNodeFactory.instance.objectNode();
+ 
++    boolean multipartOptimization = (mediaType != null && context != null) && context.isMultipartOptimization();
++
++    List<String> notBinaries = new ArrayList<>();
++    List<String> binaries = null;
++    List<String> base64 = null;
++    if (multipartOptimization) {
++      Map<String, Schema> map = mediaType.getSchema() != null ? mediaType.getSchema().getProperties() : null;
++      if (map != null && !map.isEmpty()) {
++        binaries = new ArrayList<>();
++        base64 = new ArrayList<>();
++        for (String name : map.keySet()) {
++          Schema propSchema = mediaType.getSchema().getProperty(name);
++          Schema effectiveSchema = propSchema;
++          if (effectiveSchema != null && OAI3SchemaKeywords.TYPE_ARRAY.equals(effectiveSchema.getSupposedType(context))) {
++            Schema itemsSchema = effectiveSchema.getItemsSchema();
++            if (itemsSchema != null) {
++              effectiveSchema = itemsSchema;
++            }
++          }
++          if (effectiveSchema != null) {
++            if (OAI3SchemaKeywords.FORMAT_BINARY.equals(effectiveSchema.getFormat())) {
++              binaries.add(name);
++              continue;
++            } else if (OAI3SchemaKeywords.FORMAT_BASE64.equals(effectiveSchema.getFormat())) {
++              base64.add(name);
++              continue;
++            }
++          }
++          notBinaries.add(name);
++        }
++      }
++    } else {
++      notBinaries.add("OptimizationDisabled");
++    }
++
+     try {
++      int unknown = 1;
+       FileItemIterator iterator = new FileUpload().getItemIterator(requestContext);
+-      while (iterator.hasNext()) {
++      while (!notBinaries.isEmpty() && iterator.hasNext()) {
+         FileItemStream item = iterator.next();
+         String name = item.getFieldName();
+ 
+-        if (item.isFormField()) {
++        // Un attachment senza 'filename' nell'header Content-Disposition è
++        // trattato come form field da commons-fileupload; ma se per un bug del
++        // client si ricade in quel ramo con un binario, il tentativo di parsing
++        // come JSON manda in crisi il sistema. Forziamo la classificazione
++        // binaria/non-binaria tramite il format dichiarato nello schema.
++        String fileName = item.getName();
++        boolean isBin = fileName != null;
++        Schema propSchema = null;
++        Schema effectiveSchema = null;
++        if (name != null && mediaType.getSchema() != null) {
++          propSchema = mediaType.getSchema().getProperty(name);
++          if (propSchema != null) {
++            effectiveSchema = propSchema;
++            if (OAI3SchemaKeywords.TYPE_ARRAY.equals(effectiveSchema.getSupposedType(context))) {
++              Schema itemsSchema = effectiveSchema.getItemsSchema();
++              if (itemsSchema != null) {
++                effectiveSchema = itemsSchema;
++              }
++            }
++            if (effectiveSchema != null) {
++              if (OAI3SchemaKeywords.FORMAT_BASE64.equals(effectiveSchema.getFormat())
++                || OAI3SchemaKeywords.FORMAT_BINARY.equals(effectiveSchema.getFormat())) {
++                isBin = true;
++              } else {
++                isBin = false;
++              }
++            }
++          }
++        }
++
++        if (name != null && !isBin) {
+           JsonNode convertedValue = mapValue(context, result, mediaType, item, name, encoding);
+           if (convertedValue != null) {
+             addValue(result, name, convertedValue);
+           }
+-        } else { // Add file name only
+-          addValue(result, name, JsonNodeFactory.instance.textNode(item.getName()));
++        } else {
++          if (name == null) {
++            name = "_unnamedParameter" + unknown;
++            unknown++;
++          }
++
++          String content = fileName != null ? fileName : name;
++
++          if (effectiveSchema != null && OAI3SchemaKeywords.FORMAT_BASE64.equals(effectiveSchema.getFormat())) {
++            content = Base64.getEncoder().encodeToString(content.getBytes());
++          }
++
++          addValue(result, name, JsonNodeFactory.instance.textNode(content));
++        }
++
++        if (multipartOptimization) {
++          if (notBinaries.contains(name)) {
++            notBinaries.remove(name);
++          } else if (binaries.contains(name)) {
++            binaries.remove(name);
++          } else if (base64.contains(name)) {
++            base64.remove(name);
++          }
++        }
++      }
++
++      if (multipartOptimization) {
++        if (binaries != null) {
++          for (String n : binaries) {
++            addValue(result, n, JsonNodeFactory.instance.textNode(n));
++          }
++        }
++        if (base64 != null) {
++          for (String n : base64) {
++            String content = Base64.getEncoder().encodeToString(n.getBytes());
++            addValue(result, n, JsonNodeFactory.instance.textNode(content));
++          }
+         }
+       }
+     } catch (FileUploadException ex) {
+@@ -104,6 +208,11 @@ class MultipartConverter {
+     String itemContentType = item.getContentType();
+     String specContentType = (encProperty != null && encProperty.getContentType() != null) ? encProperty.getContentType() : null;
+ 
++    // Schema può non descrivere la proprietà (parametro non dichiarato)
++    if (propSchema == null) {
++      return -1;
++    }
++
+     // Check given content type against spec content type
+     if (specContentType != null && !itemContentType.equals(specContentType)) {
+       return -1;
+@@ -139,14 +248,24 @@ class MultipartConverter {
+       return TypeConverter.instance().convertPrimitive(context, null, IOUtil.toString(item.openStream(), encoding));
+     }
+ 
+-    switch (schema.getSupposedType(context)) {
++    String supposedType = schema.getSupposedType(context);
++    if (supposedType == null) {
++      return TypeConverter.instance().convertPrimitive(context, schema, IOUtil.toString(item.openStream(), encoding));
++    }
++
++    switch (supposedType) {
+       case OAI3SchemaKeywords.TYPE_OBJECT:
+-        Map<String, Object> jsonContent = TreeUtil.json.readValue(item.openStream(), MAP_TYPE);
+-        return TypeConverter.instance().convertObject(context, schema, jsonContent);
+-      case OAI3SchemaKeywords.TYPE_ARRAY:
++        try {
++          Map<String, Object> jsonContent = TreeUtil.json.readValue(item.openStream(), MAP_TYPE);
++          return TreeUtil.json.valueToTree(jsonContent);
++        } catch (Exception e) {
++          throw new IOException(e.getMessage(), e);
++        }
++      case OAI3SchemaKeywords.TYPE_ARRAY: {
+         // Special case for arrays
+         // They can be referenced multiple times in different ways
+-        JsonNode convertedValue = convertToJsonNode(context, result, name, schema.getItemsSchema(), item, encoding);
++        Schema schemaItems = schema.getItemsSchema();
++        JsonNode convertedValue = convertToJsonNode(context, result, name, schemaItems, item, encoding);
+         JsonNode previousValue = result.get(name);
+         if ((previousValue instanceof ArrayNode)) {
+           ((ArrayNode) previousValue).add(convertedValue);
+@@ -154,6 +273,7 @@ class MultipartConverter {
+           result.set(name, JsonNodeFactory.instance.arrayNode().add(convertedValue));
+         }
+         return null;
++      }
+       default:
+         return TypeConverter.instance().convertPrimitive(context, schema, IOUtil.toString(item.openStream(), encoding));
+     }

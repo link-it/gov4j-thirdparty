@@ -1,0 +1,20 @@
+Validazione del format 'date-time' più stringente, conforme a RFC 3339 sezione 5.6.
+
+https://datatracker.ietf.org/doc/html/rfc3339#section-5.6
+
+== Uso di "T" e "Z" maiuscole/minuscole
+RFC 3339 ammette anche le lettere minuscole 't' e 'z' come alternative, ma raccomanda l'uso delle maiuscole. json-sKema 0.29.0 accetta entrambe per default.
+Per default kappa applica il criterio più stringente: solo lettere maiuscole "T" e "Z".
+È possibile riabilitare il comportamento permissivo con SKemaBackedJsonValidator.setDateTimeAllowLowerCaseTZ(true).
+
+== Uso dello spazio come separatore al posto di "T"
+ISO 8601 consente lo spazio come separatore tra data e ora, ma RFC 3339 non lo prevede.
+Per default kappa applica il criterio stringente: solo "T" è accettata.
+È possibile riabilitare lo spazio con SKemaBackedJsonValidator.setDateTimeAllowSpaceSeparator(true).
+
+IMPLEMENTAZIONE
+La validazione viene fatta lato kappa registrando un additionalFormatValidator("date-time", ...) sul ValidatorConfig di json-sKema; questa entry sovrascrive il built-in date-time validator. La parsing semantica usa java.time.ZonedDateTime (con la stessa gestione del leap-second 23:59:60 di json-sKema).
+
+Sostituisce in modo equivalente la patch 011 di openapi4j (1.0.7) per kappa 2.0.5.
+File modificati:
+  - src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java

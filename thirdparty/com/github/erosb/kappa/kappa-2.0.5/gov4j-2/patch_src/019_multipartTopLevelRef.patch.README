@@ -1,0 +1,37 @@
+Risolve un NullPointerException in MultipartConverter quando lo schema body di una mediaType
+multipart è dichiarato come $ref top-level (es. 'schema: { $ref: "#/components/schemas/X" }').
+
+PROBLEMA
+MultipartConverter.convert accede a mediaType.getSchema().getProperty(name) per ogni parte del
+multipart (sia nel loop di classificazione binaria/non-binaria sia nel ramo mapValue). Quando
+lo schema top-level è un $ref puro, Jackson popola lo Schema POJO con solo il campo 'ref' e
+lascia 'properties' a null: Schema.getProperty(name) chiama internamente
+'getProperties().get(name)' e fallisce con NPE
+("Cannot invoke java.util.Map.get(Object) because the return value of
+com.github.erosb.kappa.parser.model.v3.Schema.getProperties() is null").
+
+L'API restituisce in conseguenza un 400 generico con il messaggio NPE invece dell'esito di
+validazione effettivo, su tutte le risorse che dichiarano lo schema body multipart via $ref
+top-level (caso comune con schemi factorizzati in components/schemas).
+
+SOLUZIONE
+In MultipartConverter.convert viene dereferenziato lo schema top-level UNA VOLTA all'inizio del
+metodo tramite il nuovo helper resolveRefIfNeeded(Schema, OAIContext), e tutti gli accessi
+successivi a getProperty(name) usano la versione risolta ('topSchema').
+
+La dereferenza usa tre strategie a cascata, allineate a BodyValidator.resolveRef della patch 013:
+  - Schema.getReference(OAIContext): API standard di kappa via ReferenceRegistry;
+  - ReferenceRegistry.getRef(baseUrl, ref): fallback quando il canonicalRef non è popolato;
+  - lookup diretto via JSON Pointer su OAI3Context.getBaseDocument() + TreeUtil.json.treeToValue:
+    fallback ultimo, necessario perché kappa non popola il registry per tutti i $ref interni.
+Se lo schema non è un $ref oppure il ref non risolve, viene ritornato lo schema originale e i
+chiamanti hanno comunque un null-check difensivo su topSchema.getProperties() prima di accedere
+a getProperty(name).
+
+Per evitare la stessa lookup dentro mapValue (che chiamava nuovamente
+mediaType.getSchema().getProperty(name)), il propSchema risolto dal loop in convert() viene ora
+passato come parametro a mapValue: la firma è cambiata aggiungendo 'Schema propSchema' fra
+'MediaType mediaType' e 'FileItemInput item'.
+
+File modificati:
+  - src/main/java/com/github/erosb/kappa/operation/validator/util/convert/MultipartConverter.java

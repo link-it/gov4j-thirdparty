@@ -1,0 +1,37 @@
+diff --git src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java
+--- src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java
++++ src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java
+@@ -121,6 +121,25 @@
+       return null;
+     };
+ 
++  // Format 'hostname' (RFC 1123). json-sKema 0.30.0 fornisce nativamente i validator per
++  // email/uri/uuid/ipv4/ipv6/date/date-time/time/duration ma NON per 'hostname', anche se è
++  // uno dei format standard JSON Schema 2020-12. La regex è la stessa di openapi4j (1.0.7)
++  // org/openapi4j/schema/validator/v3/FormatValidator.java#HOSTNAME_PATTERN.
++  private static final Pattern HOSTNAME_PATTERN =
++    Pattern.compile("^([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])(\\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9]))*$");
++
++  private static final Function2<IJsonValue, FormatSchema, FormatValidationFailure> HOSTNAME_VALIDATOR =
++    (instance, schema) -> {
++      if (!(instance instanceof IJsonString)) {
++        return null;
++      }
++      String value = ((IJsonString) instance).getValue();
++      if (!HOSTNAME_PATTERN.matcher(value).matches()) {
++        return new FormatValidationFailure(schema, instance);
++      }
++      return null;
++    };
++
+   private static URI toURI(URL url) {
+     try {
+       return url.toURI();
+@@ -173,6 +192,7 @@
+     ValidatorConfig config = ValidatorConfig.builder()
+       .validateFormat(FormatValidationPolicy.ALWAYS)
+       .additionalFormatValidator("date-time", DATE_TIME_VALIDATOR)
++      .additionalFormatValidator("hostname", HOSTNAME_VALIDATOR)
+       .build();
+     ValidationFailure failure = Validator.create(schema, config).validate(jsonValue);
+     if (failure != null) {

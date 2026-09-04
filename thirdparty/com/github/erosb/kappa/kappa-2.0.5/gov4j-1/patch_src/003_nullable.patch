@@ -1,0 +1,82 @@
+diff --git src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java
+index 411e85c..349d26c 100644
+--- src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java
++++ src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java
+@@ -1,7 +1,10 @@
+ package com.github.erosb.kappa.schema.validator;
+ 
+ import com.fasterxml.jackson.databind.JsonNode;
++import com.fasterxml.jackson.databind.node.ArrayNode;
++import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+ import com.fasterxml.jackson.databind.node.ObjectNode;
++import com.fasterxml.jackson.databind.node.TextNode;
+ import com.github.erosb.jsonsKema.FormatValidationPolicy;
+ import com.github.erosb.jsonsKema.IJsonValue;
+ import com.github.erosb.jsonsKema.JsonParser;
+@@ -16,6 +19,7 @@ import com.github.erosb.kappa.core.util.TreeUtil;
+ import java.net.URI;
+ import java.net.URISyntaxException;
+ import java.net.URL;
++import java.util.Iterator;
+ 
+ public class SKemaBackedJsonValidator
+   implements JsonValidator {
+@@ -51,6 +55,12 @@ public class SKemaBackedJsonValidator
+       ObjectNode obj = (ObjectNode) rawJson;
+       obj.set("components", context.getContext().getBaseDocument().get("components"));
+     }
++    // OpenAPI 3.0: traduce 'nullable: true' nel relativo costrutto JSON Schema
++    // 2020-12 'type: [..., "null"]' (rispettivamente: aggiunge "null" all'array
++    // se 'type' è un array, lo trasforma in array se è una stringa, lo lascia
++    // intatto se 'type' è assente). Senza questa traduzione json-sKema ignora
++    // 'nullable' e segnala come errore i valori null.
++    rewriteNullable(rawJson);
+     try {
+       this.schema = new SchemaLoader(new JsonParser(
+         rawJson.toPrettyString(),
+@@ -81,4 +91,45 @@ public class SKemaBackedJsonValidator
+     IJsonValue jsonValue = new JsonParser(jsonString, documentSource).parse();
+     return validate(jsonValue, validation);
+   }
++
++  private static void rewriteNullable(JsonNode node) {
++    if (node == null) {
++      return;
++    }
++    if (node.isObject()) {
++      ObjectNode obj = (ObjectNode) node;
++      JsonNode nullable = obj.remove("nullable");
++      if (nullable != null && nullable.isBoolean() && nullable.booleanValue()) {
++        JsonNode type = obj.get("type");
++        if (type != null) {
++          if (type.isTextual() && !"null".equals(type.textValue())) {
++            ArrayNode arr = JsonNodeFactory.instance.arrayNode();
++            arr.add(type.textValue());
++            arr.add("null");
++            obj.set("type", arr);
++          } else if (type.isArray()) {
++            ArrayNode arr = (ArrayNode) type;
++            boolean hasNull = false;
++            for (JsonNode el : arr) {
++              if (el.isTextual() && "null".equals(el.textValue())) {
++                hasNull = true;
++                break;
++              }
++            }
++            if (!hasNull) {
++              arr.add("null");
++            }
++          }
++        }
++      }
++      Iterator<JsonNode> it = obj.elements();
++      while (it.hasNext()) {
++        rewriteNullable(it.next());
++      }
++    } else if (node.isArray()) {
++      for (JsonNode el : node) {
++        rewriteNullable(el);
++      }
++    }
++  }
+ }

@@ -1,0 +1,102 @@
+--- src/main/java/com/github/erosb/kappa/operation/validator/util/convert/MultipartConverter.java
++++ src/main/java/com/github/erosb/kappa/operation/validator/util/convert/MultipartConverter.java
+@@ -54,16 +54,22 @@
+ 
+     boolean multipartOptimization = (mediaType != null && context != null) && context.isMultipartOptimization();
+ 
++    // Risolve il $ref top-level se presente: per le multipart con schema body in formato
++    // 'schema: { $ref: "#/components/schemas/X" }' (vs schema inline), il POJO ha solo il
++    // campo 'ref' valorizzato e 'properties=null' -> getProperty(name) lancia NPE. Dereferenziando
++    // qui una volta, il loop successivo trova le properties POJO popolate dal target del $ref.
++    Schema topSchema = (mediaType != null) ? resolveRefIfNeeded(mediaType.getSchema(), context) : null;
++
+     List<String> notBinaries = new ArrayList<>();
+     List<String> binaries = null;
+     List<String> base64 = null;
+     if (multipartOptimization) {
+-      Map<String, Schema> map = mediaType.getSchema() != null ? mediaType.getSchema().getProperties() : null;
++      Map<String, Schema> map = topSchema != null ? topSchema.getProperties() : null;
+       if (map != null && !map.isEmpty()) {
+         binaries = new ArrayList<>();
+         base64 = new ArrayList<>();
+         for (String name : map.keySet()) {
+-          Schema propSchema = mediaType.getSchema().getProperty(name);
++          Schema propSchema = topSchema.getProperty(name);
+           Schema effectiveSchema = propSchema;
+           if (effectiveSchema != null && OAI3SchemaKeywords.TYPE_ARRAY.equals(effectiveSchema.getSupposedType(context))) {
+             Schema itemsSchema = effectiveSchema.getItemsSchema();
+@@ -103,8 +109,8 @@
+         boolean isBin = fileName != null;
+         Schema propSchema = null;
+         Schema effectiveSchema = null;
+-        if (name != null && mediaType.getSchema() != null) {
+-          propSchema = mediaType.getSchema().getProperty(name);
++        if (name != null && topSchema != null && topSchema.getProperties() != null) {
++          propSchema = topSchema.getProperty(name);
+           if (propSchema != null) {
+             effectiveSchema = propSchema;
+             if (OAI3SchemaKeywords.TYPE_ARRAY.equals(effectiveSchema.getSupposedType(context))) {
+@@ -125,7 +131,7 @@
+         }
+ 
+         if (name != null && !isBin) {
+-          JsonNode convertedValue = mapValue(context, result, mediaType, item, name, encoding);
++          JsonNode convertedValue = mapValue(context, result, mediaType, propSchema, item, name, encoding);
+           if (convertedValue != null) {
+             addValue(result, name, convertedValue);
+           }
+@@ -175,8 +181,7 @@
+     return result;
+   }
+ 
+-  private JsonNode mapValue(OAIContext context, ObjectNode result, MediaType mediaType, FileItemInput item, String name, String encoding) throws IOException {
+-    Schema propSchema = mediaType.getSchema().getProperty(name);
++  private JsonNode mapValue(OAIContext context, ObjectNode result, MediaType mediaType, Schema propSchema, FileItemInput item, String name, String encoding) throws IOException {
+     String itemContentType = item.getContentType();
+ 
+     if (itemContentType != null) {
+@@ -283,6 +288,44 @@
+     }
+   }
+ 
++  /**
++   * Dereferenzia uno schema $ref top-level cercando, nell'ordine: il registry kappa
++   * ({@link com.github.erosb.kappa.core.model.v3.OAI3Context#getReferenceRegistry()}) tramite il
++   * canonical/ref dichiarato, e in fallback un lookup JSON-pointer diretto sul baseDocument
++   * (necessario perché kappa non popola il registry per tutti i {@code $ref} interni alla spec).
++   * Se lo schema non è un $ref, lo ritorna invariato. In caso di errore o ref non risolvibile
++   * ritorna lo schema originale (il chiamante gestirà properties=null con null-check difensivo).
++   */
++  private static Schema resolveRefIfNeeded(Schema schema, OAIContext context) {
++    if (schema == null || !schema.isRef()) {
++      return schema;
++    }
++    if (!(context instanceof com.github.erosb.kappa.core.model.v3.OAI3Context)) {
++      return schema;
++    }
++    com.github.erosb.kappa.core.model.v3.OAI3Context ctx = (com.github.erosb.kappa.core.model.v3.OAI3Context) context;
++    try {
++      com.github.erosb.kappa.core.model.reference.Reference ref = schema.getReference(ctx);
++      if (ref == null) {
++        ref = ctx.getReferenceRegistry().getRef(ctx.getBaseUrl(), schema.getRef());
++      }
++      Schema resolved = (ref != null) ? ref.getMappedContent(Schema.class) : null;
++      if (resolved == null) {
++        String r = schema.getRef();
++        if (r != null && r.startsWith("#")) {
++          JsonNode baseDoc = ctx.getBaseDocument();
++          JsonNode node = (baseDoc != null) ? baseDoc.at(r.substring(1)) : null;
++          if (node != null && !node.isMissingNode()) {
++            resolved = TreeUtil.json.treeToValue(node, Schema.class);
++          }
++        }
++      }
++      return resolved != null ? resolved : schema;
++    } catch (Exception e) {
++      return schema;
++    }
++  }
++
+   private void addValue(ObjectNode result, String name, JsonNode value) {
+     // Check if value is already referenced
+     // If so, add new value to an array

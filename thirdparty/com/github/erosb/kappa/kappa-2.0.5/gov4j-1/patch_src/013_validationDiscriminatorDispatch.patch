@@ -1,0 +1,185 @@
+diff --git src/main/java/com/github/erosb/kappa/operation/validator/validation/BodyValidator.java src/main/java/com/github/erosb/kappa/operation/validator/validation/BodyValidator.java
+--- src/main/java/com/github/erosb/kappa/operation/validator/validation/BodyValidator.java
++++ src/main/java/com/github/erosb/kappa/operation/validator/validation/BodyValidator.java
+@@ -4,18 +4,22 @@
+ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+ import com.github.erosb.jsonsKema.IJsonValue;
+ import com.github.erosb.jsonsKema.JsonParseException;
++import com.github.erosb.kappa.core.model.reference.Reference;
+ import com.github.erosb.kappa.core.model.v3.OAI3;
+ import com.github.erosb.kappa.core.model.v3.OAI3SchemaKeywords;
+ import com.github.erosb.kappa.core.validation.OpenApiValidationFailure;
+ import com.github.erosb.kappa.core.validation.OperationContextUriFactory;
+ import com.github.erosb.kappa.operation.validator.model.impl.Body;
+ import com.github.erosb.kappa.operation.validator.util.ContentType;
++import com.github.erosb.kappa.parser.model.v3.Discriminator;
+ import com.github.erosb.kappa.parser.model.v3.MediaType;
+ import com.github.erosb.kappa.parser.model.v3.Schema;
+ import com.github.erosb.kappa.schema.validator.SKemaBackedJsonValidator;
+ import com.github.erosb.kappa.schema.validator.ValidationContext;
+ import com.github.erosb.kappa.schema.validator.ValidationData;
+ import java.io.IOException;
++import java.util.List;
++import java.util.Map;
+ 
+ class BodyValidator {
+ 
+@@ -55,7 +59,12 @@
+         // path json: parsing tramite json-sKema (IJsonValue), invariato rispetto a upstream
+         IJsonValue jsonBody = body.contentAsNode(rawContentType, uriFactory.httpEntity());
+         if (!skipSchemaValidation) {
+-          validator.validate(jsonBody, validation);
++          SKemaBackedJsonValidator dispatched = dispatchDiscriminator(jsonBody);
++          if (dispatched != null) {
++            dispatched.validate(jsonBody, validation);
++          } else {
++            validator.validate(jsonBody, validation);
++          }
+         }
+       } else {
+         // path non-json: dispatch xml/multipart/form-url/textToNode tramite ContentConverter,
+@@ -64,7 +73,12 @@
+         // passato all'overload validate(JsonNode, URI, ValidationData) di SKemaBackedJsonValidator.
+         JsonNode bridged = body.getContentAsNode(context.getContext(), mediaType, rawContentType);
+         if (!skipSchemaValidation) {
+-          validator.validate(bridged, uriFactory.httpEntity(), validation);
++          SKemaBackedJsonValidator dispatched = dispatchDiscriminator(bridged);
++          if (dispatched != null) {
++            dispatched.validate(bridged, uriFactory.httpEntity(), validation);
++          } else {
++            validator.validate(bridged, uriFactory.httpEntity(), validation);
++          }
+         }
+       }
+     } catch (JsonParseException ex) {
+@@ -89,4 +103,130 @@
+     Schema copy = mediaType.getSchema().copy();
+     return new SKemaBackedJsonValidator(copy, context);
+   }
++
++  /**
++   * OAS-specific 'discriminator' shortcut: se lo schema del mediaType ha un 'discriminator' su
++   * 'oneOf'/'anyOf', seleziona il subschema target in base al valore del discriminator nel body
++   * e ritorna un validator costruito solo su quel subschema. Allineato a openapi4j (DiscriminatorValidator).
++   *
++   * <p>Il discriminator NON è parte di JSON Schema 2020-12: senza questo shortcut, json-sKema
++   * valuta tutti i subschema in 'oneOf'/'anyOf' come JSON Schema puro e può generare falsi positivi
++   * (ad es. tutti i subschema matchano quando hanno un parent comune e non vietano proprietà extra).</p>
++   *
++   * <p>Risoluzione del target:
++   *   <ul>
++   *     <li>explicit: {@code discriminator.mapping[value]} se presente;</li>
++   *     <li>implicit: il subschema con {@code $ref} che termina con il valore del discriminator
++   *         (es. {@code #/components/schemas/Cat} per valore {@code Cat}).</li>
++   *   </ul>
++   * </p>
++   *
++   * @return validator dedicato al subschema target, oppure {@code null} se non è applicabile lo shortcut
++   *         (nessun discriminator, body non-object, valore mancante, target non trovato)
++   *         e si deve usare il path standard.
++   */
++  private SKemaBackedJsonValidator dispatchDiscriminator(Object bodyAsValue) {
++    Schema schema = resolveRef(mediaType.getSchema());
++    if (schema == null) {
++      return null;
++    }
++    Discriminator discriminator = schema.getDiscriminator();
++    if (discriminator == null || discriminator.getPropertyName() == null) {
++      return null;
++    }
++    List<Schema> alternatives = schema.getOneOfSchemas();
++    if (alternatives == null || alternatives.isEmpty()) {
++      alternatives = schema.getAnyOfSchemas();
++    }
++    if (alternatives == null || alternatives.isEmpty()) {
++      return null;
++    }
++    String discriminatorValue = extractDiscriminatorValue(bodyAsValue, discriminator.getPropertyName());
++    if (discriminatorValue == null) {
++      return null;
++    }
++    Schema target = findTargetSchema(alternatives, discriminator.getMapping(), discriminatorValue);
++    if (target == null) {
++      return null;
++    }
++    return new SKemaBackedJsonValidator(target.copy(), context);
++  }
++
++  /**
++   * Dereferenzia uno schema $ref usando, nell'ordine:
++   *   - {@link Schema#getReference(com.github.erosb.kappa.core.model.OAIContext)} che usa canonicalRef (o ref) per cercare nel registry;
++   *   - in fallback, {@link com.github.erosb.kappa.core.model.reference.ReferenceRegistry#getRef(java.net.URL, String)} con baseUrl del contesto;
++   *   - in ultimo fallback, lookup diretto via JSON Pointer su {@link com.github.erosb.kappa.core.model.v3.OAI3Context#getBaseDocument()}
++   *     (necessario perché kappa non popola il registry per tutti i {@code $ref} interni alla spec).
++   * Ritorna lo schema invariato se nessuna strategia risolve.
++   */
++  private Schema resolveRef(Schema schema) {
++    if (schema == null || !schema.isRef()) {
++      return schema;
++    }
++    try {
++      Reference ref = schema.getReference(context.getContext());
++      if (ref == null) {
++        ref = context.getContext().getReferenceRegistry()
++            .getRef(context.getContext().getBaseUrl(), schema.getRef());
++      }
++      Schema resolved = (ref != null) ? ref.getMappedContent(Schema.class) : null;
++      if (resolved == null) {
++        String r = schema.getRef();
++        if (r != null && r.startsWith("#")) {
++          JsonNode baseDoc = context.getContext().getBaseDocument();
++          JsonNode node = (baseDoc != null) ? baseDoc.at(r.substring(1)) : null;
++          if (node != null && !node.isMissingNode()) {
++            resolved = com.github.erosb.kappa.core.util.TreeUtil.json.treeToValue(node, Schema.class);
++          }
++        }
++      }
++      return resolved != null ? resolved : schema;
++    } catch (Exception e) {
++      return schema;
++    }
++  }
++
++  private static String extractDiscriminatorValue(Object bodyAsValue, String propertyName) {
++    if (bodyAsValue instanceof JsonNode) {
++      JsonNode jn = (JsonNode) bodyAsValue;
++      if (!jn.isObject()) {
++        return null;
++      }
++      JsonNode prop = jn.get(propertyName);
++      return (prop != null && prop.isTextual()) ? prop.textValue() : null;
++    }
++    if (bodyAsValue instanceof com.github.erosb.jsonsKema.IJsonObject) {
++      com.github.erosb.jsonsKema.IJsonObject<?, ?> jo = (com.github.erosb.jsonsKema.IJsonObject<?, ?>) bodyAsValue;
++      Object prop = jo.get(propertyName);
++      if (prop instanceof com.github.erosb.jsonsKema.IJsonString) {
++        return ((com.github.erosb.jsonsKema.IJsonString) prop).getValue();
++      }
++    }
++    return null;
++  }
++
++  private static Schema findTargetSchema(List<Schema> alternatives,
++                                         Map<String, String> mapping,
++                                         String discriminatorValue) {
++    // explicit: discriminator.mapping[value] -> ref esatto
++    if (mapping != null) {
++      String mappedRef = mapping.get(discriminatorValue);
++      if (mappedRef != null) {
++        for (Schema alt : alternatives) {
++          if (alt.isRef() && mappedRef.equals(alt.getRef())) {
++            return alt;
++          }
++        }
++      }
++    }
++    // implicit: $ref che termina con il valore (es. #/components/schemas/Cat)
++    String suffix = "/" + discriminatorValue;
++    for (Schema alt : alternatives) {
++      if (alt.isRef() && alt.getRef() != null && alt.getRef().endsWith(suffix)) {
++        return alt;
++      }
++    }
++    return null;
++  }
+ }

@@ -1,0 +1,61 @@
+Aggiunge il supporto a 'prefixItems' (OpenAPI 3.1 / JSON Schema 2020-12) sia per il binding dei
+parametri query di tipo array, sia per la validazione del tipo per posizione. Necessario perche'
+json-sKema 0.30 non implementa il keyword 'prefixItems': il bridge produce un CompositeSchema con
+solo TypeSchema/MinItemsSchema/MaxItemsSchema e ignora completamente la tuple validation.
+
+PROBLEMA
+1) Schema POJO: Schema.getSupposedType(OAIContext) usa il visitor json-sKema su sub-schema
+   TypeSchema/ItemsSchema/PropertySchema/FormatSchema. Per uno schema OAS 3.1 con 'type: array'
+   + 'prefixItems' il parser json-sKema genera anche sub-schemi non riconosciuti dal visitor
+   ('PrefixItemsSchema' e simili); nell'ordine di iterazione di CompositeSchema.accept() questi
+   possono mascherare il TypeSchema facendo ritornare null. Il binding di un parametro query
+   'param=5,ciao' su 'array+prefixItems' vede quindi una stringa e fallisce con
+   'expected type: array, actual: string' anche su body legittimi.
+
+2) Binding array: FormStyleConverter.getArrayValues usa un unico 'itemsSchema' per la conversione
+   di tutti gli elementi (TypeConverter.convertArray). Con 'prefixItems: [integer, string]', il
+   primo elemento "5" viene convertito come stringa (non come integer) e la validazione successiva
+   emette 'param.0: expected type: integer, actual: string' anche quando "5" e' formalmente un
+   integer parseable.
+
+3) Validazione type per posizione: anche dopo aver convertito correttamente gli elementi (es.
+   [5(integer), "ciao"(string)]), json-sKema 0.30 non emette il mismatch quando il valore non
+   corrisponde a prefixItems[i].type (es. "foo" su prefixItems[0]:integer). Il parametro passa la
+   validazione senza errori e il backend riceve la richiesta non conforme.
+
+SOLUZIONE
+1) Schema.java
+   - Aggiunto field POJO 'prefixItemsSchemas' (Jackson @JsonProperty("prefixItems")) + getter/setter,
+     in modo che downstream possa leggere la tupla di sub-schema dichiarata nella spec.
+   - getSupposedType: aggiunto fast path che se 'this.type'/'this.types' (popolati da Jackson)
+     sono presenti li usa direttamente, evitando il visitor che puo' mascherare il TypeSchema in
+     presenza di prefixItems.
+
+2) FormStyleConverter.java
+   - getArrayValues: se lo schema del parametro ha 'prefixItems' non vuoto, costruisce l'array
+     applicando 'prefixItems[i]' per il convertPrimitive (con fallback a 'items' per gli indici
+     extra). In questo modo "5" su prefixItems[0]:integer diventa numberNode(5) anziche'
+     textNode("5"). Quando convertPrimitive cattura silenziosamente NumberFormatException e
+     ritorna textNode("foo") per un input non parseable contro un tipo non-string, viene forzato
+     un NullNode in modo che la validazione successiva (sia json-sKema sia il nostro
+     validatePrefixItems) emetta un type mismatch coerente.
+
+3) ParameterValidator.java
+   - Aggiunto validatePrefixItems(paramName, param, paramValue, validation): per ogni indice
+     i < |prefixItems| confronta il tipo del JsonNode dell'array con prefixItems[i].type
+     (via Schema.getSupposedType) ed emette OpenApiValidationFailure.prefixItemsTypeMismatch
+     in caso di non corrispondenza. Allineato al wording json-sKema:
+       "param.<i>: expected type: <T>, actual: <actual>"
+     No-op se il parametro non ha 'prefixItems' o se il valore non e' un array: i parametri
+     privi del costrutto continuano ad essere validati esclusivamente da json-sKema.
+
+4) OpenApiValidationFailure.java
+   - Aggiunta factory pubblica 'prefixItemsTypeMismatch(paramName, index, expectedType,
+     actualType, schemaLocation)' che costruisce una ParameterValidationFailure con il wording
+     atteso.
+
+File modificati:
+  - src/main/java/com/github/erosb/kappa/parser/model/v3/Schema.java
+  - src/main/java/com/github/erosb/kappa/operation/validator/util/convert/style/FormStyleConverter.java
+  - src/main/java/com/github/erosb/kappa/operation/validator/validation/ParameterValidator.java
+  - src/main/java/com/github/erosb/kappa/core/validation/OpenApiValidationFailure.java

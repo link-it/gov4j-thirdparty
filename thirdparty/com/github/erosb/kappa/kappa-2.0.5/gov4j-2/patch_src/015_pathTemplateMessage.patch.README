@@ -1,0 +1,11 @@
+Fix di un bug latente: il messaggio di errore per un path che non matcha nessun template conteneva '%s' letterali mai sostituiti.
+
+PROBLEMA
+OpenApiValidationFailure.noMatchingPathPatternFound restituiva il template "Path template '%s' has not been found from value '%s'." senza mai chiamare String.format e senza ricevere i parametri da sostituire, generando un messaggio "Path template '%s' has not been found from value '%s'." con gli %s letterali nell'output di validazione.
+
+SOLUZIONE
+Cambiata la firma di noMatchingPathPatternFound aggiungendo il parametro pathValue (il path della request che non ha trovato match) e formattato il messaggio con String.format. Aggiornato l'unico chiamante in OperationValidator.validatePath passando matchPath. Il messaggio risultante è "Path '<value>' does not match any defined template.".
+
+File modificati:
+  - src/main/java/com/github/erosb/kappa/core/validation/OpenApiValidationFailure.java
+  - src/main/java/com/github/erosb/kappa/operation/validator/validation/OperationValidator.java

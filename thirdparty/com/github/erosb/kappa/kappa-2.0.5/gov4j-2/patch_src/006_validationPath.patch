@@ -1,0 +1,146 @@
+diff --git src/main/java/com/github/erosb/kappa/operation/validator/model/impl/DefaultRequest.java src/main/java/com/github/erosb/kappa/operation/validator/model/impl/DefaultRequest.java
+index 75e4b23..54b26e4 100644
+--- src/main/java/com/github/erosb/kappa/operation/validator/model/impl/DefaultRequest.java
++++ src/main/java/com/github/erosb/kappa/operation/validator/model/impl/DefaultRequest.java
+@@ -15,6 +15,7 @@ public class DefaultRequest implements Request {
+   private final String url;
+   private final Method method;
+   private final String path;
++  private final String rawPath;
+   private final Map<String, String> cookies;
+   private final Map<String, Collection<String>> headers;
+   private final String query;
+@@ -33,7 +34,9 @@ public class DefaultRequest implements Request {
+     this.headers = requireNonNull(headers);
+     this.query = query;
+     this.body = body;
+-    this.path = URI.create(url).getPath();
++    URI uri = URI.create(url);
++    this.path = uri.getPath();
++    this.rawPath = uri.getRawPath();
+   }
+ 
+   @Override
+@@ -46,6 +49,15 @@ public class DefaultRequest implements Request {
+     return path;
+   }
+ 
++  /**
++   * Path of the request URL preserving percent-encoded sequences.
++   * Used to match path patterns when the encoded form differs from the
++   * decoded one (e.g. '%2F' inside a path parameter value).
++   */
++  public String getRawPath() {
++    return rawPath;
++  }
++
+   @Override
+   public Method getMethod() {
+     return method;
+diff --git src/main/java/com/github/erosb/kappa/operation/validator/util/convert/ParameterConverter.java src/main/java/com/github/erosb/kappa/operation/validator/util/convert/ParameterConverter.java
+index 1a4d28d..72c6e12 100644
+--- src/main/java/com/github/erosb/kappa/operation/validator/util/convert/ParameterConverter.java
++++ src/main/java/com/github/erosb/kappa/operation/validator/util/convert/ParameterConverter.java
+@@ -14,6 +14,9 @@ import com.github.erosb.kappa.operation.validator.util.convert.style.SimpleStyle
+ import com.github.erosb.kappa.parser.model.OpenApiSchema;
+ 
+ import java.io.IOException;
++import java.io.UnsupportedEncodingException;
++import java.net.URLDecoder;
++import java.nio.charset.StandardCharsets;
+ import java.util.Collection;
+ import java.util.HashMap;
+ import java.util.Map;
+@@ -113,17 +116,20 @@ public final class ParameterConverter {
+       String paramGroupName = PathResolver.instance().getParamGroupName(paramName);
+       final JsonNode convertedValue;
+ 
++      String paramGroupNameValue = matcher.group(paramGroupName);
++      String paramGroupNameValueDecoded = decodePathSegment(paramGroupNameValue);
++
+       if (param.getSchema() != null) {
+         final String style = param.getStyle();
+         if (LABEL.equals(style)) {
+-          convertedValue = LabelStyleConverter.instance().convert(context, param, paramName, matcher.group(paramGroupName));
++          convertedValue = LabelStyleConverter.instance().convert(context, param, paramName, paramGroupNameValueDecoded);
+         } else if (MATRIX.equals(style)) {
+-          convertedValue = MatrixStyleConverter.instance().convert(context, param, paramName, matcher.group(paramGroupName));
++          convertedValue = MatrixStyleConverter.instance().convert(context, param, paramName, paramGroupNameValueDecoded);
+         } else { // simple is the default
+-          convertedValue = SimpleStyleConverter.instance().convert(context, param, paramName, matcher.group(paramGroupName));
++          convertedValue = SimpleStyleConverter.instance().convert(context, param, paramName, paramGroupNameValueDecoded);
+         }
+       } else {
+-        convertedValue = getValueFromContentType(context, param.getContentMediaTypes(), matcher.group(paramGroupName));
++        convertedValue = getValueFromContentType(context, param.getContentMediaTypes(), paramGroupNameValueDecoded);
+       }
+ 
+       mappedValues.put(paramName, convertedValue);
+@@ -245,6 +251,23 @@ public final class ParameterConverter {
+     return mappedValues;
+   }
+ 
++  /**
++   * Decodes a percent-encoded path segment using UTF-8.
++   * URLDecoder also turns '+' into ' ', which in the path component is not the
++   * standard meaning ('+' is a literal there); pre-escape it so the decoder
++   * leaves it untouched.
++   */
++  private static String decodePathSegment(String value) {
++    if (value == null) {
++      return null;
++    }
++    try {
++      return URLDecoder.decode(value.replace("+", "%2B"), StandardCharsets.UTF_8.name());
++    } catch (UnsupportedEncodingException e) {
++      return value;
++    }
++  }
++
+   private static JsonNode getValueFromContentType(final OAIContext context,
+                                                   final Map<String, MediaType> mediaTypes,
+                                                   final String value) {
+diff --git src/main/java/com/github/erosb/kappa/operation/validator/validation/OperationValidator.java src/main/java/com/github/erosb/kappa/operation/validator/validation/OperationValidator.java
+index 0bdcec2..2cce1bb 100644
+--- src/main/java/com/github/erosb/kappa/operation/validator/validation/OperationValidator.java
++++ src/main/java/com/github/erosb/kappa/operation/validator/validation/OperationValidator.java
+@@ -138,8 +138,17 @@ public class OperationValidator {
+    * @return The mapped parameters with their values.
+    */
+   public Map<String, JsonNode> validatePath(final Request request, final ValidationData<?> validation) {
+-    // Check paths are matching before trying to map values
+-    Pattern pathPattern = PathResolver.instance().findPathPattern(pathPatterns, request.getPath());
++    // Match against the encoded path so percent-encoded sequences (e.g. %2F
++    // inside a path parameter value) survive the regex match — the decoded
++    // form drops the encoding and breaks segment boundaries.
++    String matchPath = request.getPath();
++    if (request instanceof com.github.erosb.kappa.operation.validator.model.impl.DefaultRequest) {
++      String raw = ((com.github.erosb.kappa.operation.validator.model.impl.DefaultRequest) request).getRawPath();
++      if (raw != null) {
++        matchPath = raw;
++      }
++    }
++    Pattern pathPattern = PathResolver.instance().findPathPattern(pathPatterns, matchPath);
+     if (pathPattern == null) {
+       validation.add(OpenApiValidationFailure.noMatchingPathPatternFound(context.requestScopedUriFactory().definitionPaths()));
+       return null;
+@@ -160,11 +169,18 @@ public class OperationValidator {
+       return null;
+     }
+ 
++    String matchPath = request.getPath();
++    if (request instanceof com.github.erosb.kappa.operation.validator.model.impl.DefaultRequest) {
++      String raw = ((com.github.erosb.kappa.operation.validator.model.impl.DefaultRequest) request).getRawPath();
++      if (raw != null) {
++        matchPath = raw;
++      }
++    }
+     Map<String, JsonNode> mappedValues = ParameterConverter.pathToNode(
+       context.getContext(),
+       specRequestPathValidator.getParameters(),
+       pathPattern,
+-      request.getPath());
++      matchPath);
+ 
+     specRequestPathValidator.validate(mappedValues, validation);
+ 

@@ -1,0 +1,22 @@
+Risolve problemi relativi alle validazioni di richieste/risposte multipart form-data o mixed e aggiunge supporto per la codifica base64 in uscita.
+
+PROBLEMI RISOLTI
+1. Attachment senza 'filename' nell'header Content-Disposition: commons-fileupload li tratta come form field. Se il client invia un binario (es. PDF) senza filename, il parser tentava di interpretarlo come JSON, mandando in crisi il sistema (consumo di memoria fino al crash). Ora la classificazione binario/non-binario viene determinata dal format dichiarato nello schema (binary o base64).
+2. NullPointerException in checkContentType() quando lo schema non descrive una proprietà (parametro non dichiarato): il metodo restituisce subito -1.
+3. NullPointerException in convertToJsonNode() quando 'getSupposedType()' ritorna null: viene eseguito il fallback a convertPrimitive().
+4. Correzione della conversione di oggetti tipo TYPE_OBJECT: ora si usa direttamente TreeUtil.json.valueToTree() per evitare la perdita di tipi che si verificava con convertObject().
+5. Parametri senza nome ricevono un nome generato automaticamente (_unnamedParameter1, _unnamedParameter2, ...).
+6. Per proprietà con format 'base64', il content viene codificato in base64 nel risultato.
+
+NUOVA FEATURE
+È stata aggiunta una flag opzionale nell'OAIContext (multipartOptimization, default false) che, se attivata, fa pre-classificare le proprietà come binarie/base64/non-binarie sulla base dello schema, permettendo di chiudere correttamente l'iterazione anche se nel multipart non sono presenti tutti i campi previsti.
+È stata aggiunta la costante OAI3SchemaKeywords.FORMAT_BASE64 = "base64".
+
+NOTA
+Rispetto alla patch 007 originale di openapi4j non è stata aggiunta la dipendenza 'commons-codec' (la base64 è realizzata via java.util.Base64), e non è stato modificato un equivalente di FormatValidator/ValidationOptions perché in kappa la validazione del format avviene in json-sKema (che ignora silenziosamente i format non registrati come 'base64'/'binary', quindi non emette errori).
+
+File modificati:
+  - src/main/java/com/github/erosb/kappa/core/model/OAIContext.java
+  - src/main/java/com/github/erosb/kappa/core/model/v3/OAI3Context.java
+  - src/main/java/com/github/erosb/kappa/core/model/v3/OAI3SchemaKeywords.java
+  - src/main/java/com/github/erosb/kappa/operation/validator/util/convert/MultipartConverter.java

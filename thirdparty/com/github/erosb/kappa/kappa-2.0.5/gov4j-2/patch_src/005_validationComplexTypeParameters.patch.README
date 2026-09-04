@@ -1,0 +1,8 @@
+Aggiunge il supporto alla validazione dei parametri (path/query/header/cookie) definiti tramite complex type anyOf/allOf/oneOf con tipo primitivo.
+
+Quando il tipo del parametro non è 'array' né 'object' ma il suo schema contiene 'anyOf', 'oneOf' o 'allOf', i due converter usati dal layer di parametri (FormStyleConverter e StyleConverter) provano la conversione contro ciascuno dei sotto-schema e restituiscono il primo risultato non nullo (semantica: "uso il primo tipo che riesce a convertire").
+
+Porting della patch 008 di openapi4j (1.0.7) per kappa 2.0.5.
+File modificati:
+  - src/main/java/com/github/erosb/kappa/operation/validator/util/convert/style/FormStyleConverter.java
+  - src/main/java/com/github/erosb/kappa/operation/validator/util/convert/style/StyleConverter.java

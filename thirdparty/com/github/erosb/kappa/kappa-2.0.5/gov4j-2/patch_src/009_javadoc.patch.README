@@ -1,0 +1,33 @@
+Sistema gli errori di compilazione del task javadoc.
+
+Eseguendo `./gradlew javadoc` con JDK 21, doclint emette diversi errori che fanno fallire il task. Le correzioni applicate non alterano alcuna semantica del codice: intervengono solo sui commenti Javadoc.
+
+CORREZIONI
+
+1. Tag `<p/>` self-closing non ammessi in HTML5/Javadoc moderno: sostituiti con `<p>`.
+   - src/main/java/com/github/erosb/kappa/core/exception/ResolutionException.java
+   - src/main/java/com/github/erosb/kappa/core/model/v3/OAI3Context.java
+   - src/main/java/com/github/erosb/kappa/operation/validator/validation/RequestValidator.java (3 occorrenze)
+   - src/main/java/com/github/erosb/kappa/schema/validator/v3/ValidationOptions.java
+
+2. `@see` con `{@link ...}` non e' una sintassi valida (`@see` accetta direttamente la reference): rimosso il wrapper `{@link}`.
+   - src/main/java/com/github/erosb/kappa/operation/validator/model/impl/Body.java
+     (`@see {@link Charset#defaultCharset()}` -> `@see Charset#defaultCharset()`)
+
+3. Caratteri `&` non escapati nei commenti vengono interpretati come entita' HTML mal formate ("semicolon missing" / "bad HTML entity"): sostituiti con `&amp;` nelle tabelle del Javadoc.
+   - src/main/java/com/github/erosb/kappa/operation/validator/util/convert/ParameterConverter.java
+
+4. Riferimenti generici tra `<...>` nei commenti vengono interpretati come tag HTML sconosciuti ("unknown tag"): incapsulati in `{@code ...}`.
+   - kappa-vertx-adapter/src/main/java/com/github/erosb/kappa/operation/validator/adapters/server/vertx/v3/OpenApi3RouterFactory.java
+     (`AsyncResult<OpenApi3RouterFactory>` -> `{@code AsyncResult<OpenApi3RouterFactory>}`)
+
+Dopo l'applicazione, `./gradlew build jar javadoc` completa con BUILD SUCCESSFUL.
+
+File modificati:
+  - src/main/java/com/github/erosb/kappa/core/exception/ResolutionException.java
+  - src/main/java/com/github/erosb/kappa/core/model/v3/OAI3Context.java
+  - src/main/java/com/github/erosb/kappa/operation/validator/model/impl/Body.java
+  - src/main/java/com/github/erosb/kappa/operation/validator/util/convert/ParameterConverter.java
+  - src/main/java/com/github/erosb/kappa/operation/validator/validation/RequestValidator.java
+  - src/main/java/com/github/erosb/kappa/schema/validator/v3/ValidationOptions.java
+  - kappa-vertx-adapter/src/main/java/com/github/erosb/kappa/operation/validator/adapters/server/vertx/v3/OpenApi3RouterFactory.java

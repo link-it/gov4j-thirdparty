@@ -1,0 +1,140 @@
+diff --git src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java
+index 349d26c..b40e08a 100644
+--- src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java
++++ src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java
+@@ -5,7 +5,10 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
+ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+ import com.fasterxml.jackson.databind.node.ObjectNode;
+ import com.fasterxml.jackson.databind.node.TextNode;
++import com.github.erosb.jsonsKema.FormatSchema;
++import com.github.erosb.jsonsKema.FormatValidationFailure;
+ import com.github.erosb.jsonsKema.FormatValidationPolicy;
++import com.github.erosb.jsonsKema.IJsonString;
+ import com.github.erosb.jsonsKema.IJsonValue;
+ import com.github.erosb.jsonsKema.JsonParser;
+ import com.github.erosb.jsonsKema.Schema;
+@@ -13,17 +16,111 @@ import com.github.erosb.jsonsKema.SchemaLoader;
+ import com.github.erosb.jsonsKema.ValidationFailure;
+ import com.github.erosb.jsonsKema.Validator;
+ import com.github.erosb.jsonsKema.ValidatorConfig;
++import kotlin.jvm.functions.Function2;
+ import com.github.erosb.kappa.core.model.v3.OAI3;
+ import com.github.erosb.kappa.core.util.TreeUtil;
+ 
+ import java.net.URI;
+ import java.net.URISyntaxException;
+ import java.net.URL;
++import java.time.ZonedDateTime;
++import java.time.format.DateTimeParseException;
+ import java.util.Iterator;
++import java.util.regex.Pattern;
+ 
+ public class SKemaBackedJsonValidator
+   implements JsonValidator {
+ 
++  // RFC 3339 strict default: T/Z maiuscoli, T (non spazio) come separatore.
++  // Le due flag riabilitano il comportamento permissivo originario di
++  // json-sKema 0.29.0 (regex [Tt]…[Zz], spazio già rifiutato comunque dalla
++  // regex built-in).
++  private static volatile boolean dateTimeAllowLowerCaseTZ = false;
++  private static volatile boolean dateTimeAllowSpaceSeparator = false;
++
++  /**
++   * Re-enable the lenient acceptance of lowercase 't' and 'z' in date-time
++   * values (default: false → only uppercase 'T' and 'Z' are accepted).
++   */
++  public static void setDateTimeAllowLowerCaseTZ(boolean v) {
++    dateTimeAllowLowerCaseTZ = v;
++  }
++
++  public static boolean isDateTimeAllowLowerCaseTZ() {
++    return dateTimeAllowLowerCaseTZ;
++  }
++
++  /**
++   * Re-enable the lenient acceptance of a space character as the separator
++   * between date and time (default: false → only 'T'/'t' are accepted).
++   */
++  public static void setDateTimeAllowSpaceSeparator(boolean v) {
++    dateTimeAllowSpaceSeparator = v;
++  }
++
++  public static boolean isDateTimeAllowSpaceSeparator() {
++    return dateTimeAllowSpaceSeparator;
++  }
++
++  private static final Pattern DATE_TIME_STRICT =
++    Pattern.compile("^(\\d{4}-\\d{2}-\\d{2})T(\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?)(Z|[+-]\\d{2}:\\d{2})$");
++  private static final Pattern DATE_TIME_LOWERCASE_TZ =
++    Pattern.compile("^(\\d{4}-\\d{2}-\\d{2})[Tt](\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?)([Zz]|[+-]\\d{2}:\\d{2})$");
++  private static final Pattern DATE_TIME_SPACE_SEPARATOR =
++    Pattern.compile("^(\\d{4}-\\d{2}-\\d{2})[T ](\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?)(Z|[+-]\\d{2}:\\d{2})$");
++  private static final Pattern DATE_TIME_LOWERCASE_TZ_AND_SPACE =
++    Pattern.compile("^(\\d{4}-\\d{2}-\\d{2})[Tt ](\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?)([Zz]|[+-]\\d{2}:\\d{2})$");
++
++  private static final Function2<IJsonValue, FormatSchema, FormatValidationFailure> DATE_TIME_VALIDATOR =
++    (instance, schema) -> {
++      if (!(instance instanceof IJsonString)) {
++        return null;
++      }
++      String value = ((IJsonString) instance).getValue();
++      Pattern p;
++      if (dateTimeAllowLowerCaseTZ && dateTimeAllowSpaceSeparator) {
++        p = DATE_TIME_LOWERCASE_TZ_AND_SPACE;
++      } else if (dateTimeAllowLowerCaseTZ) {
++        p = DATE_TIME_LOWERCASE_TZ;
++      } else if (dateTimeAllowSpaceSeparator) {
++        p = DATE_TIME_SPACE_SEPARATOR;
++      } else {
++        p = DATE_TIME_STRICT;
++      }
++      if (!p.matcher(value).matches()) {
++        return new FormatValidationFailure(schema, instance);
++      }
++      String normalized = value;
++      if (dateTimeAllowLowerCaseTZ) {
++        // ZonedDateTime.parse è case-sensitive ed esige T e Z maiuscoli; qui
++        // siamo passati dal regex DATE_TIME_LOWERCASE_TZ (o _AND_SPACE) che
++        // ha già accettato solo t/z legittimi come separator e zone-designator,
++        // quindi la normalizzazione globale è sicura.
++        normalized = normalized.replace('t', 'T').replace('z', 'Z');
++      }
++      if (dateTimeAllowSpaceSeparator) {
++        // ZonedDateTime.parse non accetta lo spazio; normalizziamo per la
++        // sola validazione semantica.
++        normalized = normalized.replaceFirst(" ", "T");
++      }
++      try {
++        ZonedDateTime.parse(normalized);
++      } catch (DateTimeParseException e) {
++        if (e.getMessage() != null && e.getMessage().contains("Invalid value for SecondOfMinute")
++          && normalized.contains("23:59:60")) {
++          // leap second: stessa gestione di json-sKema
++          try {
++            ZonedDateTime.parse(normalized.replace("23:59:60", "23:59:59"));
++            return null;
++          } catch (DateTimeParseException ex) {
++            return new FormatValidationFailure(schema, instance);
++          }
++        }
++        return new FormatValidationFailure(schema, instance);
++      }
++      return null;
++    };
++
+   private static URI toURI(URL url) {
+     try {
+       return url.toURI();
+@@ -73,7 +170,11 @@ public class SKemaBackedJsonValidator
+   }
+ 
+   public boolean validate(IJsonValue jsonValue, ValidationData<?> validation) {
+-    ValidationFailure failure = Validator.create(schema, new ValidatorConfig(FormatValidationPolicy.ALWAYS)).validate(jsonValue);
++    ValidatorConfig config = ValidatorConfig.builder()
++      .validateFormat(FormatValidationPolicy.ALWAYS)
++      .additionalFormatValidator("date-time", DATE_TIME_VALIDATOR)
++      .build();
++    ValidationFailure failure = Validator.create(schema, config).validate(jsonValue);
+     if (failure != null) {
+       validation.add(failure);
+       return false;

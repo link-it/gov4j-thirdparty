@@ -1,0 +1,208 @@
+--- src/main/java/com/github/erosb/kappa/operation/validator/util/convert/MultipartConverter.java
++++ src/main/java/com/github/erosb/kappa/operation/validator/util/convert/MultipartConverter.java
+@@ -12,7 +12,10 @@
+ import com.github.erosb.kappa.parser.model.v3.EncodingProperty;
+ import com.github.erosb.kappa.parser.model.v3.MediaType;
+ import com.github.erosb.kappa.parser.model.v3.Schema;
+-import org.apache.commons.fileupload.*;
++import org.apache.commons.fileupload2.core.FileItemInput;
++import org.apache.commons.fileupload2.core.FileItemInputIterator;
++import org.apache.commons.fileupload2.core.FileUploadException;
++import org.apache.commons.fileupload2.jakarta.JakartaServletFileUpload;
+ 
+ import java.io.ByteArrayInputStream;
+ import java.io.IOException;
+@@ -22,6 +25,7 @@
+ import java.util.HashMap;
+ import java.util.List;
+ import java.util.Map;
++import java.util.function.LongSupplier;
+ 
+ class MultipartConverter {
+   private static final MultipartConverter INSTANCE = new MultipartConverter();
+@@ -44,7 +48,7 @@
+   }
+ 
+   JsonNode convert(final OAIContext context, final MediaType mediaType, final InputStream body, final String rawContentType, final String encoding) throws IOException {
+-    UploadContext requestContext = UPLOAD_CONTEXT_INSTANCE.create(body, rawContentType, encoding);
++    MCContext requestContext = new MCContext(body, rawContentType, encoding);
+ 
+     ObjectNode result = JsonNodeFactory.instance.objectNode();
+ 
+@@ -85,9 +89,9 @@
+ 
+     try {
+       int unknown = 1;
+-      FileItemIterator iterator = new FileUpload().getItemIterator(requestContext);
++      FileItemInputIterator iterator = new JakartaServletFileUpload<>().getItemIterator(requestContext);
+       while (!notBinaries.isEmpty() && iterator.hasNext()) {
+-        FileItemStream item = iterator.next();
++        FileItemInput item = iterator.next();
+         String name = item.getFieldName();
+ 
+         // Un attachment senza 'filename' nell'header Content-Disposition è
+@@ -171,7 +175,7 @@
+     return result;
+   }
+ 
+-  private JsonNode mapValue(OAIContext context, ObjectNode result, MediaType mediaType, FileItemStream item, String name, String encoding) throws IOException {
++  private JsonNode mapValue(OAIContext context, ObjectNode result, MediaType mediaType, FileItemInput item, String name, String encoding) throws IOException {
+     Schema propSchema = mediaType.getSchema().getProperty(name);
+     String itemContentType = item.getContentType();
+ 
+@@ -179,11 +183,11 @@
+       final int checkResult = checkContentType(context, propSchema, mediaType.getEncoding(name), item);
+       if (checkResult == -1) {
+         // content type mismatch
+-        String content = IOUtil.toString(item.openStream(), encoding);
++        String content = IOUtil.toString(item.getInputStream(), encoding);
+         return JsonNodeFactory.instance.textNode(content);
+       } else if (checkResult == 0) {
+         // Process with the given content type
+-        String content = IOUtil.toString(item.openStream(), encoding);
++        String content = IOUtil.toString(item.getInputStream(), encoding);
+         try {
+           return ContentConverter.convert(context, new MediaType().setSchema(propSchema), itemContentType, null, content);
+         } catch (IOException ex) {
+@@ -204,7 +208,7 @@
+    * 0: if content should be processed with the given content type<br/>
+    * 1: if the content should be processed as JSON.<br/>
+    */
+-  private int checkContentType(OAIContext context, Schema propSchema, EncodingProperty encProperty, FileItemStream item) {
++  private int checkContentType(OAIContext context, Schema propSchema, EncodingProperty encProperty, FileItemInput item) {
+     String itemContentType = item.getContentType();
+     String specContentType = (encProperty != null && encProperty.getContentType() != null) ? encProperty.getContentType() : null;
+ 
+@@ -241,22 +245,22 @@
+                                      final ObjectNode result,
+                                      final String name,
+                                      final Schema schema,
+-                                     final FileItemStream item,
++                                     final FileItemInput item,
+                                      final String encoding) throws IOException {
+ 
+     if (schema == null) {
+-      return TypeConverter.instance().convertPrimitive(context, null, IOUtil.toString(item.openStream(), encoding));
++      return TypeConverter.instance().convertPrimitive(context, null, IOUtil.toString(item.getInputStream(), encoding));
+     }
+ 
+     String supposedType = schema.getSupposedType(context);
+     if (supposedType == null) {
+-      return TypeConverter.instance().convertPrimitive(context, schema, IOUtil.toString(item.openStream(), encoding));
++      return TypeConverter.instance().convertPrimitive(context, schema, IOUtil.toString(item.getInputStream(), encoding));
+     }
+ 
+     switch (supposedType) {
+       case OAI3SchemaKeywords.TYPE_OBJECT:
+         try {
+-          Map<String, Object> jsonContent = TreeUtil.json.readValue(item.openStream(), MAP_TYPE);
++          Map<String, Object> jsonContent = TreeUtil.json.readValue(item.getInputStream(), MAP_TYPE);
+           return TreeUtil.json.valueToTree(jsonContent);
+         } catch (Exception e) {
+           throw new IOException(e.getMessage(), e);
+@@ -275,7 +279,7 @@
+         return null;
+       }
+       default:
+-        return TypeConverter.instance().convertPrimitive(context, schema, IOUtil.toString(item.openStream(), encoding));
++        return TypeConverter.instance().convertPrimitive(context, schema, IOUtil.toString(item.getInputStream(), encoding));
+     }
+   }
+ 
+@@ -298,41 +302,47 @@
+     }
+   }
+ 
+-  /**
+-   * Represents a function that creates a new instance of UploadContext object.
+-   */
+-  @FunctionalInterface
+-  private interface UploadContextInstance {
+-    UploadContext create(
+-      final InputStream body,
+-      final String contentType,
+-      final String encoding);
+-  }
++}
+ 
+-  private static final UploadContextInstance UPLOAD_CONTEXT_INSTANCE = (body, contentType, encoding) -> new UploadContext() {
+-    @Override
+-    public String getCharacterEncoding() {
+-      return encoding;
+-    }
++/**
++ * Implementazione di RequestContext per commons-fileupload2 (la 1.x usava UploadContext).
++ */
++class MCContext extends org.apache.commons.fileupload2.core.AbstractRequestContext<String> {
++
++  String encoding;
++  String contentType;
++  InputStream body;
++
++  public MCContext(InputStream body, String contentType, String encoding) {
++    super(MCContextUtils::length, new LongSupplier() {
++      @Override
++      public long getAsLong() {
++        return 0;
++      }
++    }, "NOP");
++    this.encoding = encoding;
++    this.contentType = contentType;
++    this.body = body;
++  }
+ 
+-    @Override
+-    public String getContentType() {
+-      return contentType;
+-    }
++  @Override
++  public String getCharacterEncoding() {
++    return this.encoding;
++  }
+ 
+-    @Override
+-    public int getContentLength() {
+-      return 0;
+-    }
++  @Override
++  public String getContentType() {
++    return this.contentType;
++  }
+ 
+-    @Override
+-    public long contentLength() {
+-      return 0;
+-    }
++  @Override
++  public InputStream getInputStream() throws IOException {
++    return this.body;
++  }
++}
+ 
+-    @Override
+-    public InputStream getInputStream() {
+-      return body;
+-    }
+-  };
++class MCContextUtils {
++  public static String length(String x) {
++    return x.length() + "";
++  }
+ }
+
+--- build.gradle
++++ build.gradle
+@@ -53,9 +53,13 @@
+   testImplementation("org.skyscreamer:jsonassert:1.5.0")
+ 
+   compileOnly("org.json:json:20250517")
+-  compileOnly("commons-fileupload:commons-fileupload:1.5")
++  compileOnly("org.apache.commons:commons-fileupload2-core:2.0.0-M1")
++  compileOnly("org.apache.commons:commons-fileupload2-jakarta:2.0.0-M1")
++  compileOnly("jakarta.servlet:jakarta.servlet-api:5.0.0")
+   testImplementation("org.json:json:20250517")
+-  testImplementation("commons-fileupload:commons-fileupload:1.5")
++  testImplementation("org.apache.commons:commons-fileupload2-core:2.0.0-M1")
++  testImplementation("org.apache.commons:commons-fileupload2-jakarta:2.0.0-M1")
++  testImplementation("jakarta.servlet:jakarta.servlet-api:5.0.0")
+ }

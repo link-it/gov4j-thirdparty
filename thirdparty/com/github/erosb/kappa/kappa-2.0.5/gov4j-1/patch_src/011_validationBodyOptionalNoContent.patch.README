@@ -1,0 +1,10 @@
+Risolve un bug in OperationValidator.validateBody(Request, ...) per cui una richiesta con body opzionale e nessun body inviato viene rifiutata.
+
+PROBLEMA
+Quando lo spec dichiara il request body opzionale (default per OpenAPI 3.x: requestBody.required = false), una richiesta senza body e senza Content-Type viene rifiutata da kappa con "Content type 'null' is not allowed for body content.". Il guard sul required nel metodo OperationValidator.validateBody scatta solo se isRequired() è true; nel ramo opzionale si arriva comunque a validateBodyWithContentType che non trova un mediaType che matchi e segnala wrongContentType.
+
+SOLUZIONE
+Aggiunto in OperationValidator.validateBody, accanto al guard isRequired() esistente, un ramo "else if (request.getBody() == null) return;" che salta la validazione se il body è opzionale e il client non lo ha inviato (con o senza Content-Type). Comportamento già presente in openapi4j (1.0.7).
+
+File modificati:
+  - src/main/java/com/github/erosb/kappa/operation/validator/validation/OperationValidator.java

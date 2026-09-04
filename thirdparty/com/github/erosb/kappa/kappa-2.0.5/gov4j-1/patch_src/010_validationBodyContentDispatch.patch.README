@@ -1,0 +1,14 @@
+Aggancia in BodyValidator il dispatch sul content-type del body, allineando il comportamento di kappa a openapi4j.
+
+PROBLEMA
+BodyValidator.validate chiama incondizionatamente Body.contentAsNode(rawContentType, ...) che accetta solo json. Tutti gli altri media type (xml, multipart/form-data, application/x-www-form-urlencoded, text/plain, ...) lanciano UnsupportedOperationException, anche se in kappa esistono già XmlConverter, MultipartConverter, FormUrlConverter e ContentConverter (dispatcher) — porting da openapi4j — che sono però rimasti scollegati dal body validator.
+
+SOLUZIONE
+In BodyValidator.validate viene introdotto il dispatch sul content-type:
+  - se isJson(getTypeOnly(rawContentType)) → path invariato (body.contentAsNode → validator.validate(IJsonValue, ValidationData));
+  - altrimenti → si delega al metodo legacy Body.getContentAsNode(OAIContext, MediaType, rawContentType) che invoca ContentConverter.convert e restituisce un Jackson JsonNode; il risultato viene passato all'overload già presente validator.validate(JsonNode, URI, ValidationData) di SKemaBackedJsonValidator (usato a riga 37 per il body nullo).
+Il path json del metodo NON viene modificato.
+La gestione delle eccezioni include un nuovo catch IOException (ContentConverter throws IOException su parse failure di xml/multipart) wrappato in JsonParseException per riusare unparseableHttpEntity.
+
+File modificati:
+  - src/main/java/com/github/erosb/kappa/operation/validator/validation/BodyValidator.java

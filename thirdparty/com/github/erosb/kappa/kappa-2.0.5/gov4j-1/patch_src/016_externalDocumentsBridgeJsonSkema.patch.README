@@ -1,0 +1,23 @@
+Estende la patch 001_externalDocuments propagando i sub-document esterni al motore json-sKema usato da SKemaBackedJsonValidator, in modo che la validazione runtime funzioni anche con mergeSpec=false.
+
+PROBLEMA
+La patch 001 registra correttamente i documenti esterni in AbstractReferenceResolver.documentRegistry e OAI3Context.referenceRegistry, e i $ref cross-file vengono risolti dal modello OpenApi3 (a livello parser). Tuttavia SKemaBackedJsonValidator serializza il singolo schema del mediaType e lo passa a json-sKema iniettando solo i 'components' del master: json-sKema non traccia il base URI quando segue un $ref cross-file, quindi un $ref locale dentro al sub-document ('#/components/schemas/X') viene risolto rispetto al base URI del master e fallisce. Sintomatologia tipica con mergeSpec=false: "could not evaluate pointer file:/#/components/schemas/Problem" anche se Problem e' nel file allegato registrato.
+
+SOLUZIONE
+Replica al volo, in SKemaBackedJsonValidator, il merge che UniqueInterfaceGenerator fa offline quando mergeSpec=true:
+  - OAIContext espone un default method getDocumentRegistry() (mappa vuota di default).
+  - AbstractReferenceResolver espone getDocumentRegistry() concreto.
+  - OAI3Context copia il registry dal resolver dopo resolveReferences e lo espone.
+  - SKemaBackedJsonValidator, prima di delegare a json-sKema:
+      * fonde i 'components' di tutti i documenti registrati (master + allegati) in un singolo nodo iniettato nel rawJson. Il master ha precedenza in caso di duplicati;
+      * riscrive i $ref/abs$ref cross-file ('foo.yaml#/...' o 'file:/foo.yaml#/...') in $ref locali ('#/...') sfruttando la fusione precedente.
+Cosi' json-sKema non deve fare cross-file resolution (e il suo limite di base-URI tracking non emerge): tutti i $ref locali trovano il loro target nel rawJson arricchito.
+
+LIMITE
+Convenzione: per OpenAPI ben-formati (master + allegati) i nomi dei componenti devono essere unique tra documenti. Se due documenti definiscono lo stesso component con contenuto diverso, il merge perde una delle due definizioni (master vince) e l'eventuale $ref cross-file rimappato in locale punta al componente "vincitore". Questo limite e' identico a quello di UniqueInterfaceGenerator.
+
+File modificati:
+  - src/main/java/com/github/erosb/kappa/core/model/OAIContext.java
+  - src/main/java/com/github/erosb/kappa/core/model/reference/AbstractReferenceResolver.java
+  - src/main/java/com/github/erosb/kappa/core/model/v3/OAI3Context.java
+  - src/main/java/com/github/erosb/kappa/schema/validator/SKemaBackedJsonValidator.java

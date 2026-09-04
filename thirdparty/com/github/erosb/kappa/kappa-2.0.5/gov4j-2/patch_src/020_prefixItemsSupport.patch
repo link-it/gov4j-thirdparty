@@ -1,0 +1,202 @@
+--- src/main/java/com/github/erosb/kappa/parser/model/v3/Schema.java
++++ src/main/java/com/github/erosb/kappa/parser/model/v3/Schema.java
+@@ -70,6 +70,11 @@
+   private List<Schema> anyOfSchemas;
+   @JsonProperty(OAI3SchemaKeywords.ONEOF)
+   private List<Schema> oneOfSchemas;
++  // OpenAPI 3.1 / JSON Schema 2020-12: 'prefixItems' applica schemi diversi per posizione.
++  // Jackson popola il POJO da spec; usato da FormStyleConverter per la conversione per posizione
++  // (es. query 'param=5,ciao' con prefixItems [integer,string] -> [5, "ciao"]).
++  @JsonProperty("prefixItems")
++  private List<Schema> prefixItemsSchemas;
+   private Boolean readOnly;
+   private Boolean writeOnly;
+   @JsonIgnore
+@@ -367,6 +372,18 @@
+ 
+   @JsonIgnore
+   public String getSupposedType(OAIContext context) {
++    // Fast path: se il POJO Jackson ha gia' 'type' (o 'types') valorizzato, usa quello.
++    // Necessario per spec OAS 3.1 dove keyword come 'prefixItems' generano sub-schema
++    // (PrefixItemsSchema) che il visitor sotto non riconosce: nell'ordine di iterazione
++    // di CompositeSchema.accept() possono "mascherare" il TypeSchema, facendo ritornare
++    // null e causando il fallimento del binding (es. query 'param=5,ciao' su array+prefixItems
++    // veniva visto come stringa, restituendo poi 'expected type: array, actual: string').
++    if (this.type != null) {
++      return this.type;
++    }
++    if (this.types != null && !this.types.isEmpty()) {
++      return this.types.get(0);
++    }
+     initSkema(context);
+     String result = skema.accept(new SchemaVisitor<String>() {
+       @Override
+@@ -468,6 +485,20 @@
+     return this;
+   }
+ 
++  /**
++   * Lista degli schemi per posizione dichiarati via {@code prefixItems} (OpenAPI 3.1).
++   * Necessario per la conversione tipo dei parametri array dove ciascun elemento puo' avere
++   * uno schema diverso (es. tuple {@code [integer, string]}).
++   */
++  public List<Schema> getPrefixItemsSchemas() {
++    return prefixItemsSchemas;
++  }
++
++  public Schema setPrefixItemsSchemas(List<Schema> prefixItemsSchemas) {
++    this.prefixItemsSchemas = prefixItemsSchemas;
++    return this;
++  }
++
+   public boolean hasOneOfSchemas() {
+     return oneOfSchemas != null && !oneOfSchemas.isEmpty();
+   }
+--- src/main/java/com/github/erosb/kappa/operation/validator/util/convert/style/FormStyleConverter.java
++++ src/main/java/com/github/erosb/kappa/operation/validator/util/convert/style/FormStyleConverter.java
+@@ -91,6 +91,43 @@
+         values.addAll(StringUtil.tokenize(paramValue, ",", false, false));
+       }
+     }
++    // OpenAPI 3.1: 'prefixItems' applica schemi diversi per posizione. Se presente, converte
++    // ciascun elemento secondo 'prefixItems[i]' (con fallback a 'items' per gli indici extra).
++    // Necessario perche' convertArray usa un solo itemsSchema condiviso e tratta tutti gli
++    // elementi come stringhe quando itemsSchema=string, anche se prefixItems[0]=integer.
++    java.util.List<com.github.erosb.kappa.parser.model.v3.Schema> prefixItems = param.getSchema().getPrefixItemsSchemas();
++    if (prefixItems != null && !prefixItems.isEmpty()) {
++      com.fasterxml.jackson.databind.node.ArrayNode out = com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.arrayNode();
++      com.github.erosb.kappa.parser.model.v3.Schema fallback = param.getSchema().getItemsSchema();
++      int i = 0;
++      for (Object v : values) {
++        com.github.erosb.kappa.parser.model.v3.Schema elemSchema = (i < prefixItems.size()) ? prefixItems.get(i) : fallback;
++        com.fasterxml.jackson.databind.JsonNode node;
++        if (elemSchema == null) {
++          node = com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.textNode(String.valueOf(v));
++        } else {
++          node = TypeConverter.instance().convertPrimitive(context, elemSchema, v);
++          // TypeConverter.convertPrimitive cattura NumberFormatException e ritorna silenziosamente
++          // un textNode come fallback (riga 147-149 di TypeConverter). Per prefixItems con tipo
++          // non-string questo nasconde la violation: json-sKema 0.30 non rileva il type mismatch
++          // (probabile bug della libreria sul check di tipo all'interno di prefixItems). Forziamo
++          // NullNode per gli elementi non-stringa caduti nel fallback, in modo che la validazione
++          // json-sKema emetta 'expected type: <T>, actual: null'.
++          String expectedType = elemSchema.getSupposedType(context);
++          if (node != null && node.isTextual()
++              && expectedType != null
++              && !com.github.erosb.kappa.core.model.v3.OAI3SchemaKeywords.TYPE_STRING.equals(expectedType)) {
++            node = com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.nullNode();
++          }
++          if (node == null) {
++            node = com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.textNode(String.valueOf(v));
++          }
++        }
++        out.add(node);
++        i++;
++      }
++      return out;
++    }
+     return TypeConverter.instance().convertArray(context, param.getSchema().getItemsSchema(), values);
+   }
+ 
+--- src/main/java/com/github/erosb/kappa/operation/validator/validation/ParameterValidator.java
++++ src/main/java/com/github/erosb/kappa/operation/validator/validation/ParameterValidator.java
+@@ -50,10 +50,76 @@
+       if (checkRequired(paramName, specParameters.get(paramName), values, validation)) {
+         JsonNode paramValue = values.get(paramName);
+         entry.getValue().validate(paramValue, uriFactory.pathParam(paramName), validation);
++        validatePrefixItems(paramName, specParameters.get(paramName), paramValue, validation);
+       }
+     }
+   }
+ 
++  /**
++   * Validazione esplicita di {@code prefixItems[i].type} per posizione: json-sKema 0.30 non
++   * implementa il keyword {@code prefixItems} (vedi log {@code [KAPPA-SKEMA] schema=...subschemas
++   * non include PrefixItemsSchema}) e quindi non emette di per se' il mismatch di tipo elemento
++   * per elemento. Per ogni indice i &lt; |prefixItems| confronta il tipo del JsonNode con
++   * {@code prefixItems[i].type}; se non matcha emette
++   * {@link OpenApiValidationFailure#prefixItemsTypeMismatch}.
++   *
++   * <p>No-op se lo schema del parametro non ha {@code prefixItems} (non altera il comportamento
++   * dei parametri privi del costrutto).</p>
++   */
++  private void validatePrefixItems(String paramName,
++                                   AbsParameter<M> param,
++                                   JsonNode paramValue,
++                                   ValidationData<?> validation) {
++    if (param == null || param.getSchema() == null || paramValue == null || !paramValue.isArray()) {
++      return;
++    }
++    java.util.List<Schema> prefixItems = param.getSchema().getPrefixItemsSchemas();
++    if (prefixItems == null || prefixItems.isEmpty()) {
++      return;
++    }
++    com.fasterxml.jackson.databind.node.ArrayNode arr = (com.fasterxml.jackson.databind.node.ArrayNode) paramValue;
++    int bound = Math.min(arr.size(), prefixItems.size());
++    for (int i = 0; i < bound; i++) {
++      Schema elemSchema = prefixItems.get(i);
++      if (elemSchema == null) continue;
++      String expectedType = elemSchema.getSupposedType(context.getContext());
++      if (expectedType == null) continue;
++      JsonNode el = arr.get(i);
++      if (!matchesType(el, expectedType)) {
++        String actualType = jsonNodeTypeName(el);
++        validation.add(OpenApiValidationFailure.prefixItemsTypeMismatch(
++          paramName, i, expectedType, actualType,
++          context.requestScopedUriFactory().definitionPath()));
++      }
++    }
++  }
++
++  private static boolean matchesType(JsonNode node, String oasType) {
++    if (node == null || node.isNull()) {
++      return "null".equals(oasType);
++    }
++    switch (oasType) {
++      case "integer": return node.isIntegralNumber();
++      case "number":  return node.isNumber();
++      case "string":  return node.isTextual();
++      case "boolean": return node.isBoolean();
++      case "array":   return node.isArray();
++      case "object":  return node.isObject();
++      default:        return true;
++    }
++  }
++
++  private static String jsonNodeTypeName(JsonNode node) {
++    if (node == null || node.isNull())   return "null";
++    if (node.isIntegralNumber())         return "integer";
++    if (node.isNumber())                 return "number";
++    if (node.isTextual())                return "string";
++    if (node.isBoolean())                return "boolean";
++    if (node.isArray())                  return "array";
++    if (node.isObject())                 return "object";
++    return node.getNodeType().toString().toLowerCase();
++  }
++
+   private Map<String, JsonValidator> initValidators(Map<String, AbsParameter<M>> specParameters) {
+     if (specParameters == null || specParameters.isEmpty()) {
+       return null;
+--- src/main/java/com/github/erosb/kappa/core/validation/OpenApiValidationFailure.java
++++ src/main/java/com/github/erosb/kappa/core/validation/OpenApiValidationFailure.java
+@@ -36,6 +36,20 @@
+       String.format("Content type '%s' is not allowed for body content.", actualContentType), schemaLocation);
+   }
+ 
++  /**
++   * Emessa quando un elemento di un parametro array non rispetta il tipo dichiarato in
++   * {@code prefixItems[i]}. Wording allineato a quello di json-sKema (es. "expected type: integer,
++   * actual: string"). Necessario perche' json-sKema 0.30 non implementa il keyword
++   * {@code prefixItems} e quindi non emette di per se' il mismatch di tipo per posizione.
++   */
++  public static ParameterValidationFailure prefixItemsTypeMismatch(String paramName, int index,
++                                                                   String expectedType, String actualType,
++                                                                   SourceLocation schemaLocation) {
++    return new ParameterValidationFailure(
++      paramName + "." + index + ": expected type: " + expectedType + ", actual: " + actualType,
++      schemaLocation);
++  }
++
+   public static ParameterValidationFailure missingRequiredParameter(String paramName, SourceLocation schemaLocation) {
+     return new ParameterValidationFailure(String.format("Missing required parameter '%s'.", paramName), schemaLocation);
+   }

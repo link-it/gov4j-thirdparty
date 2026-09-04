@@ -1,0 +1,74 @@
+diff --git src/main/java/com/github/erosb/kappa/parser/model/v3/Schema.java src/main/java/com/github/erosb/kappa/parser/model/v3/Schema.java
+index b838062..4affbed 100644
+--- src/main/java/com/github/erosb/kappa/parser/model/v3/Schema.java
++++ src/main/java/com/github/erosb/kappa/parser/model/v3/Schema.java
+@@ -44,8 +44,10 @@ public class Schema
+   private Boolean exclusiveMinimum;
+   private ExternalDocs externalDocs;
+   private String format;
+-  @JsonProperty(OAI3SchemaKeywords.ITEMS)
++  @JsonIgnore
+   private Schema itemsSchema;
++  @JsonIgnore
++  private Boolean itemsAllowed;
+   private Number maximum;
+   private Number minimum;
+   private Integer maxItems;
+@@ -527,6 +529,44 @@ public class Schema
+ 
+   public Schema setItemsSchema(Schema itemsSchema) {
+     this.itemsSchema = itemsSchema;
++    this.itemsAllowed = (itemsSchema == null) ? itemsAllowed : null;
++    return this;
++  }
++
++  @JsonProperty(value = OAI3SchemaKeywords.ITEMS, access = JsonProperty.Access.WRITE_ONLY)
++  private void setMappedItems(JsonNode items) throws JsonProcessingException {
++    if (items == null || items.isNull()) {
++      return;
++    }
++    if (items.isBoolean()) {
++      setItemsAllowed(items.booleanValue());
++    } else if (items.isObject()) {
++      setItemsSchema(TreeUtil.json.treeToValue(items, Schema.class));
++    }
++  }
++
++  @JsonProperty(value = OAI3SchemaKeywords.ITEMS, access = JsonProperty.Access.READ_ONLY)
++  private Object getMappedItems() {
++    if (itemsSchema != null) {
++      return itemsSchema;
++    }
++    if (itemsAllowed != null) {
++      return itemsAllowed;
++    }
++    return null;
++  }
++
++  public Boolean getItemsAllowed() {
++    return itemsAllowed;
++  }
++
++  public boolean isItemsAllowed() {
++    return itemsAllowed == null || Boolean.TRUE.equals(itemsAllowed);
++  }
++
++  public Schema setItemsAllowed(Boolean itemsAllowed) {
++    this.itemsAllowed = itemsAllowed;
++    this.itemsSchema = null;
+     return this;
+   }
+ 
+@@ -793,7 +833,11 @@ public class Schema
+       copy.setAnyOfSchemas(copyList(getAnyOfSchemas()));
+ 
+       copy.setNotSchema(copyField(getNotSchema()));
+-      copy.setItemsSchema(copyField(getItemsSchema()));
++      if (getItemsSchema() != null) {
++        copy.setItemsSchema(copyField(getItemsSchema()));
++      } else if (getItemsAllowed() != null) {
++        copy.setItemsAllowed(getItemsAllowed());
++      }
+       copy.setProperties(copyMap(getProperties()));
+ 
+       if (hasAdditionalProperties()) {

@@ -1,0 +1,403 @@
+diff --git src/main/java/com/github/erosb/kappa/core/model/reference/AbstractReferenceResolver.java src/main/java/com/github/erosb/kappa/core/model/reference/AbstractReferenceResolver.java
+index fa7a192..71e4931 100644
+--- src/main/java/com/github/erosb/kappa/core/model/reference/AbstractReferenceResolver.java
++++ src/main/java/com/github/erosb/kappa/core/model/reference/AbstractReferenceResolver.java
+@@ -22,7 +22,12 @@ public abstract class AbstractReferenceResolver {
+   private final URL baseUrl;
+   private final List<AuthOption> authOptions;
+   private JsonNode baseDocument;
+-  private final Map<URL, JsonNode> documentRegistry = new HashMap<>();
++  // Indicizzato per URL.toString(): URL.equals/hashCode di Java fanno DNS
++  // resolution per http(s) e su file:// la canonical form non è stabile
++  // (file:/x vs file:///x), quindi un HashMap<URL,…> non è affidabile per
++  // confronti di chiavi tra documenti pre-registrati e sub-URL risolti via
++  // new URL(base, refValue).
++  private Map<String, JsonNode> documentRegistry = new HashMap<>();
+   private final ReferenceRegistry referenceRegistry;
+   final String refKeyword;
+ 
+@@ -34,6 +39,33 @@ public abstract class AbstractReferenceResolver {
+     this.referenceRegistry = referenceRegistry;
+   }
+ 
++  protected AbstractReferenceResolver(URL baseUrl, List<AuthOption> authOptions, JsonNode baseDocument, String refKeyword, ReferenceRegistry referenceRegistry, Map<URL, JsonNode> documentRegistryParam) throws ResolutionException {
++    this.baseUrl = baseUrl;
++    this.authOptions = authOptions;
++    this.baseDocument = baseDocument;
++    this.refKeyword = refKeyword;
++    this.referenceRegistry = referenceRegistry;
++    if (documentRegistryParam != null) {
++      // Due fasi separate per rendere la registrazione indipendente dall'ordine
++      // di iterazione del Map. La fase 2 (findReferences) consulta documentRegistry
++      // tramite containsKey() per decidere se caricare un sub-document dal
++      // filesystem; se in fase 1 non avessimo già inserito tutti i pre-loaded,
++      // un documento la cui dipendenza appare più tardi nell'iterazione
++      // tenterebbe il load da disco anche se la dipendenza è già nel
++      // documentRegistryParam ricevuto come parametro.
++      for (Map.Entry<URL, JsonNode> entry : documentRegistryParam.entrySet()) {
++        documentRegistry.put(key(entry.getKey()), entry.getValue());
++      }
++      for (Map.Entry<URL, JsonNode> entry : documentRegistryParam.entrySet()) {
++        findReferences(entry.getKey(), entry.getValue());
++      }
++    }
++  }
++
++  private static String key(URL url) {
++    return url == null ? null : url.toString();
++  }
++
+   public void resolve() throws ResolutionException {
+     // Register base resolution document
+     baseDocument
+@@ -81,7 +113,7 @@ public abstract class AbstractReferenceResolver {
+ 
+         addRef(subUrl, refParents, refValue);
+ 
+-        if (!documentRegistry.containsKey(subUrl)) {
++        if (!documentRegistry.containsKey(key(subUrl))) {
+           JsonNode subDocument = registerDocument(subUrl);
+           findReferences(subUrl, subDocument);
+         }
+@@ -105,7 +137,7 @@ public abstract class AbstractReferenceResolver {
+   private JsonNode registerDocument(URL url) throws ResolutionException {
+     try {
+       JsonNode document = TreeUtil.load(url, authOptions);
+-      documentRegistry.put(url, document);
++      documentRegistry.put(key(url), document);
+       return document;
+     } catch (Exception e) {
+       throw new ResolutionException(String.format(LOAD_DOC_ERR_MSG, url), e);
+@@ -113,7 +145,7 @@ public abstract class AbstractReferenceResolver {
+   }
+ 
+   private JsonNode registerDocument(URL url, JsonNode node) {
+-    documentRegistry.put(url, node);
++    documentRegistry.put(key(url), node);
+     return node;
+   }
+ 
+@@ -133,7 +165,7 @@ public abstract class AbstractReferenceResolver {
+       throw new ResolutionException(String.format(CYCLING_REF_ERR_MSG, stringBuilder.toString()));
+     }
+ 
+-    JsonNode document = documentRegistry.get(ref.getBaseUrl());
++    JsonNode document = documentRegistry.get(key(ref.getBaseUrl()));
+     String jsonPointer = getJsonPointer(ref.getRef());
+ 
+     final JsonNode valueNode;
+diff --git src/main/java/com/github/erosb/kappa/core/model/reference/ReferenceResolver.java src/main/java/com/github/erosb/kappa/core/model/reference/ReferenceResolver.java
+index 8c7023a..40bd026 100644
+--- src/main/java/com/github/erosb/kappa/core/model/reference/ReferenceResolver.java
++++ src/main/java/com/github/erosb/kappa/core/model/reference/ReferenceResolver.java
+@@ -2,12 +2,14 @@ package com.github.erosb.kappa.core.model.reference;
+ 
+ import com.fasterxml.jackson.databind.JsonNode;
+ import com.github.erosb.jsonsKema.JsonObject;
++import com.github.erosb.kappa.core.exception.ResolutionException;
+ import com.github.erosb.kappa.core.model.AuthOption;
+ 
+ import java.net.URL;
+ import java.util.Collection;
+ import java.util.HashSet;
+ import java.util.List;
++import java.util.Map;
+ import java.util.Set;
+ 
+ /**
+@@ -18,6 +20,10 @@ public class ReferenceResolver extends AbstractReferenceResolver {
+     super(baseUrl, authOptions, apiNode, refKeyword, referenceRegistry);
+   }
+ 
++  public ReferenceResolver(URL baseUrl, List<AuthOption> authOptions, JsonNode apiNode, String refKeyword, ReferenceRegistry referenceRegistry, Map<URL, JsonNode> documentRegistryParam) throws ResolutionException {
++    super(baseUrl, authOptions, apiNode, refKeyword, referenceRegistry, documentRegistryParam);
++  }
++
+   private Collection<JsonNode> getReferencePaths(JsonNode document, Set<JsonNode> foundRefs) {
+     if (document.isObject()) {
+       JsonNode ref = document.get("$ref");
+diff --git src/main/java/com/github/erosb/kappa/core/model/v3/MappingReferenceResolver.java src/main/java/com/github/erosb/kappa/core/model/v3/MappingReferenceResolver.java
+index cf6f13c..d348710 100644
+--- src/main/java/com/github/erosb/kappa/core/model/v3/MappingReferenceResolver.java
++++ src/main/java/com/github/erosb/kappa/core/model/v3/MappingReferenceResolver.java
+@@ -1,6 +1,7 @@
+ package com.github.erosb.kappa.core.model.v3;
+ 
+ import com.fasterxml.jackson.databind.JsonNode;
++import com.github.erosb.kappa.core.exception.ResolutionException;
+ import com.github.erosb.kappa.core.model.AuthOption;
+ import com.github.erosb.kappa.core.model.reference.AbstractReferenceResolver;
+ import com.github.erosb.kappa.core.model.reference.ReferenceRegistry;
+@@ -9,6 +10,7 @@ import java.net.URL;
+ import java.util.Collection;
+ import java.util.HashSet;
+ import java.util.List;
++import java.util.Map;
+ 
+ import static com.github.erosb.kappa.core.model.v3.OAI3SchemaKeywords.$REF;
+ import static com.github.erosb.kappa.core.model.v3.OAI3SchemaKeywords.MAPPING;
+@@ -21,6 +23,10 @@ class MappingReferenceResolver extends AbstractReferenceResolver {
+     super(baseUrl, authOptions, apiNode, $REF, referenceRegistry);
+   }
+ 
++  MappingReferenceResolver(URL baseUrl, List<AuthOption> authOptions, JsonNode apiNode, ReferenceRegistry referenceRegistry, Map<URL, JsonNode> documentRegistryParam) throws ResolutionException {
++    super(baseUrl, authOptions, apiNode, $REF, referenceRegistry, documentRegistryParam);
++  }
++
+   @Override
+   protected Collection<JsonNode> getReferencePaths(JsonNode document) {
+     Collection<JsonNode> referenceNodes = document.findValues(MAPPING);
+diff --git src/main/java/com/github/erosb/kappa/core/model/v3/OAI3Context.java src/main/java/com/github/erosb/kappa/core/model/v3/OAI3Context.java
+index 5d844f6..3b745e4 100644
+--- src/main/java/com/github/erosb/kappa/core/model/v3/OAI3Context.java
++++ src/main/java/com/github/erosb/kappa/core/model/v3/OAI3Context.java
+@@ -9,6 +9,7 @@ import com.github.erosb.kappa.core.model.reference.ReferenceRegistry;
+ 
+ import java.net.URL;
+ import java.util.List;
++import java.util.Map;
+ 
+ import static com.github.erosb.kappa.core.model.v3.OAI3SchemaKeywords.$REF;
+ 
+@@ -32,7 +33,18 @@ public class OAI3Context implements OAIContext {
+    * @throws ResolutionException In case of missing or wrong reference during discovery process.
+    */
+   public OAI3Context(URL baseUrl) throws ResolutionException {
+-    this(baseUrl, null, null);
++    this(baseUrl, null, null, null);
++  }
++
++  /**
++   * Creates a context from the given url with externally registered documents.
++   *
++   * @param baseUrl                The given url.
++   * @param documentRegistryParam  Pre-registered external documents (URL → JsonNode).
++   * @throws ResolutionException In case of missing or wrong reference during discovery process.
++   */
++  public OAI3Context(URL baseUrl, Map<URL, JsonNode> documentRegistryParam) throws ResolutionException {
++    this(baseUrl, null, null, documentRegistryParam);
+   }
+ 
+   /**
+@@ -43,7 +55,19 @@ public class OAI3Context implements OAIContext {
+    * @throws ResolutionException In case of missing or wrong reference during discovery process.
+    */
+   public OAI3Context(URL baseUrl, List<AuthOption> authOptions) throws ResolutionException {
+-    this(baseUrl, authOptions, null);
++    this(baseUrl, authOptions, null, null);
++  }
++
++  /**
++   * Creates a context from the given url with externally registered documents.
++   *
++   * @param baseUrl                The given url.
++   * @param authOptions            The authentication values.
++   * @param documentRegistryParam  Pre-registered external documents (URL → JsonNode).
++   * @throws ResolutionException In case of missing or wrong reference during discovery process.
++   */
++  public OAI3Context(URL baseUrl, List<AuthOption> authOptions, Map<URL, JsonNode> documentRegistryParam) throws ResolutionException {
++    this(baseUrl, authOptions, null, documentRegistryParam);
+   }
+ 
+   /**
+@@ -54,7 +78,19 @@ public class OAI3Context implements OAIContext {
+    * @throws ResolutionException In case of missing or wrong reference during discovery process.
+    */
+   public OAI3Context(URL baseUrl, JsonNode baseDocument) throws ResolutionException {
+-    this(baseUrl, null, baseDocument);
++    this(baseUrl, null, baseDocument, null);
++  }
++
++  /**
++   * Creates a context from the given url with externally registered documents.
++   *
++   * @param baseUrl                The given url.
++   * @param baseDocument           The tree node representing the Open API schema.
++   * @param documentRegistryParam  Pre-registered external documents (URL → JsonNode).
++   * @throws ResolutionException In case of missing or wrong reference during discovery process.
++   */
++  public OAI3Context(URL baseUrl, JsonNode baseDocument, Map<URL, JsonNode> documentRegistryParam) throws ResolutionException {
++    this(baseUrl, null, baseDocument, documentRegistryParam);
+   }
+ 
+   /**
+@@ -66,10 +102,23 @@ public class OAI3Context implements OAIContext {
+    * @throws ResolutionException In case of missing or wrong reference during discovery process.
+    */
+   public OAI3Context(URL baseUrl, List<AuthOption> authOptions, JsonNode baseDocument) throws ResolutionException {
++    this(baseUrl, authOptions, baseDocument, null);
++  }
++
++  /**
++   * Creates a context from the given url with externally registered documents.
++   *
++   * @param baseUrl                The given url.
++   * @param authOptions            The authentication values.
++   * @param baseDocument           The tree node representing the Open API schema.
++   * @param documentRegistryParam  Pre-registered external documents (URL → JsonNode).
++   * @throws ResolutionException In case of missing or wrong reference during discovery process.
++   */
++  public OAI3Context(URL baseUrl, List<AuthOption> authOptions, JsonNode baseDocument, Map<URL, JsonNode> documentRegistryParam) throws ResolutionException {
+     this.baseUrl = baseUrl;
+     referenceRegistry = new ReferenceRegistry(baseUrl);
+     this.authOptions = authOptions;
+-    this.baseDocument = resolveReferences(baseDocument);
++    this.baseDocument = resolveReferences(baseDocument, documentRegistryParam);
+   }
+ 
+   /**
+@@ -97,19 +146,27 @@ public class OAI3Context implements OAIContext {
+   }
+ 
+   private JsonNode resolveReferences(JsonNode baseDocument) throws ResolutionException {
++    return resolveReferences(baseDocument, null);
++  }
++
++  private JsonNode resolveReferences(JsonNode baseDocument, Map<URL, JsonNode> documentRegistryParam) throws ResolutionException {
+     // Standard JSON references
+-    ReferenceResolver resolver = new ReferenceResolver(baseUrl, authOptions, baseDocument, $REF, referenceRegistry);
++    ReferenceResolver resolver = new ReferenceResolver(baseUrl, authOptions, baseDocument, $REF, referenceRegistry, documentRegistryParam);
+     resolver.resolve();
+ 
+     // Mapping JSON references
+     ReferenceRegistry mappingRefsRegistry = new ReferenceRegistry(baseUrl);
+-    MappingReferenceResolver mappingResolver = new MappingReferenceResolver(baseUrl, authOptions, baseDocument, mappingRefsRegistry);
++    MappingReferenceResolver mappingResolver = documentRegistryParam != null
++      ? new MappingReferenceResolver(baseUrl, authOptions, baseDocument, mappingRefsRegistry, documentRegistryParam)
++      : new MappingReferenceResolver(baseUrl, authOptions, baseDocument, mappingRefsRegistry);
+     mappingResolver.resolve();
+     referenceRegistry.mergeRefs(mappingRefsRegistry);
+ 
+     // Links JSON references
+     ReferenceRegistry operationRefsRegistry = new ReferenceRegistry(baseUrl);
+-    ReferenceResolver operationResolver = new ReferenceResolver(baseUrl, authOptions, baseDocument, OPERATION_REF, operationRefsRegistry);
++    ReferenceResolver operationResolver = documentRegistryParam != null
++      ? new ReferenceResolver(baseUrl, authOptions, baseDocument, OPERATION_REF, operationRefsRegistry, documentRegistryParam)
++      : new ReferenceResolver(baseUrl, authOptions, baseDocument, OPERATION_REF, operationRefsRegistry);
+     operationResolver.resolve();
+     referenceRegistry.mergeRefs(operationRefsRegistry);
+ 
+diff --git src/main/java/com/github/erosb/kappa/parser/OpenApi3Parser.java src/main/java/com/github/erosb/kappa/parser/OpenApi3Parser.java
+index f3eb46f..146fb82 100644
+--- src/main/java/com/github/erosb/kappa/parser/OpenApi3Parser.java
++++ src/main/java/com/github/erosb/kappa/parser/OpenApi3Parser.java
+@@ -1,5 +1,6 @@
+ package com.github.erosb.kappa.parser;
+ 
++import com.fasterxml.jackson.databind.JsonNode;
+ import com.github.erosb.kappa.core.exception.ResolutionException;
+ import com.github.erosb.kappa.core.model.AuthOption;
+ import com.github.erosb.kappa.core.model.v3.OAI3Context;
+@@ -9,6 +10,7 @@ import com.github.erosb.kappa.parser.model.v3.OpenApi3;
+ 
+ import java.net.URL;
+ import java.util.List;
++import java.util.Map;
+ 
+ /**
+  * The parser for Open API v3.x.x
+@@ -21,7 +23,7 @@ public class OpenApi3Parser extends OpenApiParser<OpenApi3> {
+    * {@inheritDoc}
+    */
+   @Override
+-  public OpenApi3 parse(URL url, List<AuthOption> authOptions, boolean validate) throws ResolutionException, ValidationException {
++  public OpenApi3 parse(URL url, List<AuthOption> authOptions, Map<URL, JsonNode> documentRegistryParam, boolean validate) throws ResolutionException, ValidationException {
+     if (url == null) {
+       throw new ResolutionException(NULL_SPEC_URL);
+     }
+@@ -29,7 +31,9 @@ public class OpenApi3Parser extends OpenApiParser<OpenApi3> {
+     OpenApi3 api;
+ 
+     try {
+-      OAI3Context context = new OAI3Context(url, authOptions);
++      OAI3Context context = documentRegistryParam != null
++        ? new OAI3Context(url, authOptions, documentRegistryParam)
++        : new OAI3Context(url, authOptions);
+       api = TreeUtil.json.convertValue(context.getBaseDocument(), OpenApi3.class);
+       api.setContext(context);
+     } catch (IllegalArgumentException e) {
+diff --git src/main/java/com/github/erosb/kappa/parser/OpenApiParser.java src/main/java/com/github/erosb/kappa/parser/OpenApiParser.java
+index 1c0a935..2216267 100644
+--- src/main/java/com/github/erosb/kappa/parser/OpenApiParser.java
++++ src/main/java/com/github/erosb/kappa/parser/OpenApiParser.java
+@@ -1,5 +1,6 @@
+ package com.github.erosb.kappa.parser;
+ 
++import com.fasterxml.jackson.databind.JsonNode;
+ import com.github.erosb.kappa.core.exception.ResolutionException;
+ import com.github.erosb.kappa.core.model.AuthOption;
+ import com.github.erosb.kappa.core.model.OAI;
+@@ -9,6 +10,7 @@ import java.io.File;
+ import java.net.MalformedURLException;
+ import java.net.URL;
+ import java.util.List;
++import java.util.Map;
+ 
+ /**
+  * Base Open API parser
+@@ -40,6 +42,25 @@ public abstract class OpenApiParser<O extends OAI> {
+     }
+   }
+ 
++  /**
++   * Parse the Open API specification from the given file with externally registered documents.
++   *
++   * @param specFile               The given file.
++   * @param documentRegistryParam  Pre-registered external documents (URL → JsonNode), used to short-circuit $ref resolution.
++   * @param validate               {@code true} for validation, {@code false} otherwise.
++   */
++  public O parse(File specFile, Map<URL, JsonNode> documentRegistryParam, boolean validate) throws ResolutionException, ValidationException {
++    if (specFile == null) {
++      throw new ResolutionException(INVALID_FILE);
++    }
++
++    try {
++      return parse(specFile.toURI().toURL(), null, documentRegistryParam, validate);
++    } catch (MalformedURLException e) {
++      throw new ResolutionException(INVALID_URL, e);
++    }
++  }
++
+   /**
+    * Parse the Open API specification from the given URL.
+    *
+@@ -50,7 +71,18 @@ public abstract class OpenApiParser<O extends OAI> {
+    * @throws ValidationException In case of validation error.
+    */
+   public O parse(URL url, boolean validate) throws ResolutionException, ValidationException {
+-    return parse(url, null, validate);
++    return parse(url, null, null, validate);
++  }
++
++  /**
++   * Parse the Open API specification from the given URL with externally registered documents.
++   *
++   * @param url                    The given URL.
++   * @param documentRegistryParam  Pre-registered external documents (URL → JsonNode).
++   * @param validate               {@code true} for validation, {@code false} otherwise.
++   */
++  public O parse(URL url, Map<URL, JsonNode> documentRegistryParam, boolean validate) throws ResolutionException, ValidationException {
++    return parse(url, null, documentRegistryParam, validate);
+   }
+ 
+   /**
+@@ -63,5 +95,18 @@ public abstract class OpenApiParser<O extends OAI> {
+    * @throws ResolutionException In case of wrong path, JSON reference issue.
+    * @throws ValidationException In case of validation error.
+    */
+-  public abstract O parse(URL url, List<AuthOption> authOptions, boolean validate) throws ResolutionException, ValidationException;
++  public O parse(URL url, List<AuthOption> authOptions, boolean validate) throws ResolutionException, ValidationException {
++    return parse(url, authOptions, null, validate);
++  }
++
++  /**
++   * Parse the Open API specification from the given URL with authentication values
++   * and externally registered documents.
++   *
++   * @param url                    The given URL.
++   * @param authOptions            The given authentication values for all the chain to resolve.
++   * @param documentRegistryParam  Pre-registered external documents (URL → JsonNode).
++   * @param validate               {@code true} for validation, {@code false} otherwise.
++   */
++  public abstract O parse(URL url, List<AuthOption> authOptions, Map<URL, JsonNode> documentRegistryParam, boolean validate) throws ResolutionException, ValidationException;
+ }

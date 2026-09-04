@@ -1,0 +1,27 @@
+Implementa il discriminator-shortcut OAS in BodyValidator quando lo schema usa 'oneOf'/'anyOf' + 'discriminator'.
+
+PROBLEMA
+Il 'discriminator' è una feature OAS-specific (non parte di JSON Schema 2020-12). Kappa parsa il Discriminator nel modello (Schema.getDiscriminator) ma non lo usa durante la validazione: la composizione 'oneOf'/'anyOf' viene delegata a json-sKema come JSON Schema puro, che richiede l'unicità del match. Con schemi che derivano da un parent comune e non vietano proprietà extra, più subschema possono matchare contemporaneamente, generando errori come "expected 1 subschema to match out of 2, 2 matched" anche su body legittimi.
+
+SOLUZIONE
+In BodyValidator.validate, prima della delegazione a SKemaBackedJsonValidator, viene chiamato dispatchDiscriminator(body). Il metodo:
+  - dereferenzia lo schema del mediaType se è un $ref (vedi resolveRef);
+  - verifica che lo schema abbia 'discriminator.propertyName' e una 'oneOf'/'anyOf' non vuota;
+  - estrae dal body il valore della property indicata (sia da JsonNode che da IJsonValue/IJsonObject di json-sKema);
+  - risolve il subschema target:
+      * explicit: discriminator.mapping[value] -> $ref esatto;
+      * implicit: $ref tra i subschema che termina con il valore (es. '#/components/schemas/Cat' per valore 'Cat');
+  - se trovato, costruisce un nuovo SKemaBackedJsonValidator sul solo subschema target e ritorna quello; altrimenti ritorna null e il flow prosegue con il validator originale (composizione completa).
+Comportamento allineato a openapi4j (1.0.7) DiscriminatorValidator per i casi 'oneOf'/'anyOf'.
+
+La dereferenza del $ref usa tre strategie a cascata:
+  - Schema.getReference(OAIContext): API standard di kappa via ReferenceRegistry;
+  - ReferenceRegistry.getRef(baseUrl, ref): fallback quando il canonicalRef non è popolato;
+  - lookup diretto via JSON Pointer su OAI3Context.getBaseDocument() + TreeUtil.json.treeToValue(node, Schema.class):
+    fallback ultimo, necessario perché kappa non popola il registry per tutti i $ref interni alla spec
+    (alcuni schemi referenziati solo dai mediaType di request/response non vengono registrati).
+
+Nota: il caso 'allOf' + discriminator (parent-schema che riferisce sub-schema via discriminator) NON è gestito da questa patch; tipicamente lo si modella già con 'oneOf'/'anyOf'.
+
+File modificati:
+  - src/main/java/com/github/erosb/kappa/operation/validator/validation/BodyValidator.java

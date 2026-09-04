@@ -1,0 +1,24 @@
+Aggiunge il supporto al parsing dello schema booleano per il keyword 'items'.
+
+JSON Schema 2020-12 e OpenAPI 3.1 ammettono come valore di 'items' un oggetto schema o un booleano (true/false). 'items: false' significa "nessun ulteriore elemento ammesso" (tipicamente in combinazione con 'prefixItems'); 'items: true' è equivalente a uno schema vuoto. Il modello Schema.java di kappa modellava il campo come 'private Schema itemsSchema' e Jackson, su un valore booleano, falliva la deserializzazione.
+
+SOLUZIONE
+Si replica il pattern già usato per 'additionalProperties':
+  - Il campo 'itemsSchema' ora è @JsonIgnore.
+  - Aggiunto il campo 'itemsAllowed' (Boolean) @JsonIgnore.
+  - Setter 'setMappedItems(JsonNode)' annotato @JsonProperty("items", WRITE_ONLY) che distingue il valore boolean dal valore object.
+  - Getter 'getMappedItems()' annotato @JsonProperty("items", READ_ONLY) che riserializza nella forma corretta.
+  - Setter pubblici dedicati: setItemsSchema(Schema) e setItemsAllowed(Boolean) si invalidano a vicenda.
+  - copyContent() propaga itemsAllowed quando itemsSchema è null.
+
+Roundtrip verificato su:
+  items: false                                → itemsAllowed=false
+  items: true                                 → itemsAllowed=true
+  items: {type: string}                       → itemsSchema valorizzato
+  prefixItems: [...] + items: false            → entrambi preservati
+
+NOTA
+Il keyword 'prefixItems' (JSON Schema 2020-12) non ha al momento un campo dedicato nel POJO Schema.java; viene comunque preservato nella serializzazione round-trip ma non viene esposto via getter Java né validato dal pipeline (limite separato del modello kappa, non oggetto di questa patch).
+
+File modificati:
+  - src/main/java/com/github/erosb/kappa/parser/model/v3/Schema.java

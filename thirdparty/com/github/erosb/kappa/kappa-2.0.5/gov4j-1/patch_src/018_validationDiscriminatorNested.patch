@@ -1,0 +1,406 @@
+--- src/main/java/com/github/erosb/kappa/operation/validator/validation/BodyValidator.java
++++ src/main/java/com/github/erosb/kappa/operation/validator/validation/BodyValidator.java
+@@ -59,11 +59,20 @@
+         // path json: parsing tramite json-sKema (IJsonValue), invariato rispetto a upstream
+         IJsonValue jsonBody = body.contentAsNode(rawContentType, uriFactory.httpEntity());
+         if (!skipSchemaValidation) {
+-          SKemaBackedJsonValidator dispatched = dispatchDiscriminator(jsonBody);
+-          if (dispatched != null) {
+-            dispatched.validate(jsonBody, validation);
+-          } else {
+-            validator.validate(jsonBody, validation);
++          // Pre-check discriminator (top-level + nested): se un valore di discriminator non è
++          // associabile a nessun subschema, viene emessa una failure esplicita e la validazione
++          // standard di schema viene saltata. Allineato a openapi4j (DiscriminatorValidator). Il
++          // count dei results delta consente di distinguere i nuovi failure di discriminator da
++          // failure pre-esistenti su altri elementi (es. parameters) nella stessa ValidationData.
++          int beforeDiscr = validation.results().size();
++          validateAllDiscriminators(mediaType.getSchema(), jsonBody, validation);
++          if (validation.results().size() == beforeDiscr) {
++            SKemaBackedJsonValidator dispatched = dispatchDiscriminator(jsonBody);
++            if (dispatched != null) {
++              dispatched.validate(jsonBody, validation);
++            } else {
++              validator.validate(jsonBody, validation);
++            }
+           }
+         }
+       } else {
+@@ -73,11 +82,15 @@
+         // passato all'overload validate(JsonNode, URI, ValidationData) di SKemaBackedJsonValidator.
+         JsonNode bridged = body.getContentAsNode(context.getContext(), mediaType, rawContentType);
+         if (!skipSchemaValidation) {
+-          SKemaBackedJsonValidator dispatched = dispatchDiscriminator(bridged);
+-          if (dispatched != null) {
+-            dispatched.validate(bridged, uriFactory.httpEntity(), validation);
+-          } else {
+-            validator.validate(bridged, uriFactory.httpEntity(), validation);
++          int beforeDiscr = validation.results().size();
++          validateAllDiscriminators(mediaType.getSchema(), bridged, validation);
++          if (validation.results().size() == beforeDiscr) {
++            SKemaBackedJsonValidator dispatched = dispatchDiscriminator(bridged);
++            if (dispatched != null) {
++              dispatched.validate(bridged, uriFactory.httpEntity(), validation);
++            } else {
++              validator.validate(bridged, uriFactory.httpEntity(), validation);
++            }
+           }
+         }
+       }
+@@ -229,4 +242,335 @@
+     }
+     return null;
+   }
++
++  /**
++   * Walking ricorsivo dello schema parallelamente al body per intercettare violazioni del
++   * discriminator a qualunque livello di annidamento. Per ogni sub-schema con
++   * {@code oneOf}/{@code anyOf} + {@code discriminator}, estrae il valore del discriminator dal
++   * corrispondente sotto-albero del body e verifica che sia mappato. Se non mappato, aggiunge una
++   * {@link OpenApiValidationFailure.RequestBodyValidationFailure} con wording allineato a openapi4j.
++   *
++   * <p>Per gli schemi nested inline lo Schema POJO non popola i field tradizionali
++   * ({@code discriminator}/{@code oneOfSchemas}): l'informazione viene allora estratta dal bridge
++   * {@code skema} (json-sKema {@link com.github.erosb.jsonsKema.CompositeSchema}).</p>
++   */
++  private void validateAllDiscriminators(Schema schema, Object body, ValidationData<?> validation) {
++    if (schema == null || body == null) {
++      return;
++    }
++    walkDiscriminators(schema, body, validation, new java.util.IdentityHashMap<>(), "");
++  }
++
++  /**
++   * @param path dot-path corrente nel body, concatenato al prefisso {@code body} nel messaggio
++   *             (vuoto al root, es. {@code "allegati.0.documento"} dopo aver attraversato
++   *             {@code properties.allegati} + {@code items[0]} + {@code properties.documento}).
++   */
++  private void walkDiscriminators(Schema schema, Object body, ValidationData<?> validation,
++                                  java.util.IdentityHashMap<Schema, Boolean> visited,
++                                  String path) {
++    schema = resolveRef(schema);
++    if (schema == null || visited.containsKey(schema)) {
++      return;
++    }
++    visited.put(schema, Boolean.TRUE);
++
++    // 1) Discriminator sul nodo corrente
++    // Lo Schema POJO popola 'discriminator' + 'oneOfSchemas' solo per schemi top-level o
++    // referenziati ($ref) deserializzati da Jackson convertValue. Per i sotto-schemi nested inline
++    // (es. 'metadati.pet' definito inline in un body multipart) lo Schema viene costruito via
++    // {@code new Schema(skema)} dal visitor di {@link Schema#getProperties()}: i field
++    // tradizionali restano vuoti e l'info finisce dentro {@code skema} (CompositeSchema), con il
++    // discriminator in {@code unprocessedProperties["discriminator"]} e gli alternative come
++    // sub-istanze {@link com.github.erosb.jsonsKema.OneOfSchema}/{@link com.github.erosb.jsonsKema.AnyOfSchema}.
++    Discriminator discriminator = schema.getDiscriminator();
++    List<Schema> alternatives = schema.getOneOfSchemas();
++    if (alternatives == null || alternatives.isEmpty()) {
++      alternatives = schema.getAnyOfSchemas();
++    }
++    java.util.List<com.github.erosb.jsonsKema.Schema> bridgeAlternatives = null;
++    if ((discriminator == null || discriminator.getPropertyName() == null)
++        || alternatives == null || alternatives.isEmpty()) {
++      DiscriminatorFromBridge fromBridge = extractDiscriminatorFromSkema(schema);
++      if (fromBridge != null) {
++        if (discriminator == null || discriminator.getPropertyName() == null) {
++          discriminator = fromBridge.discriminator;
++        }
++        if (alternatives == null || alternatives.isEmpty()) {
++          bridgeAlternatives = fromBridge.alternatives;
++        }
++      }
++    }
++    // Il discriminator è meaningful solo accoppiato a oneOf/anyOf. Per schemi con discriminator
++    // SENZA composizione (es. Pet OAS 3.0 parent allOf-based), saltiamo silenziosamente: la
++    // composizione effettiva è dichiarata dai sub-schemi figli che lo referenziano via allOf,
++    // e l'eventuale violation verrà segnalata dalla validazione di schema standard.
++    boolean hasAlternativesPojo = (alternatives != null && !alternatives.isEmpty());
++    boolean hasAlternativesBridge = (bridgeAlternatives != null && !bridgeAlternatives.isEmpty());
++    if (discriminator != null && discriminator.getPropertyName() != null
++        && (hasAlternativesPojo || hasAlternativesBridge)) {
++      String value = extractDiscriminatorValue(body, discriminator.getPropertyName());
++      if (value != null) {
++        boolean targetFound;
++        Schema targetPojo = null;
++        if (hasAlternativesPojo) {
++          targetPojo = findTargetSchema(alternatives, discriminator.getMapping(), value);
++          targetFound = (targetPojo != null);
++        } else {
++          targetFound = findTargetRefInBridge(bridgeAlternatives, discriminator.getMapping(), value);
++        }
++        if (!targetFound) {
++          String prefix = path.isEmpty() ? "body" : ("body." + path);
++          String message = prefix + ": Schema selection can't be made for discriminator '"
++              + discriminator.getPropertyName() + "' with value '" + value + "'.";
++          validation.add(new OpenApiValidationFailure.RequestBodyValidationFailure(
++              message, uriFactory.definitionHttpEntity()));
++          return;
++        }
++        // proseguiamo il walking sul subschema target risolto (per intercettare discriminator
++        // ulteriormente annidati all'interno del target stesso). Per il caso skema-bridge non
++        // abbiamo Schema POJO target -> il walking si ferma qui (json-sKema farà la sua
++        // validazione standard sul subschema corretto).
++        if (targetPojo != null) {
++          walkDiscriminators(targetPojo, body, validation, visited, path);
++        }
++      }
++    }
++
++    // 2) Walk in properties (oggetto schema)
++    Map<String, Schema> properties = schema.getProperties();
++    if (properties != null && !properties.isEmpty()) {
++      for (Map.Entry<String, Schema> e : properties.entrySet()) {
++        Object childBody = getProperty(body, e.getKey());
++        if (childBody != null) {
++          String childPath = path.isEmpty() ? e.getKey() : (path + "." + e.getKey());
++          walkDiscriminators(e.getValue(), childBody, validation, visited, childPath);
++        }
++      }
++    }
++
++    // 3) Walk in items (array schema)
++    Schema itemsSchema = schema.getItemsSchema();
++    if (itemsSchema != null) {
++      int size = arraySize(body);
++      for (int i = 0; i < size; i++) {
++        Object child = arrayElement(body, i);
++        if (child != null) {
++          String childPath = path.isEmpty() ? String.valueOf(i) : (path + "." + i);
++          walkDiscriminators(itemsSchema, child, validation, visited, childPath);
++        }
++      }
++    }
++
++    // 4) Walk in allOf (composizione: tutti i sotto-schema applicano allo stesso body)
++    List<Schema> allOf = schema.getAllOfSchemas();
++    if (allOf != null) {
++      for (Schema sub : allOf) {
++        walkDiscriminators(sub, body, validation, visited, path);
++      }
++    }
++  }
++
++  private static Object getProperty(Object body, String name) {
++    if (body instanceof JsonNode) {
++      JsonNode jn = (JsonNode) body;
++      if (!jn.isObject()) {
++        return null;
++      }
++      JsonNode v = jn.get(name);
++      return (v != null && !v.isMissingNode() && !v.isNull()) ? v : null;
++    }
++    if (body instanceof com.github.erosb.jsonsKema.IJsonObject) {
++      com.github.erosb.jsonsKema.IJsonObject<?, ?> jo = (com.github.erosb.jsonsKema.IJsonObject<?, ?>) body;
++      return jo.get(name);
++    }
++    return null;
++  }
++
++  private static int arraySize(Object body) {
++    if (body instanceof JsonNode) {
++      JsonNode jn = (JsonNode) body;
++      return jn.isArray() ? jn.size() : 0;
++    }
++    if (body instanceof com.github.erosb.jsonsKema.IJsonArray) {
++      return ((com.github.erosb.jsonsKema.IJsonArray<?>) body).length();
++    }
++    return 0;
++  }
++
++  private static Object arrayElement(Object body, int index) {
++    if (body instanceof JsonNode) {
++      JsonNode jn = (JsonNode) body;
++      return jn.isArray() ? jn.get(index) : null;
++    }
++    if (body instanceof com.github.erosb.jsonsKema.IJsonArray) {
++      return ((com.github.erosb.jsonsKema.IJsonArray<?>) body).get(index);
++    }
++    return null;
++  }
++
++  /**
++   * Coppia {@code (discriminator, alternativeRefs)} estratta da un
++   * {@link com.github.erosb.jsonsKema.CompositeSchema} quando lo Schema POJO non popola i field
++   * tradizionali (caso degli schemi inline nested). Gli alternative sono espressi come liste di
++   * stringhe {@code $ref} (es. {@code "#/components/schemas/Cat2"}) perché il setter
++   * {@code Schema.setRef} non è accessibile dal nostro package.
++   */
++  private static final class DiscriminatorFromBridge {
++    final Discriminator discriminator;
++    final java.util.List<com.github.erosb.jsonsKema.Schema> alternatives;
++
++    DiscriminatorFromBridge(Discriminator discriminator, java.util.List<com.github.erosb.jsonsKema.Schema> alternatives) {
++      this.discriminator = discriminator;
++      this.alternatives = alternatives;
++    }
++  }
++
++  /**
++   * Cerca {@code discriminator}/{@code oneOf}/{@code anyOf} dentro il bridge {@code skema}
++   * (json-sKema) associato a uno Schema POJO. Necessario per schemi inline nested dove i field
++   * tradizionali non sono popolati. Ritorna {@code null} se {@code skema} non è un CompositeSchema
++   * oppure se non contiene né un discriminator né un oneOf/anyOf.
++   */
++  private static DiscriminatorFromBridge extractDiscriminatorFromSkema(Schema schema) {
++    if (schema == null) {
++      return null;
++    }
++    com.github.erosb.jsonsKema.Schema sk = schema.getSkema();
++    if (!(sk instanceof com.github.erosb.jsonsKema.CompositeSchema)) {
++      return null;
++    }
++    com.github.erosb.jsonsKema.CompositeSchema composite = (com.github.erosb.jsonsKema.CompositeSchema) sk;
++
++    Discriminator discriminator = null;
++    Map<com.github.erosb.jsonsKema.IJsonString, com.github.erosb.jsonsKema.IJsonValue> unprocessed = composite.getUnprocessedProperties();
++    if (unprocessed != null) {
++      for (Map.Entry<com.github.erosb.jsonsKema.IJsonString, com.github.erosb.jsonsKema.IJsonValue> e : unprocessed.entrySet()) {
++        if ("discriminator".equals(e.getKey().getValue())) {
++          discriminator = buildDiscriminatorFromJsonValue(e.getValue());
++          break;
++        }
++      }
++    }
++
++    java.util.List<com.github.erosb.jsonsKema.Schema> alternatives = null;
++    java.util.Set<com.github.erosb.jsonsKema.Schema> subs = composite.getSubschemas();
++    if (subs != null) {
++      for (com.github.erosb.jsonsKema.Schema sub : subs) {
++        java.util.List<com.github.erosb.jsonsKema.Schema> candidates = null;
++        if (sub instanceof com.github.erosb.jsonsKema.OneOfSchema) {
++          candidates = ((com.github.erosb.jsonsKema.OneOfSchema) sub).getSubschemas();
++        } else if (sub instanceof com.github.erosb.jsonsKema.AnyOfSchema) {
++          candidates = ((com.github.erosb.jsonsKema.AnyOfSchema) sub).getSubschemas();
++        }
++        if (candidates != null && !candidates.isEmpty()) {
++          alternatives = new java.util.ArrayList<>(candidates);
++          break;
++        }
++      }
++    }
++
++    if (discriminator == null && (alternatives == null || alternatives.isEmpty())) {
++      return null;
++    }
++    return new DiscriminatorFromBridge(discriminator, alternatives);
++  }
++
++  /**
++   * Estrae il nome "implicito" di uno schema referenziato via {@code $ref}, deducendolo
++   * dall'ultimo segmento del {@link com.github.erosb.jsonsKema.SourceLocation#getPointer()}.
++   * Per uno schema raggiunto via {@code $ref: "#/components/schemas/Cat2"} ritorna {@code "Cat2"}.
++   * Necessario perché json-sKema risolve i {@code $ref} durante il parsing producendo direttamente
++   * gli schema target (es. {@link com.github.erosb.jsonsKema.CompositeSchema}) anziché
++   * {@link com.github.erosb.jsonsKema.ReferenceSchema}: l'unica traccia del nome originale è il pointer.
++   */
++  private static String extractImplicitName(com.github.erosb.jsonsKema.Schema sk) {
++    if (sk == null) return null;
++    try {
++      com.github.erosb.jsonsKema.SourceLocation loc = sk.getLocation();
++      if (loc == null) return null;
++      Object pointer = loc.getPointer();
++      if (pointer == null) return null;
++      String s = pointer.toString();
++      if (s == null || s.isEmpty()) return null;
++      int slash = s.lastIndexOf('/');
++      return (slash >= 0 && slash < s.length() - 1) ? s.substring(slash + 1) : s;
++    } catch (Exception e) {
++      return null;
++    }
++  }
++
++  /**
++   * Variante di {@link #findTargetSchema(List, Map, String)} per il caso skema-bridge.
++   *
++   * <p>json-sKema risolve i {@code $ref} durante il parsing producendo direttamente gli schema
++   * target (tipicamente {@link com.github.erosb.jsonsKema.CompositeSchema}); per individuare il
++   * target del discriminator usiamo due strategie complementari:</p>
++   *
++   * <ul>
++   *   <li><b>explicit mapping</b> ({@code mapping} non-vuoto): è sufficiente verificare che
++   *       {@code discriminatorValue} sia tra le chiavi del {@code mapping}. Se lo è, json-sKema
++   *       valuterà comunque il subschema corretto durante la validazione standard e qui basta
++   *       confermare che la mappatura del valore esista. Se non lo è, il valore non è associato
++   *       a nessun subschema -&gt; violation.</li>
++   *   <li><b>implicit</b> (senza {@code mapping}): confrontiamo {@code discriminatorValue} con
++   *       il nome "implicito" di ciascun alternative, estratto dall'ultimo segmento del
++   *       {@link com.github.erosb.jsonsKema.SourceLocation#getPointer() pointer}
++   *       (es. {@code "#/components/schemas/Cat"} -&gt; {@code "Cat"}). Per le schema risolte
++   *       inline il nome è {@code null} e si lascia il dubbio a json-sKema (return true).</li>
++   * </ul>
++   */
++  private static boolean findTargetRefInBridge(java.util.List<com.github.erosb.jsonsKema.Schema> alternatives,
++                                               Map<String, String> mapping,
++                                               String discriminatorValue) {
++    if (mapping != null && !mapping.isEmpty()) {
++      return mapping.containsKey(discriminatorValue);
++    }
++    boolean anyInlineCandidate = false;
++    for (com.github.erosb.jsonsKema.Schema alt : alternatives) {
++      String name = extractImplicitName(alt);
++      if (name == null) {
++        anyInlineCandidate = true;
++        continue;
++      }
++      if (name.equals(discriminatorValue)) {
++        return true;
++      }
++    }
++    return anyInlineCandidate;
++  }
++
++  /**
++   * Costruisce un {@link Discriminator} kappa da un valore json-sKema {@code IJsonObject} estratto
++   * da {@code unprocessedProperties["discriminator"]}. Tollera assenze di {@code propertyName} e
++   * {@code mapping}.
++   */
++  private static Discriminator buildDiscriminatorFromJsonValue(com.github.erosb.jsonsKema.IJsonValue value) {
++    if (!(value instanceof com.github.erosb.jsonsKema.IJsonObject)) {
++      return null;
++    }
++    com.github.erosb.jsonsKema.IJsonObject<?, ?> obj = (com.github.erosb.jsonsKema.IJsonObject<?, ?>) value;
++    Discriminator d = new Discriminator();
++    Object propName = obj.get("propertyName");
++    if (propName instanceof com.github.erosb.jsonsKema.IJsonString) {
++      d.setPropertyName(((com.github.erosb.jsonsKema.IJsonString) propName).getValue());
++    }
++    Object mapping = obj.get("mapping");
++    if (mapping instanceof com.github.erosb.jsonsKema.IJsonObject) {
++      com.github.erosb.jsonsKema.IJsonObject<?, ?> mapObj = (com.github.erosb.jsonsKema.IJsonObject<?, ?>) mapping;
++      java.util.Map<String, String> javaMap = new java.util.LinkedHashMap<>();
++      for (Map.Entry<?, ?> me : mapObj.getProperties().entrySet()) {
++        Object k = me.getKey();
++        Object v = me.getValue();
++        String keyStr = (k instanceof com.github.erosb.jsonsKema.IJsonString)
++            ? ((com.github.erosb.jsonsKema.IJsonString) k).getValue() : String.valueOf(k);
++        String valStr = (v instanceof com.github.erosb.jsonsKema.IJsonString)
++            ? ((com.github.erosb.jsonsKema.IJsonString) v).getValue() : String.valueOf(v);
++        javaMap.put(keyStr, valStr);
++      }
++      d.setMapping(javaMap);
++    }
++    return d;
++  }
++
+ }
+--- src/main/java/com/github/erosb/kappa/parser/model/v3/Schema.java
++++ src/main/java/com/github/erosb/kappa/parser/model/v3/Schema.java
+@@ -94,6 +94,18 @@
+     this.skema = skema;
+   }
+ 
++  /**
++   * Espone il json-sKema interno bridge usato dalla patch {@code SKemaBackedJsonValidator}.
++   * Utilizzato da downstream (BodyValidator.walkDiscriminators) per recuperare
++   * {@code oneOf}/{@code anyOf}/{@code discriminator} sui sotto-schemi nested inline, che non
++   * vengono popolati nei field POJO tradizionali quando lo schema viene costruito via
++   * {@link CompositeSchema} bridge.
++   */
++  @JsonIgnore
++  public com.github.erosb.jsonsKema.Schema getSkema() {
++    return this.skema;
++  }
++
+   // Title
+   public String getTitle() {
+     return title;

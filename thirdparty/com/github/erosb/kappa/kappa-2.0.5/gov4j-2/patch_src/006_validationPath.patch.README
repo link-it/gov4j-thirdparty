@@ -1,0 +1,17 @@
+Aggiunto supporto per validare path parameters URL-encoded.
+
+PROBLEMA
+URI.getPath() restituisce il path già decodificato. Se l'URL contiene un parametro di path con sequenze percent-encoded che, una volta decodificate, contengono '/' o altri delimitatori (es. /pets/abc%2Fdef → /pets/abc/def), la pipeline di matching non riusciva più a riconoscere il segmento corretto e di conseguenza il valore del parametro veniva estratto in modo errato.
+
+SOLUZIONE
+- DefaultRequest espone, oltre a getPath() (decodificato), anche getRawPath() che mantiene la forma percent-encoded.
+- OperationValidator.validatePath() utilizza la rawPath quando presente per il matching contro il path pattern.
+- ParameterConverter.pathToNode() effettua la decodifica esplicita del valore estratto dal matcher (URLDecoder UTF-8). Il '+' viene preservato come carattere letterale (in path component non rappresenta uno spazio).
+
+NOTA
+Rispetto alla patch 009 originale di openapi4j non è stata aggiunta la dipendenza da Spring (UriUtils): la decodifica usa java.net.URLDecoder.
+
+File modificati:
+  - src/main/java/com/github/erosb/kappa/operation/validator/model/impl/DefaultRequest.java
+  - src/main/java/com/github/erosb/kappa/operation/validator/util/convert/ParameterConverter.java
+  - src/main/java/com/github/erosb/kappa/operation/validator/validation/OperationValidator.java

@@ -1,0 +1,8 @@
+Risolto NullPointerException nella gestione dei messaggi XML quando il content node è null.
+
+Si è intervenuti solamente nel modulo 'operation-validator'.
+
+Porting della patch 003 di openapi4j (1.0.7) per kappa 2.0.5.
+File modificati:
+  - src/main/java/com/github/erosb/kappa/operation/validator/util/convert/XmlConverter.java
+    (null-check su content nei metodi privati unwrap() e getRenamedNode())

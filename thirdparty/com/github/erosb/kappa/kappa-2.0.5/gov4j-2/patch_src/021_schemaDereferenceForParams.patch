@@ -1,0 +1,114 @@
+--- src/main/java/com/github/erosb/kappa/parser/model/v3/Schema.java
++++ src/main/java/com/github/erosb/kappa/parser/model/v3/Schema.java
+@@ -411,6 +411,49 @@
+     return result;
+   }
+ 
++  /**
++   * Dereferenzia uno schema {@code $ref} top-level cercando, nell'ordine: il registry kappa
++   * ({@link com.github.erosb.kappa.core.model.v3.OAI3Context#getReferenceRegistry()}) tramite il
++   * canonical/ref dichiarato, e in fallback un lookup JSON-pointer diretto sul baseDocument.
++   * Se lo schema non e' un {@code $ref}, oppure il ref non risolve, ritorna {@code this}.
++   *
++   * <p>Necessario quando lo Schema POJO ha solo il campo {@code ref} valorizzato e
++   * {@code properties}/{@code types}/etc. sono {@code null}: tipicamente accade per parametri
++   * dichiarati come {@code schema: { $ref: '#/components/schemas/X' }}. I caller che accedono
++   * a {@code getProperties()}/{@code getProperty()} devono dereferenziare prima per evitare
++   * NPE o falsi negativi ("Missing required parameter X" sui parametri object con explode=true
++   * e su {@code style: deepObject}).</p>
++   */
++  public Schema dereference(OAIContext context) {
++    if (!isRef()) {
++      return this;
++    }
++    if (!(context instanceof com.github.erosb.kappa.core.model.v3.OAI3Context)) {
++      return this;
++    }
++    com.github.erosb.kappa.core.model.v3.OAI3Context ctx = (com.github.erosb.kappa.core.model.v3.OAI3Context) context;
++    try {
++      com.github.erosb.kappa.core.model.reference.Reference ref = getReference(ctx);
++      if (ref == null) {
++        ref = ctx.getReferenceRegistry().getRef(ctx.getBaseUrl(), getRef());
++      }
++      Schema resolved = (ref != null) ? ref.getMappedContent(Schema.class) : null;
++      if (resolved == null) {
++        String r = getRef();
++        if (r != null && r.startsWith("#")) {
++          JsonNode baseDoc = ctx.getBaseDocument();
++          JsonNode node = (baseDoc != null) ? baseDoc.at(r.substring(1)) : null;
++          if (node != null && !node.isMissingNode()) {
++            resolved = TreeUtil.json.treeToValue(node, Schema.class);
++          }
++        }
++      }
++      return resolved != null ? resolved : this;
++    } catch (Exception e) {
++      return this;
++    }
++  }
++
+   public com.github.erosb.jsonsKema.Schema initSkema(OAIContext context) {
+     if (skema == null) {
+       try {
+--- src/main/java/com/github/erosb/kappa/operation/validator/util/convert/style/FormStyleConverter.java
++++ src/main/java/com/github/erosb/kappa/operation/validator/util/convert/style/FormStyleConverter.java
+@@ -142,7 +142,15 @@
+   private JsonNode getExplodedObjectValues(OAIContext context, AbsParameter<?> param, MultiStringMap<String> values, List<String> visitedParams) {
+     ObjectNode result = JsonNodeFactory.instance.objectNode();
+ 
+-    for (Map.Entry<String, Schema> propEntry : param.getSchema().getProperties().entrySet()) {
++    // Dereferenzia eventuale $ref top-level del paramSchema: 'schema: { $ref: ... }' lascia il POJO
++    // con solo 'ref' valorizzato e properties=null, facendo fallire l'iterazione qui sotto
++    // ("Missing required parameter X" sui body con explode=true).
++    Schema schema = param.getSchema().dereference(context);
++    Map<String, Schema> properties = schema.getProperties();
++    if (properties == null) {
++      return null;
++    }
++    for (Map.Entry<String, Schema> propEntry : properties.entrySet()) {
+       String propName = propEntry.getKey();
+       Collection<String> paramValues = values.get(propName);
+ 
+@@ -176,12 +184,14 @@
+ 
+     ObjectNode result = JsonNodeFactory.instance.objectNode();
+ 
++    // Dereferenzia eventuale $ref top-level: vedi nota in getExplodedObjectValues.
++    Schema schema = param.getSchema().dereference(context);
+     List<String> arrayValues = StringUtil.tokenize(value, ",", false, false);
+     int idx = 0;
+     while (idx < arrayValues.size()) {
+       String propName = arrayValues.get(idx++);
+       String propValue = arrayValues.get(idx++);
+-      Schema propSchema = param.getSchema().getProperty(propName);
++      Schema propSchema = (schema.getProperties() != null) ? schema.getProperty(propName) : null;
+ 
+       result.set(propName, TypeConverter.instance().convertPrimitive(context, propSchema, propValue));
+     }
+--- src/main/java/com/github/erosb/kappa/operation/validator/util/convert/style/DeepObjectStyleConverter.java
++++ src/main/java/com/github/erosb/kappa/operation/validator/util/convert/style/DeepObjectStyleConverter.java
+@@ -32,7 +32,11 @@
+                           List<String> visitedParams) {
+ 
+     ObjectNode result = JsonNodeFactory.instance.objectNode();
+-    Schema propSchema = param.getSchema();
++    // Dereferenzia eventuale $ref top-level del paramSchema. Senza questo, 'schema: { $ref: ... }'
++    // (caso comune con schemi factorizzati in components/schemas) lascia il POJO con solo 'ref'
++    // valorizzato e properties=null, facendo ritornare propSchema.getProperty(propName)=null e
++    // generando "Missing required parameter X" o "expected type" inattesi su input legittimi.
++    Schema propSchema = param.getSchema().dereference(context);
+     String type = propSchema.getSupposedType(context);
+ 
+     for (Map.Entry<String, Collection<String>> valueEntry : paramPairs.entrySet()) {
+@@ -45,9 +49,10 @@
+           String propName = properties.get(1);
+ 
+           // Convert value or get string representation
++          Schema childSchema = (propSchema.getProperties() != null) ? propSchema.getProperty(propName) : null;
+           JsonNode value = TypeConverter.instance().convertPrimitive(
+             context,
+-            propSchema.getProperty(propName),
++            childSchema,
+             valueEntry.getValue().stream().findFirst().orElse(null));
+ 
+           result.set(propName, value);
