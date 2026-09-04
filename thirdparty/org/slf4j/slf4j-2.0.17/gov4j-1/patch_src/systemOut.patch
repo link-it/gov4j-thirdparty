@@ -1,0 +1,56 @@
+diff -urN slf4j-v_2.0.17/slf4j-api/pom.xml slf4j-v_2.0.17/slf4j-api/pom.xml
+--- slf4j-v_2.0.17/slf4j-api/pom.xml	2024-09-02 14:23:33.339977457 +0200
++++ slf4j-v_2.0.17/slf4j-api/pom.xml	2024-09-02 14:24:18.545480853 +0200
+@@ -23,6 +23,19 @@
+     <module-name>org.slf4j</module-name>
+   </properties>
+ 
++  <dependencies>
++     <dependency>
++       <groupId>org.apache.logging.log4j</groupId>
++       <artifactId>log4j-1.2-api</artifactId>
++       <version>2.23.1</version>
++     </dependency>
++     <dependency>
++       <groupId>org.apache.logging.log4j</groupId>
++       <artifactId>log4j-core</artifactId>
++       <version>2.23.1</version>
++     </dependency>
++ </dependencies>
++
+   <build>
+     <plugins>
+       <plugin>
+diff -urN slf4j-v_2.0.17/slf4j-api/src/main/java/org/slf4j/helpers/Util.java slf4j-v_2.0.17/slf4j-api/src/main/java/org/slf4j/helpers/Util.java
+--- slf4j-v_2.0.17/slf4j-api/src/main/java/org/slf4j/helpers/Util.java	2024-09-02 14:23:33.341977480 +0200
++++ slf4j-v_2.0.17/slf4j-api/src/main/java/org/slf4j/helpers/Util.java	2024-09-02 14:26:27.240913964 +0200
+@@ -117,6 +117,8 @@
+         return trace[i + 2];
+     }
+ 
++    private static org.apache.log4j.Logger log = org.apache.log4j.Logger.getLogger(Util.class);
++
+     /**
+      * See  {@link Reporter#error(String, Throwable)} class for alternative.
+      *
+@@ -125,9 +127,8 @@
+      * @param t throwable to print
+      */
+     static final public void report(String msg, Throwable t) {
+-        System.err.println(msg);
+-        System.err.println("Reported exception:");
+-        t.printStackTrace();
++        log.info(msg);
++        log.info("Reported exception: "+t.getMessage(),t);
+     }
+ 
+     /**
+@@ -138,7 +139,7 @@
+      * @param msg message to print
+      */
+     static final public void report(String msg) {
+-        System.err.println("SLF4J: " + msg);
++        log.info("SLF4J: " +msg);
+     }
+ 
+ }

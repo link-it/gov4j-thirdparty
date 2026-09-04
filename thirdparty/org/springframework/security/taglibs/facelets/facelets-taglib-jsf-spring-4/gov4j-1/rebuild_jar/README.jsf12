@@ -1,0 +1,185 @@
+Readme per la versione JSF 12 e Spring 4 
+
+Il progetto originale rende possibile utilizzare all'interno del codice JSF le funzionalita' di spring-security attraverso la realizzazione di una taglib.
+Per realizzare l'integrazione con spring-4, si e' dovuto estendere il progetto presistente che forniva supporto per le versioni spring-2/3 e jsf12/20. 
+
+Eseguire le seguenti istruzioni:
+
+1) vi pom.xml :
+
+- modificare l'artifactId da
+
+	<artifactId>facelets-taglib-jsf12-spring-3</artifactId>
+
+a
+
+	<artifactId>facelets-taglib-jsf12-spring-4</artifactId>
+
+- modificare la descrizione del progetto da
+
+	<name>Spring Security + JSF/Facelets Tag Library: JSF 1.2 + Spring 3</name>
+
+a 
+	
+	<name>Spring Security + JSF/Facelets Tag Library: JSF 1.2 + Spring 4</name>
+
+- modificare le seguenti dipendenze da
+
+	<dependency>
+          <groupId>org.springframework.security</groupId>
+          <artifactId>org.springframework.security.core</artifactId>
+          <version>${spring-security-3-version}</version>
+          <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>org.springframework.security.web</artifactId>
+            <version>${spring-security-3-version}</version>
+            <scope>test</scope>
+        </dependency>
+
+a 
+
+        <dependency>
+          <groupId>org.springframework.security</groupId>
+          <artifactId>spring-security-core</artifactId>
+          <version>${spring-security-4-version}</version>
+          <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-web</artifactId>
+            <version>${spring-security-4-version}</version>
+            <scope>test</scope>
+        </dependency>
+	
+- modificare le seguenti dipendenze da:
+
+	<dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-test</artifactId>
+            <version>${spring-3-version}</version>
+            <scope>test</scope>
+        </dependency>
+
+a:
+
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-test</artifactId>
+            <version>${spring-4-version}</version>
+            <scope>test</scope>
+        </dependency>
+
+- aggiungere il plugin per la compilazione con Java7:
+
+...
+    <build>
+      <plugins>
+	
+	<!-- Inserire come primo plugin -->
+	<plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>1.7</source>
+                    <target>1.7</target>
+                    <encoding>UTF-8</encoding>                    
+                </configuration>
+            </plugin>
+
+...
+
+- aggiungere i repository mvn per jboss:
+...
+    </build>
+
+	<!-- Inserire alla fine del tag build -->
+	<repositories>
+                <repository>
+                        <id>jboss-releases</id>
+                        <url>https://repository.jboss.org/nexus/content/repositories/releases/</url>
+                </repository>
+                <repository>
+                        <id>jboss-thirdparty-releases</id>
+                        <url>https://repository.jboss.org/nexus/content/repositories/thirdparty-releases/</url>
+                </repository>
+	
+	</repositories>
+...
+
+2) vi src/main/java/org/springframework/security/taglibs/facelets/SpringSecurityELLibrary.java
+
+nel metodo "private static GrantedAuthority[] getUserAuthorities()" modificare la riga:
+
+	Collection<GrantedAuthority> authorities = currentUser.getAuthorities();
+
+in:
+
+	Collection<? extends GrantedAuthority> authorities = currentUser.getAuthorities();
+
+3) vi src/test/java/org/springframework/security/taglibs/facelets/SpringSecurityELLibraryTest.java
+
+- aggiungere gli import:
+
+import java.util.Collection;
+import java.util.Collections;
+
+- modificare l'import: 
+
+	import org.springframework.security.core.authority.GrantedAuthorityImpl;
+
+in:
+
+	import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
+
+- modificare:
+
+  private final GrantedAuthority ROLE_ADMIN = new GrantedAuthorityImpl("ROLE_ADMIN");
+  private final GrantedAuthority ROLE_USER = new GrantedAuthorityImpl("ROLE_USER");
+
+in:
+
+  private final GrantedAuthority ROLE_ADMIN = new SimpleGrantedAuthority("ROLE_ADMIN");
+  private final GrantedAuthority ROLE_USER = new SimpleGrantedAuthority("ROLE_USER");
+
+
+- sostituire nel metodo public void setUp() il seguente blocco di istruzioni:
+
+    @SuppressWarnings("deprecation")
+    User principal = new User("username", "password",
+    /* enabled */true,
+    /* accountNonExpired */true,
+    /* credentialsNonExpired */true,
+    /* accountNonLocked */true, new GrantedAuthority[] { ROLE_ADMIN, ROLE_USER });
+
+
+con:
+
+    List<GrantedAuthority> lst = new ArrayList<GrantedAuthority>();
+    
+    lst.add(ROLE_ADMIN);
+    lst.add(ROLE_USER);
+    
+	Collection<? extends GrantedAuthority> authorities = Collections.unmodifiableList(lst );
+
+    User principal = new User("username", "password",
+    /* enabled */true,
+    /* accountNonExpired */true,
+    /* credentialsNonExpired */true,
+    /* accountNonLocked */true, authorities);
+
+
+- modificare il metodo private List<GrantedAuthority> getAnonymousAuthorities() sostituendo la riga:
+
+	authorities.add(new GrantedAuthorityImpl("ROLE_ANONYMOUS"));
+
+con:
+
+	authorities.add(new SimpleGrantedAuthority("ROLE_ANONYMOUS"));
+
+4) Ritornare al punto 8 del file README
+

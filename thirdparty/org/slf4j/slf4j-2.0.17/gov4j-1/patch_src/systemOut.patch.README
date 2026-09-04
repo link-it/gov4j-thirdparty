@@ -1,0 +1,2 @@
+Utilizza log4j2 come strumento di logger al posto della System.err in org/slf4j/helpers/Util
+Questo permette di disabilitare il messaggio agendo sulla configurazione del logging.

@@ -1,0 +1,6 @@
+Versione modificata di GROUP_ID:ARTIFACT_ID:LIB_VERSION
+========================================================================================================================================================================
+
+Questa versione personalizzata dell'artefatto `GROUP_ID:ARTIFACT_ID:LIB_VERSION` è stata creata per includere modifiche specifiche al codice sorgente originale.  
+Oltre alle classi ricompilate rispetto al contenuto originale, il file JAR contiene i file `.patch` contenente le modifiche applicabili al repository sorgente originale. 
+Possono essere utilizzati per riprodurre o applicare le stesse modifiche su una copia del progetto originale.

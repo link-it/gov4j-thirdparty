@@ -1,0 +1,86 @@
+Il progetto originale rende possibile utilizzare all'interno del codice JSF le funzionalita' di spring-security attraverso la realizzazione di una taglib.
+Per realizzare l'integrazione con spring-4, si e' dovuto estendere il progetto presistente che forniva supporto per le versioni spring-2/3 e jsf12/20.  
+
+1) estrarre i sorgenti tar xzf spring-security-facelets-taglib.tar.gz
+2a) in caso di prima modifica eseguire cp -r spring-security-facelets-taglib spring-security-facelets-taglib-conPatch
+2b) altrimenti eseguire tar xzf spring-security-facelets-taglib-conPatch.tar.gz
+3) cd spring-security-facelets-taglib-conPatch/
+4) vi pom.xml:
+
+- aggiungere il nuovo modulo all'insieme dei moduli del progetto parent:
+
+...
+ <modules>
+!--        <module>taglib-core</module> -->
+        <module>taglib-jsf12-spring-2</module>
+        <module>taglib-jsf12-spring-3</module>
+
+	<!-- Aggiungere questa riga-->
+ 	<module>taglib-jsf12-spring-4</module>
+
+        <module>taglib-jsf20-spring-2</module>
+        <module>taglib-jsf20-spring-3</module>
+
+	<!-- Aggiungere questa riga-->
+ 	<module>taglib-jsf20-spring-4</module>
+...
+
+
+- aggiungere all'interno delle properties le seguenti entries:
+
+...
+<properties>
+
+        <spring-security-2-version>2.0.5.RELEASE</spring-security-2-version>
+        <spring-security-3-version>3.0.2.RELEASE</spring-security-3-version>
+
+	<!-- Aggiungere questa riga-->
+	<spring-security-4-version>4.1.3.RELEASE</spring-security-4-version>
+
+        <spring-2-version>2.5.6</spring-2-version>
+        <spring-3-version>3.0.3.RELEASE</spring-3-version>
+
+	<!-- Aggiungere questa riga-->
+ 	<spring-4-version>4.3.2.RELEASE</spring-4-version>
+
+        <facelets-version>1.1.14</facelets-version>
+
+...
+
+5) cp -r taglib-jsf12-spring-3 taglib-jsf12-spring-4
+6) cd taglib-jsf12-spring-4
+7) seguire le istruzioni presenti nel file README.jsf12 per completare le modifiche necessarie alla generazione della versione JSF12 e Spring 4
+8) cd ..
+9) cp -r taglib-jsf20-spring-3 taglib-jsf20-spring-4
+10) cd taglib-jsf20-spring-4
+11) seguire le istruzioni presenti nel file README.jsf20 per completare le modifiche necessarie alla generazione della versione JSF20 e Spring 4
+12) cd ..
+13) mvn install
+14) Copiare i jar generati:
+15a) cp taglib-jsf12-spring-4/target/facelets-taglib-jsf12-spring-4-0.6-SNAPSHOT.jar ../facelets-taglib-jsf12-spring-4-gov4j-1.jar
+15c) cp taglib-jsf20-spring-4/target/facelets-taglib-jsf20-spring-4-0.6-SNAPSHOT.jar ../facelets-taglib-jsf20-spring-4-gov4j-1.jar
+cd ../
+
+unzip facelets-taglib-jsf12-spring-4-gov4j-1.jar -d JAR
+cp README.jsf12 JAR/patch.README
+rm facelets-taglib-jsf12-spring-4-gov4j-1.jar
+cd JAR
+jar -cfM ../facelets-taglib-jsf12-spring-4-gov4j-1.jar *
+cd ..
+rm -rf JAR
+
+unzip facelets-taglib-jsf20-spring-4-gov4j-1.jar -d JAR
+cp README.jsf20 JAR/patch.README
+rm facelets-taglib-jsf20-spring-4-gov4j-1.jar
+cd JAR
+jar -cfM ../facelets-taglib-jsf20-spring-4-gov4j-1.jar *
+cd ..
+rm -rf JAR
+
+15b) cp facelets-taglib-jsf20-spring-4-gov4j-1.jar ../../jar/faces/facelets-taglib-jsf12-spring-4.jar
+15d) cp facelets-taglib-jsf20-spring-4-gov4j-1.jar ../../jar/faces/facelets-taglib-jsf20-spring-4.jar
+17) tar czf spring-security-facelets-taglib-conPatch.tar.gz spring-security-facelets-taglib-conPatch
+18) rm -rf spring-security-facelets-taglib
+19) rm -rf spring-security-facelets-taglib-conPatch
+
+

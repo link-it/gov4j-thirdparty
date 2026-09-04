@@ -1,0 +1,6 @@
+- this mirror is laid out one level down: everything lives under jgoodies-edited/
+- follow the instructions in jgoodies-edited/patch_src/README.compile
+- then run buildArtifact.sh from inside jgoodies-edited/ to assemble the artifact
+- to rebuild the artifact, go into the jgoodies-edited directory and run 'mvn clean package'
+- to publish it on Maven Central run 'mvn clean deploy' instead: this is restricted to
+  Link.it maintainers, as it requires the GPG signing key and the Maven Central token

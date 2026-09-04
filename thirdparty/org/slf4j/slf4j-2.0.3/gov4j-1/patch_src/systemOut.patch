@@ -1,0 +1,46 @@
+diff -urN slf4j-v_2.0.3/slf4j-api/pom.xml slf4j-v_2.0.3/slf4j-api/pom.xml
+--- slf4j-v_2.0.3/slf4j-api/pom.xml	2022-10-25 17:10:02.530637747 +0200
++++ slf4j-v_2.0.3/slf4j-api/pom.xml	2022-10-25 17:10:07.765663275 +0200
+@@ -22,6 +22,19 @@
+     <module-name>org.slf4j</module-name>
+   </properties>
+ 
++  <dependencies>
++     <dependency>
++       <groupId>org.apache.logging.log4j</groupId>
++       <artifactId>log4j-1.2-api</artifactId>
++       <version>2.19.0</version>
++     </dependency>
++     <dependency>
++       <groupId>org.apache.logging.log4j</groupId>
++       <artifactId>log4j-core</artifactId>
++       <version>2.19.0</version>
++     </dependency>
++ </dependencies>
++
+   <build>
+     <plugins>
+       <plugin>
+diff -urN slf4j-v_2.0.3/slf4j-api/src/main/java/org/slf4j/helpers/Util.java slf4j-v_2.0.3/slf4j-api/src/main/java/org/slf4j/helpers/Util.java
+--- slf4j-v_2.0.3/slf4j-api/src/main/java/org/slf4j/helpers/Util.java	2022-10-25 17:10:02.532637756 +0200
++++ slf4j-v_2.0.3/slf4j-api/src/main/java/org/slf4j/helpers/Util.java	2022-10-25 17:10:07.774663319 +0200
+@@ -117,14 +117,15 @@
+         return trace[i + 2];
+     }
+ 
++    private static org.apache.log4j.Logger log = org.apache.log4j.Logger.getLogger(Util.class);
++    
+     static final public void report(String msg, Throwable t) {
+-        System.err.println(msg);
+-        System.err.println("Reported exception:");
+-        t.printStackTrace();
++        log.info(msg);
++        log.info("Reported exception: "+t.getMessage(),t);
+     }
+ 
+     static final public void report(String msg) {
+-        System.err.println("SLF4J: " + msg);
++        log.info("SLF4J: " +msg);
+     }
+ 
+ }

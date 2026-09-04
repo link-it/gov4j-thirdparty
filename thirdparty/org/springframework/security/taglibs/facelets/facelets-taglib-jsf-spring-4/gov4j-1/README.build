@@ -1,0 +1,6 @@
+- follow the instructions in rebuild_jar/README; rebuild_jar/README.jsf12 and
+  rebuild_jar/README.jsf20 document the changes made for each JSF variant
+- then run buildArtifact.sh to assemble the artifacts
+- to rebuild the artifacts, go into the facelets-taglib-jsf12 and facelets-taglib-jsf20 directories and run 'mvn clean package'
+- to publish them on Maven Central run 'mvn clean deploy' instead: this is restricted to
+  Link.it maintainers, as it requires the GPG signing key and the Maven Central token

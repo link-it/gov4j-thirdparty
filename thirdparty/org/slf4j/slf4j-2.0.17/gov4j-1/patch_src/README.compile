@@ -1,0 +1,12 @@
+ NOTA: Usare java 11 e maven 3.6.1 o superiore
+
+wget https://github.com/qos-ch/slf4j/archive/refs/tags/v_2.0.17.tar.gz
+tar xzf v_2.0.17.tar.gz
+patch -p0 < systemOut.patch
+cd slf4j-v_2.0.17/slf4j-api/
+mvn clean install
+mvn javadoc:javadoc
+cd ../..
+
+
+
