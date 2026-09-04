@@ -1,0 +1,4708 @@
+diff -urN httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/BenchmarkWorker.java httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/BenchmarkWorker.java
+--- httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/BenchmarkWorker.java	2019-10-23 15:36:25.000000000 +0200
++++ httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/BenchmarkWorker.java	2020-02-17 12:45:44.194131952 +0100
+@@ -26,11 +26,14 @@
+  */
+ package org.apache.http.benchmark;
+ 
++import java.io.ByteArrayOutputStream;
+ import java.io.IOException;
+ import java.io.InputStream;
++import java.io.PrintWriter;
+ import java.net.InetSocketAddress;
+ import java.net.Socket;
+ import java.nio.charset.Charset;
++import java.util.Random;
+ 
+ import javax.net.SocketFactory;
+ 
+@@ -38,11 +41,11 @@
+ import org.apache.http.Header;
+ import org.apache.http.HeaderIterator;
+ import org.apache.http.HttpEntity;
++import org.apache.http.HttpEntityEnclosingRequest;
+ import org.apache.http.HttpException;
+ import org.apache.http.HttpHost;
+ import org.apache.http.HttpRequest;
+ import org.apache.http.HttpResponse;
+-import org.apache.http.HttpStatus;
+ import org.apache.http.entity.ContentType;
+ import org.apache.http.impl.DefaultConnectionReuseStrategy;
+ import org.apache.http.protocol.HTTP;
+@@ -55,6 +58,7 @@
+ import org.apache.http.protocol.RequestExpectContinue;
+ import org.apache.http.protocol.RequestTargetHost;
+ import org.apache.http.protocol.RequestUserAgent;
++import org.apache.http.util.EntityUtils;
+ 
+ /**
+  * Worker thread for the {@link HttpBenchmark HttpBenchmark}.
+@@ -74,6 +78,18 @@
+     private final Config config;
+     private final SocketFactory socketFactory;
+     private final Stats stats = new Stats();
++    static int IdPrefix;
++    private boolean timeoutReach;
++
++    private StringBuffer bfDetails = new StringBuffer();
++    public String getDetails() {
++        if(bfDetails.length()>0){
++            return bfDetails.toString();
++        }else{
++            return null;
++        }
++    }
++
+ 
+     public BenchmarkWorker(
+             final HttpRequest request,
+@@ -95,10 +111,24 @@
+ 
+         this.connstrategy = DefaultConnectionReuseStrategy.INSTANCE;
+         this.socketFactory = socketFactory;
++
++        this.timeoutReach = false;
++    }
++
++    public void setTimedOut() {
++        this.timeoutReach = true;
++    }
++    public boolean isTimedOut() {
++        return this.timeoutReach;
+     }
+ 
+     @Override
+     public void run() {
++
++        if(this.config.isSleepBeforeEveryMessage()==false){
++            this.sleep(-1);
++        }
++
+         HttpResponse response = null;
+         final BenchmarkConnection conn = new BenchmarkConnection(8 * 1024, stats);
+ 
+@@ -118,7 +148,37 @@
+ 
+         stats.start();
+         final int count = config.getRequests();
+-        for (int i = 0; i < count; i++) {
++        //for (int i = 0; i < count; i++) {
++        int i;
++        if (count < 0)
++            i = -2;
++        else
++            i = 0;
++
++        int requestNumber = 0;
++
++        int numMessaggioDaInviare = 0;
++
++        while (i < count) {
++
++            numMessaggioDaInviare++;
++
++            if(this.config.isSleepBeforeEveryMessage()){
++                this.sleep(numMessaggioDaInviare);
++            }
++
++            //System.out.println("COUNT["+count+"] i["+i+"] timeoutReach["+timeoutReach+"]");
++
++            if (this.timeoutReach) {
++                i = count;
++                break;
++            }
++
++            if (this.config.getVerbosity() >= 2) {
++                this.bfDetails.append("*** Message n."+(++requestNumber)+" ***\n\n");
++            }
++
++            //System.out.println("Invoke ??");
+ 
+             try {
+                 resetHeader(request);
+@@ -138,28 +198,64 @@
+                     conn.bind(socket);
+                 }
+ 
++                final long startInvocation, stopInvocation;
++
+                 try {
+                     // Prepare request
++                    if (this.config.getVerbosity() >= 4) {
++                        if(this.request instanceof HttpEntityEnclosingRequest){
++                                final String str = EntityUtils.toString(((HttpEntityEnclosingRequest)this.request).getEntity());
++                                this.bfDetails.append(str+"\n");
++                        }
++                        else{
++                                final org.apache.http.message.BasicHttpRequest basicReq = (org.apache.http.message.BasicHttpRequest) this.request;
++                                final String str = basicReq.getRequestLine().getMethod() +" "+basicReq.getRequestLine().getUri();
++                                this.bfDetails.append(str+"\n");
++                        }
++                    }
+                     this.httpexecutor.preProcess(this.request, this.httpProcessor, this.context);
++
+                     // Execute request and get a response
++                    if (this.config.getVerbosity() >= 4) {
++                        this.bfDetails.append(">> "+ this.request.getRequestLine().toString()+"\n");
++                        final Header[] headers = this.request.getAllHeaders();
++                        for (int h = 0; h < headers.length; h++) {
++                            this.bfDetails.append(">> " + headers[h].toString()+"\n");
++                        }
++                        this.bfDetails.append("\n");
++                    }
++                    startInvocation = System.nanoTime();
+                     response = this.httpexecutor.execute(this.request, conn, this.context);
++
+                     // Finalize response
+                     this.httpexecutor.postProcess(response, this.httpProcessor, this.context);
+ 
+                 } catch (final HttpException e) {
+                     stats.incWriteErrors();
+-                    if (config.getVerbosity() >= 2) {
+-                        System.err.println("Failed HTTP request : " + e.getMessage());
++                    if (this.config.getVerbosity() >= 2) {
++                        this.bfDetails.append("ERROR Failed HTTP request : " + e.getMessage()+"\n");
+                     }
+                     conn.shutdown();
+                     continue;
+                 }
+ 
++                stopInvocation = System.nanoTime();
++                stats.addInvocationTime(stopInvocation - startInvocation);
++
+                 verboseOutput(response);
+ 
+-                if (response.getStatusLine().getStatusCode() == HttpStatus.SC_OK) {
++                //if ( (response.getStatusLine().getStatusCode() == HttpStatus.SC_OK)  || (response.getStatusLine().getStatusCode() == HttpStatus.SC_ACCEPTED) ) {
++                boolean statusCodeAccepted = false;
++                for (int j = 0; j < this.config.getAcceptedReturnCode().size(); j++) {
++                    final int accepted = this.config.getAcceptedReturnCode().get(j);
++                    if(accepted == response.getStatusLine().getStatusCode()){
++                        statusCodeAccepted = true;
++                    }
++                }
++                if(statusCodeAccepted){
+                     stats.incSuccessCount();
+                 } else {
++                    //i++;
+                     stats.incFailureCount();
+                 }
+ 
+@@ -177,7 +273,7 @@
+                         contentLen += l;
+                         if (config.getVerbosity() >= 4) {
+                             final String s = new String(this.buffer, 0, l, charset);
+-                            System.out.print(s);
++                            this.bfDetails.append(s+"\n");
+                         }
+                     }
+                     inStream.close();
+@@ -185,8 +281,8 @@
+                 }
+ 
+                 if (config.getVerbosity() >= 4) {
+-                    System.out.println();
+-                    System.out.println();
++                    this.bfDetails.append("\n");
++                    this.bfDetails.append("\n");
+                 }
+ 
+                 if (!config.isKeepAlive() || !this.connstrategy.keepAlive(response, this.context)) {
+@@ -198,13 +294,43 @@
+             } catch (final IOException ex) {
+                 stats.incFailureCount();
+                 if (config.getVerbosity() >= 2) {
+-                    System.err.println("I/O error: " + ex.getMessage());
++                    this.bfDetails.append("I/O error: " + ex.getMessage()+"\n");
++                    try{
++                        final ByteArrayOutputStream bout = new ByteArrayOutputStream();
++                        final PrintWriter pw = new PrintWriter(bout);
++                        ex.printStackTrace(pw);
++                        pw.flush();
++                        bout.flush();
++                        pw.close();
++                        bout.close();
++                        this.bfDetails.append(bout.toString());
++                        this.bfDetails.append("\n");
++                    }catch(final Exception eWrite){}
+                 }
+             } catch (final Exception ex) {
+                 stats.incFailureCount();
+                 if (config.getVerbosity() >= 2) {
+-                    System.err.println("Generic error: " + ex.getMessage());
++                    this.bfDetails.append("Generic error: " + ex.getMessage()+"\n");
++                    try{
++                        final ByteArrayOutputStream bout = new ByteArrayOutputStream();
++                        final PrintWriter pw = new PrintWriter(bout);
++                        ex.printStackTrace(pw);
++                        pw.flush();
++                        bout.flush();
++                        pw.close();
++                        bout.close();
++                        this.bfDetails.append(bout.toString());
++                        this.bfDetails.append("\n");
++                    }catch(final Exception eWrite){}
+                 }
++                }
++
++            //System.out.println("Invoke Finished count["+count+"]");
++
++            if (count < 0){
++                i = -2;
++            }else{
++                i++;
+             }
+ 
+         }
+@@ -222,30 +348,41 @@
+         } catch (final IOException ex) {
+             stats.incFailureCount();
+             if (config.getVerbosity() >= 2) {
+-                System.err.println("I/O error: " + ex.getMessage());
++                this.bfDetails.append("I/O error: " + ex.getMessage()+"\n");
++                try{
++                    final ByteArrayOutputStream bout = new ByteArrayOutputStream();
++                    final PrintWriter pw = new PrintWriter(bout);
++                    ex.printStackTrace(pw);
++                    pw.flush();
++                    bout.flush();
++                    pw.close();
++                    bout.close();
++                    this.bfDetails.append(bout.toString());
++                    this.bfDetails.append("\n");
++                }catch(final Exception eWrite){}
+             }
+         }
+     }
+ 
+     private void verboseOutput(final HttpResponse response) {
+         if (config.getVerbosity() >= 3) {
+-            System.out.println(">> " + request.getRequestLine().toString());
++            this.bfDetails.append(">> " + request.getRequestLine().toString()+"\n");
+             final Header[] headers = request.getAllHeaders();
+             for (final Header header : headers) {
+-                System.out.println(">> " + header.toString());
++                this.bfDetails.append(">> " + header.toString()+"\n");
+             }
+-            System.out.println();
++            this.bfDetails.append("\n");
+         }
+         if (config.getVerbosity() >= 2) {
+-            System.out.println(response.getStatusLine().getStatusCode());
++            this.bfDetails.append(response.getStatusLine().getStatusCode()+"\n");
+         }
+         if (config.getVerbosity() >= 3) {
+-            System.out.println("<< " + response.getStatusLine().toString());
++            this.bfDetails.append("<< " + response.getStatusLine().toString()+"\n");
+             final Header[] headers = response.getAllHeaders();
+             for (final Header header : headers) {
+-                System.out.println("<< " + header.toString());
++                this.bfDetails.append("<< " + header.toString()+"\n");
+             }
+-            System.out.println();
++            this.bfDetails.append("\n");
+         }
+     }
+ 
+@@ -261,4 +398,83 @@
+     public Stats getStats() {
+         return stats;
+     }
++
++    private void sleep(final int message){
++
++        boolean sleep = false;
++        boolean sleepConstant = false;
++        if(this.config.getSleepMaxBeforeRun()!=null && this.config.getSleepMinBeforeRun()!=null){
++            sleep = true;
++            sleepConstant = this.config.getSleepMaxBeforeRun().intValue() == this.config.getSleepMinBeforeRun().intValue();
++        }
++
++        if(sleep == false){
++            return;
++        }
++
++        final boolean print = false;
++
++        String prefix = "";
++        if(message>-1){
++            prefix = "[msg-"+message+"] ";
++        }
++
++        if(sleepConstant == false){
++            final int maxSleep = this.config.getSleepMaxBeforeRun().intValue();
++            final int minSleep = this.config.getSleepMinBeforeRun().intValue();
++            final Random r = new Random();
++            final int sleepMs = minSleep + r.nextInt(maxSleep-minSleep);
++            if(sleepMs>1000){
++                final int count = sleepMs/1000;
++                final int resto = sleepMs%1000;
++                if(print)
++                    System.out.println(prefix+"sleep "+sleepMs+"ms ...");
++                for (int i = 0; i < count; i++) {
++                    try{
++                        Thread.sleep(1000);
++                    }catch(final Exception e){}
++                }
++                try{
++                    Thread.sleep(resto);
++                }catch(final Exception e){}
++                if(print)
++                    System.out.println(prefix+"sleep "+sleepMs+"ms terminated");
++            }else{
++                if(print)
++                    System.out.println(prefix+"sleep "+sleepMs+"ms ...");
++                try{
++                    Thread.sleep(sleepMs);
++                }catch(final Exception e){}
++                if(print)
++                    System.out.println(prefix+"sleep "+sleepMs+"ms terminated");
++            }
++        }
++        else{
++            final int millisecond = this.config.getSleepMaxBeforeRun().intValue();
++            if(millisecond>1000){
++                final int count = millisecond/1000;
++                final int resto = millisecond%1000;
++                if(print)
++                    System.out.println(prefix+"sleep "+millisecond+"ms ...");
++                for (int i = 0; i < count; i++) {
++                    try{
++                        Thread.sleep(1000);
++                    }catch(final Exception e){}
++                }
++                try{
++                    Thread.sleep(resto);
++                }catch(final Exception e){}
++                if(print)
++                    System.out.println(prefix+"sleep "+millisecond+"ms terminated");
++            }else{
++                if(print)
++                    System.out.println(prefix+"sleep "+millisecond+"ms ...");
++                try{
++                    Thread.sleep(millisecond);
++                }catch(final Exception e){}
++                if(print)
++                    System.out.println(prefix+"sleep "+millisecond+"ms terminated");
++            }
++        }
++    }
+ }
+diff -urN httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/BenchmarkWorker.java.orig httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/BenchmarkWorker.java.orig
+--- httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/BenchmarkWorker.java.orig	1970-01-01 01:00:00.000000000 +0100
++++ httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/BenchmarkWorker.java.orig	2020-02-17 12:45:37.326074009 +0100
+@@ -0,0 +1,264 @@
++/*
++ * ====================================================================
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing,
++ * software distributed under the License is distributed on an
++ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++ * KIND, either express or implied.  See the License for the
++ * specific language governing permissions and limitations
++ * under the License.
++ * ====================================================================
++ *
++ * This software consists of voluntary contributions made by many
++ * individuals on behalf of the Apache Software Foundation.  For more
++ * information on the Apache Software Foundation, please see
++ * <http://www.apache.org/>.
++ *
++ */
++package org.apache.http.benchmark;
++
++import java.io.IOException;
++import java.io.InputStream;
++import java.net.InetSocketAddress;
++import java.net.Socket;
++import java.nio.charset.Charset;
++
++import javax.net.SocketFactory;
++
++import org.apache.http.ConnectionReuseStrategy;
++import org.apache.http.Header;
++import org.apache.http.HeaderIterator;
++import org.apache.http.HttpEntity;
++import org.apache.http.HttpException;
++import org.apache.http.HttpHost;
++import org.apache.http.HttpRequest;
++import org.apache.http.HttpResponse;
++import org.apache.http.HttpStatus;
++import org.apache.http.entity.ContentType;
++import org.apache.http.impl.DefaultConnectionReuseStrategy;
++import org.apache.http.protocol.HTTP;
++import org.apache.http.protocol.HttpCoreContext;
++import org.apache.http.protocol.HttpProcessor;
++import org.apache.http.protocol.HttpRequestExecutor;
++import org.apache.http.protocol.ImmutableHttpProcessor;
++import org.apache.http.protocol.RequestConnControl;
++import org.apache.http.protocol.RequestContent;
++import org.apache.http.protocol.RequestExpectContinue;
++import org.apache.http.protocol.RequestTargetHost;
++import org.apache.http.protocol.RequestUserAgent;
++
++/**
++ * Worker thread for the {@link HttpBenchmark HttpBenchmark}.
++ *
++ *
++ * @since 4.0
++ */
++class BenchmarkWorker implements Runnable {
++
++    private final byte[] buffer = new byte[4096];
++    private final HttpCoreContext context;
++    private final HttpProcessor httpProcessor;
++    private final HttpRequestExecutor httpexecutor;
++    private final ConnectionReuseStrategy connstrategy;
++    private final HttpRequest request;
++    private final HttpHost targetHost;
++    private final Config config;
++    private final SocketFactory socketFactory;
++    private final Stats stats = new Stats();
++
++    public BenchmarkWorker(
++            final HttpRequest request,
++            final HttpHost targetHost,
++            final SocketFactory socketFactory,
++            final Config config) {
++        super();
++        this.context = new HttpCoreContext();
++        this.request = request;
++        this.targetHost = targetHost;
++        this.config = config;
++        this.httpProcessor = new ImmutableHttpProcessor(
++                new RequestContent(),
++                new RequestTargetHost(),
++                new RequestConnControl(),
++                new RequestUserAgent("HttpCore-AB/1.1"),
++                new RequestExpectContinue(this.config.isUseExpectContinue()));
++        this.httpexecutor = new HttpRequestExecutor();
++
++        this.connstrategy = DefaultConnectionReuseStrategy.INSTANCE;
++        this.socketFactory = socketFactory;
++    }
++
++    @Override
++    public void run() {
++        HttpResponse response = null;
++        final BenchmarkConnection conn = new BenchmarkConnection(8 * 1024, stats);
++
++        final String scheme = targetHost.getSchemeName();
++        final String hostname = targetHost.getHostName();
++        int port = targetHost.getPort();
++        if (port == -1) {
++            if (scheme.equalsIgnoreCase("https")) {
++                port = 443;
++            } else {
++                port = 80;
++            }
++        }
++
++        // Populate the execution context
++        this.context.setTargetHost(this.targetHost);
++
++        stats.start();
++        final int count = config.getRequests();
++        for (int i = 0; i < count; i++) {
++
++            try {
++                resetHeader(request);
++                if (!conn.isOpen()) {
++
++                    final Socket socket;
++                    if (socketFactory != null) {
++                        socket = socketFactory.createSocket();
++                    } else {
++                        socket = new Socket();
++                    }
++
++                    final int timeout = config.getSocketTimeout();
++                    socket.setSoTimeout(timeout);
++                    socket.connect(new InetSocketAddress(hostname, port), timeout);
++
++                    conn.bind(socket);
++                }
++
++                try {
++                    // Prepare request
++                    this.httpexecutor.preProcess(this.request, this.httpProcessor, this.context);
++                    // Execute request and get a response
++                    response = this.httpexecutor.execute(this.request, conn, this.context);
++                    // Finalize response
++                    this.httpexecutor.postProcess(response, this.httpProcessor, this.context);
++
++                } catch (final HttpException e) {
++                    stats.incWriteErrors();
++                    if (config.getVerbosity() >= 2) {
++                        System.err.println("Failed HTTP request : " + e.getMessage());
++                    }
++                    conn.shutdown();
++                    continue;
++                }
++
++                verboseOutput(response);
++
++                if (response.getStatusLine().getStatusCode() == HttpStatus.SC_OK) {
++                    stats.incSuccessCount();
++                } else {
++                    stats.incFailureCount();
++                }
++
++                final HttpEntity entity = response.getEntity();
++                if (entity != null) {
++                    final ContentType ct = ContentType.getOrDefault(entity);
++                    Charset charset = ct.getCharset();
++                    if (charset == null) {
++                        charset = HTTP.DEF_CONTENT_CHARSET;
++                    }
++                    long contentLen = 0;
++                    final InputStream inStream = entity.getContent();
++                    int l;
++                    while ((l = inStream.read(this.buffer)) != -1) {
++                        contentLen += l;
++                        if (config.getVerbosity() >= 4) {
++                            final String s = new String(this.buffer, 0, l, charset);
++                            System.out.print(s);
++                        }
++                    }
++                    inStream.close();
++                    stats.setContentLength(contentLen);
++                }
++
++                if (config.getVerbosity() >= 4) {
++                    System.out.println();
++                    System.out.println();
++                }
++
++                if (!config.isKeepAlive() || !this.connstrategy.keepAlive(response, this.context)) {
++                    conn.close();
++                } else {
++                    stats.incKeepAliveCount();
++                }
++
++            } catch (final IOException ex) {
++                stats.incFailureCount();
++                if (config.getVerbosity() >= 2) {
++                    System.err.println("I/O error: " + ex.getMessage());
++                }
++            } catch (final Exception ex) {
++                stats.incFailureCount();
++                if (config.getVerbosity() >= 2) {
++                    System.err.println("Generic error: " + ex.getMessage());
++                }
++            }
++
++        }
++        stats.finish();
++
++        if (response != null) {
++            final Header header = response.getFirstHeader("Server");
++            if (header != null) {
++                stats.setServerName(header.getValue());
++            }
++        }
++
++        try {
++            conn.close();
++        } catch (final IOException ex) {
++            stats.incFailureCount();
++            if (config.getVerbosity() >= 2) {
++                System.err.println("I/O error: " + ex.getMessage());
++            }
++        }
++    }
++
++    private void verboseOutput(final HttpResponse response) {
++        if (config.getVerbosity() >= 3) {
++            System.out.println(">> " + request.getRequestLine().toString());
++            final Header[] headers = request.getAllHeaders();
++            for (final Header header : headers) {
++                System.out.println(">> " + header.toString());
++            }
++            System.out.println();
++        }
++        if (config.getVerbosity() >= 2) {
++            System.out.println(response.getStatusLine().getStatusCode());
++        }
++        if (config.getVerbosity() >= 3) {
++            System.out.println("<< " + response.getStatusLine().toString());
++            final Header[] headers = response.getAllHeaders();
++            for (final Header header : headers) {
++                System.out.println("<< " + header.toString());
++            }
++            System.out.println();
++        }
++    }
++
++    private static void resetHeader(final HttpRequest request) {
++        for (final HeaderIterator it = request.headerIterator(); it.hasNext();) {
++            final Header header = it.nextHeader();
++            if (!(header instanceof DefaultHeader)) {
++                it.remove();
++            }
++        }
++    }
++
++    public Stats getStats() {
++        return stats;
++    }
++}
+diff -urN httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/BustaContentProducer.java httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/BustaContentProducer.java
+--- httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/BustaContentProducer.java	1970-01-01 01:00:00.000000000 +0100
++++ httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/BustaContentProducer.java	2020-02-17 12:45:44.196131969 +0100
+@@ -0,0 +1,113 @@
++/*
++ * ====================================================================
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing,
++ * software distributed under the License is distributed on an
++ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++ * KIND, either express or implied.  See the License for the
++ * specific language governing permissions and limitations
++ * under the License.
++ * ====================================================================
++ *
++ * This software consists of voluntary contributions made by many
++ * individuals on behalf of the Apache Software Foundation.  For more
++ * information on the Apache Software Foundation, please see
++ * <http://www.apache.org/>.
++ *
++ */
++package org.apache.http.benchmark;
++
++import java.io.IOException;
++import java.io.OutputStream;
++
++import org.apache.http.entity.ContentProducer;
++import org.apache.http.entity.FileEntity;
++
++public class BustaContentProducer implements ContentProducer {
++
++    private static StringBuffer header;
++    private static FileEntity payload;
++
++    private static final String SOAP_START = "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\r\n<soapenv:Header>\r\n";
++    private static final String SOAP_BODY_START = "</soapenv:Header>\r\n<soapenv:Body>\r\n";
++    private static final String SOAP_END = "</soapenv:Body>\r\n</soapenv:Envelope>\r\n";
++
++
++
++
++    public BustaContentProducer(final StringBuffer h ,final FileEntity p){
++        header = h ;
++        payload = p ;
++    }
++
++    public long getContentLength() {
++
++        // update Length
++        try{
++            this.writeTo(null); // con null vengono solo calcolati i templates
++        }catch(final Exception e){
++            throw new RuntimeException(e.getMessage(),e);
++        }
++
++        final long payloadLength = payload.getContentLength();
++
++        final long newCount = (header.length() - this.templateLength) + this.templateReplacedValueLength + payloadLength +
++                SOAP_START.getBytes().length + SOAP_BODY_START.getBytes().length + SOAP_END.getBytes().length ;
++        //System.out.println("newX:"+newCount);
++        return newCount;
++    }
++
++
++
++
++    private long templateLength = 0;
++    private long templateReplacedValueLength = 0;
++    private long actualCount = -1;
++
++
++
++    public void writeTo(final OutputStream os) throws IOException {
++
++        if(os!=null){
++            os.write(SOAP_START.getBytes());
++            os.flush();
++        }
++
++        this.templateLength = 0;
++        this.templateReplacedValueLength = 0;
++
++        // Scrivo l'header http sostituendo i templates
++        final TemplateUtils tUtils = new TemplateUtils();
++        tUtils.template(header, os, this.actualCount, false);
++        this.templateLength = tUtils.templateLength;
++        this.templateReplacedValueLength = tUtils.templateReplacedValueLength;
++        this.actualCount = tUtils.actualCountCalcolato;
++
++        if(os!=null){
++
++            os.write(SOAP_BODY_START.getBytes());
++
++            // write payload
++            payload.writeTo(os);
++
++            //os.write("\n".getBytes());
++            os.write(SOAP_END.getBytes());
++            os.flush();
++
++        }
++    }
++
++
++    public void stop() {
++        TemplateUtils.stopCountInMinute();
++    }
++}
+diff -urN httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/CommandLineUtils.java httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/CommandLineUtils.java
+--- httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/CommandLineUtils.java	2019-10-23 15:36:25.000000000 +0200
++++ httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/CommandLineUtils.java	2020-02-17 12:45:44.197131977 +0100
+@@ -38,6 +38,12 @@
+ public class CommandLineUtils {
+ 
+     public static Options getOptions() {
++
++        // NEW
++        final Option aopt = new Option("a", true, "Attchment directory");
++        aopt.setRequired(false);
++        aopt.setArgName("dir");
++
+         final Option iopt = new Option("i", false, "Do HEAD requests instead of GET (deprecated)");
+         iopt.setRequired(false);
+ 
+@@ -70,6 +76,18 @@
+         copt.setRequired(false);
+         copt.setArgName("concurrency");
+ 
++        // NEW
++        final Option bopt = new Option("b", true,
++            "File to post is an Egov envelope template. (Imply -p)");
++        bopt.setRequired(false);
++        bopt.setArgName("ClientID");
++
++        // NEW
++        final Option lopt = new Option("l", true,
++            "Time limit (in sec) for the whole benchmark. Conflict with -n option.");
++        lopt.setArgName("duration");
++        lopt.setRequired(false);
++
+         final Option popt = new Option("p", true, "File containing data to POST or PUT");
+         popt.setRequired(false);
+         popt.setArgName("Payload file");
+@@ -103,7 +121,17 @@
+         final Option hopt = new Option("h", false, "Display usage information");
+         nopt.setRequired(false);
+ 
++        // NEW
++        final Option fopt = new Option("f", true, "Print report on file");
++        fopt.setRequired(false);
++        fopt.setArgName("Report File");
++
+         final Options options = new Options();
++
++        options.addOption(aopt);
++        options.addOption(bopt);
++        options.addOption(lopt);
++
+         options.addOption(iopt);
+         options.addOption(mopt);
+         options.addOption(uopt);
+@@ -119,10 +147,35 @@
+         options.addOption(hopt);
+         options.addOption(topt);
+         options.addOption(oopt);
++
++        options.addOption(fopt);
++
+         return options;
+     }
+ 
+     public static void parseCommandLine(final CommandLine cmd, final Config config) {
++
++        if (cmd.hasOption('a')) {
++            if (!cmd.hasOption('p') || cmd.hasOption('i'))
++                printError("Attachments only in a POST request. Add (-p)");
++
++            final File file = new File(cmd.getOptionValue('a'));
++            if (!file.exists()) {
++                 printError("File not found: " + file.getAbsolutePath());
++            }
++            if (!file.isDirectory()) {
++                 printError("Expected dir, found file: " + file.getAbsolutePath());
++            }
++            if (!file.canRead()) {
++                 printError("Cannot read directory: " + file.getAbsolutePath());
++            }
++            try{
++                 config.setAttachmentsDir( file );
++            }catch(final Exception e){
++                  printError(e.getMessage());
++            }
++        }
++
+         if (cmd.hasOption('v')) {
+             final String s = cmd.getOptionValue('v');
+             try {
+@@ -157,9 +210,40 @@
+         if (cmd.hasOption('p')) {
+             final File file = new File(cmd.getOptionValue('p'));
+             if (!file.exists()) {
+-                printError("File not found: " + file);
++                printError("File not found: " + file.getAbsolutePath());
++            }
++            if (!file.isFile()) {
++                printError("Expected file, found other type: " + file.getAbsolutePath());
++            }
++            if (!file.canRead()) {
++                printError("Cannot read file: " + file.getAbsolutePath());
++            }
++            try{
++                config.setPayloadFile( file );
++            }catch(final Exception e){
++                printError(e.getMessage());
++            }
++        }
++
++        if (cmd.hasOption('b')) {
++            final File file = new File(cmd.getOptionValue('b'));
++            if (!file.exists()) {
++                printError("File not found: " + file.getAbsolutePath());
++            }
++            if (!file.isFile()) {
++                printError("Expected file, found other type: " + file.getAbsolutePath());
++            }
++            if (!file.canRead()) {
++                printError("Cannot read file: " + file.getAbsolutePath());
++            }
++            try{
++                config.setBustaFileHeader( file );
++            }catch(final Exception e){
++                printError(e.getMessage());
++            }
++            if (config.getPayloadFile() == null) {
++                printError("No file to post specified. (Implied by -p switch)");
+             }
+-            config.setPayloadFile(file);
+         }
+ 
+         if (cmd.hasOption('T')) {
+@@ -206,6 +290,24 @@
+             config.setUseAcceptGZip(true);
+         }
+ 
++        if (cmd.hasOption('l')) {
++            final String l = cmd.getOptionValue('l');
++            try {
++                config.setDurationSec( Integer.parseInt(l) );
++            } catch (final NumberFormatException ex) {
++                printError("Invalid test duration specified: " + l);
++            }
++
++            // Test duration override requests count
++            System.out.println("Warning: Test duration override requests count");
++            config.setRequests(-1);
++        }
++
++        if (cmd.hasOption('f')) {
++            final String reportFile = cmd.getOptionValue('f');
++            config.setReportFile(reportFile);
++        }
++
+         final String[] cmdargs = cmd.getArgs();
+         if (cmdargs.length > 0) {
+             try {
+diff -urN httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/Config.java httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/Config.java
+--- httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/Config.java	2019-10-23 15:36:25.000000000 +0200
++++ httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/Config.java	2020-02-17 12:45:44.199131994 +0100
+@@ -28,6 +28,10 @@
+ 
+ import java.io.File;
+ import java.net.URL;
++import java.util.ArrayList;
++import java.util.List;
++
++import org.apache.http.HttpStatus;
+ 
+ public class Config {
+ 
+@@ -46,6 +50,7 @@
+     private boolean useExpectContinue;
+     private boolean useAcceptGZip;
+     private File payloadFile = null;
++    private boolean payloadFileTemplate = false;
+     private String payloadText = null;
+     private String soapAction = null;
+ 
+@@ -55,6 +60,25 @@
+     private String trustStorePassword = null;
+     private String identityStorePassword = null;
+ 
++    private File attachmentsDir = null;
++
++    private File busta;
++    private String reportFile = null;
++    //private int clientId;
++
++    private int durationSec;
++
++    private List<Integer> acceptedReturnCode = new ArrayList<Integer>();
++    {
++        acceptedReturnCode.add(HttpStatus.SC_OK);
++        acceptedReturnCode.add(HttpStatus.SC_ACCEPTED);
++    }
++
++    private Integer sleepMinBeforeRun;
++    private Integer sleepMaxBeforeRun;
++    private boolean sleepBeforeEveryMessage = false;
++
++
+     public Config() {
+         super();
+         this.url = null;
+@@ -69,6 +93,8 @@
+         this.contentType = null;
+         this.headers = null;
+         this.socketTimeout = 60000;
++        this.attachmentsDir = null;
++        this.reportFile = null;
+     }
+ 
+     public URL getUrl() {
+@@ -132,10 +158,23 @@
+         return payloadFile;
+     }
+ 
+-    public void setPayloadFile(final File payloadFile) {
++    public void setPayloadFile(final File payloadFile) throws Exception {
++        if(payloadFile.exists()==false){
++            throw new Exception("File not found: " + payloadFile.getAbsolutePath());
++        }
++        if (!payloadFile.isFile()) {
++            throw new Exception("Expected file, found other type: " + payloadFile.getAbsolutePath());
++        }
++        if (!payloadFile.canRead()) {
++            throw new Exception("Cannot read file: " + payloadFile.getAbsolutePath());
++        }
+         this.payloadFile = payloadFile;
+     }
+ 
++    public boolean isPayloadFileTemplate() {
++        return this.payloadFileTemplate;
++    }
++
+     public String getContentType() {
+         return contentType;
+     }
+@@ -248,6 +287,108 @@
+         this.identityStorePassword = identityStorePassword;
+     }
+ 
++    public Integer getSleepMinBeforeRun() {
++        return sleepMinBeforeRun;
++    }
++
++    public void setSleepMinBeforeRun(final Integer sleepMinBeforeRun) {
++        this.sleepMinBeforeRun = sleepMinBeforeRun;
++    }
++
++    public Integer getSleepMaxBeforeRun() {
++        return sleepMaxBeforeRun;
++    }
++
++    public void setSleepMaxBeforeRun(final Integer sleepMaxBeforeRun) {
++        this.sleepMaxBeforeRun = sleepMaxBeforeRun;
++    }
++
++    public boolean isSleepBeforeEveryMessage() {
++        return sleepBeforeEveryMessage;
++    }
++
++    public void setSleepBeforeEveryMessage(final boolean sleepBeforeEveryMessage) {
++        this.sleepBeforeEveryMessage = sleepBeforeEveryMessage;
++    }
++
++    public List<Integer> getAcceptedReturnCode() {
++        return acceptedReturnCode;
++    }
++
++    public void setAcceptedReturnCode(final List<Integer> acceptedReturnCode) {
++        this.acceptedReturnCode = acceptedReturnCode;
++    }
++
++    public File getAttachmentsDir() {
++        return this.attachmentsDir;
++    }
++
++    public void setAttachmentsDir(final File attachmentsDir) throws Exception {
++        if(attachmentsDir.exists()==false){
++            throw new Exception("File not found: " + attachmentsDir.getAbsolutePath());
++        }
++        if (!attachmentsDir.isDirectory()) {
++            throw new Exception("Expected dir, found file: " + attachmentsDir.getAbsolutePath());
++        }
++        if (!attachmentsDir.canRead()) {
++            throw new Exception("Cannot read directory: " + attachmentsDir.getAbsolutePath());
++        }
++        this.attachmentsDir = attachmentsDir;
++    }
++
++    public File getBustaFileHeader() {
++        return this.busta;
++    }
++
++    public void setBustaFileHeader(final File busta) throws Exception {
++        if(this.payloadFileTemplate){
++            throw new Exception("Cannot set busta with payloadFileTemplate enabled");
++        }
++        if(busta.exists()==false){
++            throw new Exception("File not found: " + busta.getAbsolutePath());
++        }
++        if (!busta.isFile()) {
++            throw new Exception("Expected file, found other type: " + busta.getAbsolutePath());
++        }
++        if (!busta.canRead()) {
++            throw new Exception("Cannot read file: " + busta.getAbsolutePath());
++        }
++        this.busta = busta;
++    }
++
++    public void setPayloadFileTemplate(final boolean payloadFileTemplate) throws Exception {
++        this.payloadFileTemplate = payloadFileTemplate;
++        if(this.payloadFileTemplate && this.busta!=null){
++            throw new Exception("Cannot set payloadFileTemplate with busta enabled (found busta: "+this.busta.getAbsolutePath()+")");
++        }
++    }
++
++//    public int getClientId() {
++//        return this.clientId;
++//    }
++//
++//    public void setClientId(final int clientId) {
++//        this.clientId = clientId;
++//    }
++
++    public int getDurationSec() {
++        return this.durationSec;
++    }
++
++    public void setDurationSec(final int durationSec) {
++        this.durationSec = durationSec;
++        this.requests = -1;
++    }
++
++    public void setReportFile(final String filename) {
++        this.reportFile = filename;
++    }
++
++    public String getReportFile() {
++        return this.reportFile;
++    }
++
++
+     public Config copy() {
+         final Config copy = new Config();
+         copy.url = this.url;
+@@ -265,6 +406,7 @@
+         copy.useExpectContinue = this.useExpectContinue;
+         copy.useAcceptGZip = this.useAcceptGZip;
+         copy.payloadFile = this.payloadFile;
++        copy.payloadFileTemplate = this.payloadFileTemplate;
+         copy.payloadText = this.payloadText;
+         copy.soapAction = this.soapAction;
+ 
+@@ -273,6 +415,17 @@
+         copy.identityStorePath = this.identityStorePath;
+         copy.trustStorePassword = this.trustStorePassword;
+         copy.identityStorePassword = this.identityStorePassword;
++
++        copy.attachmentsDir = this.attachmentsDir;
++        copy.busta = this.busta;
++        copy.reportFile = this.reportFile;
++        //copy.clientId = this.clientId;
++        copy.durationSec = this.durationSec;
++        copy.acceptedReturnCode = this.acceptedReturnCode;
++        copy.sleepMinBeforeRun = this.sleepMinBeforeRun;
++        copy.sleepMaxBeforeRun = this.sleepMaxBeforeRun;
++        copy.sleepBeforeEveryMessage = this.sleepBeforeEveryMessage;
++
+         return copy;
+     }
+ 
+diff -urN httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/HttpBenchmark.java httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/HttpBenchmark.java
+--- httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/HttpBenchmark.java	2019-10-23 15:36:25.000000000 +0200
++++ httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/HttpBenchmark.java	2020-02-17 12:45:44.201132011 +0100
+@@ -26,10 +26,15 @@
+  */
+ package org.apache.http.benchmark;
+ 
++import java.io.BufferedReader;
+ import java.io.File;
++import java.io.FileOutputStream;
++import java.io.FileReader;
++import java.io.IOException;
+ import java.net.URL;
+ import java.security.cert.CertificateException;
+ import java.security.cert.X509Certificate;
++import java.util.UUID;
+ import java.util.concurrent.LinkedBlockingQueue;
+ import java.util.concurrent.ThreadFactory;
+ import java.util.concurrent.ThreadPoolExecutor;
+@@ -50,6 +55,9 @@
+ import org.apache.http.entity.ContentType;
+ import org.apache.http.entity.FileEntity;
+ import org.apache.http.entity.StringEntity;
++import org.apache.http.entity.mime.MultipartRelatedEntity;
++import org.apache.http.entity.mime.content.FileBody;
++import org.apache.http.entity.mime.content.FileBodyTemplate;
+ import org.apache.http.message.BasicHttpEntityEnclosingRequest;
+ import org.apache.http.message.BasicHttpRequest;
+ import org.apache.http.protocol.HTTP;
+@@ -86,9 +94,25 @@
+         }
+ 
+         final HttpBenchmark httpBenchmark = new HttpBenchmark(config);
+-        httpBenchmark.execute();
++        final String risultato = httpBenchmark.execute();
++        if (cmd.hasOption('f')) {
++            final FileOutputStream fout = new FileOutputStream(config.getReportFile());
++            fout.write(risultato.getBytes());
++            fout.flush();
++            fout.close();
++        } else {
++            System.out.println(risultato);
++        }
++
+     }
+ 
++    private StringBuffer header = null;
++    private FileEntity payload = null;
++    BustaContentProducer cp  = null;
++
++    private StringBuffer xmlTemplate = null;
++    private XmlTemplateContentProducer xmlP;
++
+     public HttpBenchmark(final Config config) {
+         super();
+         this.config = config != null ? config : new Config();
+@@ -100,10 +124,142 @@
+ 
+         // Prepare requests for each thread
+         if (config.getPayloadFile() != null) {
++
++            if (config.getBustaFileHeader()!=null) {
++                try {
++                    this.loadfilesBusta(config);
++                } catch (final IOException e) {
++                    // TODO Auto-generated catch block
++                    e.printStackTrace();
++                    System.exit(1);
++                }
++                this.cp = new BustaContentProducer(header, payload);
++
++                if (config.getAttachmentsDir() == null) {
++                    entity = new XMLEntityTemplate(this.cp, config.getContentType());
++                } else {
++                    final FileBodyTemplate root = new FileBodyTemplate(this.cp, config.getContentType());
++                    final MultipartRelatedEntity mentity = new MultipartRelatedEntity(root);
++                    File f = config.getAttachmentsDir();
++                    if (!f.isAbsolute()) {
++                        f = f.getAbsoluteFile();
++                    }
++                    for (final File filename : f.listFiles()) {
++                        if (filename.isDirectory())
++                            continue;
++
++                        String mime = null;
++                        try {
++                            final org.apache.http.entity.mime.MimeTypes mimeTypes = org.apache.http.entity.mime.MimeTypes.getInstance();
++                            mime = "application/octet-stream";
++                            if(filename.getName().contains(".")){
++                                final String ext = filename.getName().substring(filename.getName().lastIndexOf('.')+1, filename.getName().length());
++                                mime = mimeTypes.getMimeType(ext);
++                                if(mime==null){
++                                    mime = "application/octet-stream";
++                                }
++                            }
++                        } catch (final Exception e) {
++                            // TODO Auto-generated catch block
++                            e.printStackTrace();
++                            System.exit(1);
++                        }
++
++                        final FileBody contentBody = new FileBody(filename, org.apache.http.entity.ContentType.create(mime, "UTF8"));
++                        mentity.addPart(UUID.randomUUID().toString(), contentBody);
++                    }
++
++                    entity = mentity;
++
++                    // Debug contenuto inviato
++//                    try {
++//                        mentity.writeTo(new java.io.FileOutputStream("/tmp/pippo.txt"));
++//                    } catch (final java.io.FileNotFoundException e) {
++//                        // TODO Auto-generated catch block
++//                        e.printStackTrace();
++//                    } catch (final java.io.IOException e) {
++//                        // TODO Auto-generated catch block
++//                        e.printStackTrace();
++//                    }
++
++                }
++            } else {
++
++                if (config.isPayloadFileTemplate()) {
++                    try {
++                        this.loadfilesXmlTemplate(config);
++                    } catch (final IOException e) {
++                        // TODO Auto-generated catch block
++                        e.printStackTrace();
++                        System.exit(1);
++                    }
++                    this.xmlP = new XmlTemplateContentProducer(xmlTemplate);
++                }
++
++                if (config.getAttachmentsDir() == null) {
++                    if (config.isPayloadFileTemplate()) {
++                        entity = new XMLEntityTemplate(this.xmlP, config.getContentType());
++                    }
++                    else{
++
+             final FileEntity fe = new FileEntity(config.getPayloadFile());
+             fe.setContentType(config.getContentType());
+             fe.setChunked(config.isUseChunking());
+             entity = fe;
++
++                    }
++                } else {
++
++                    // Ottengo ContentType senza ';'
++                    final String contentType = config.getContentType().contains(";") ? config.getContentType().split(";")[0] : config.getContentType();
++
++                    MultipartRelatedEntity mentity = null;
++                    if (config.isPayloadFileTemplate()) {
++                        final FileBodyTemplate root = new FileBodyTemplate(this.xmlP, contentType);
++                        mentity = new MultipartRelatedEntity(root);
++                    }
++                    else{
++                        @SuppressWarnings("deprecation")
++                        final FileBody root = new FileBody(config.getPayloadFile(), contentType);
++                        mentity = new MultipartRelatedEntity(root);
++                    }
++
++                    File f = config.getAttachmentsDir();
++                    if (!f.isAbsolute()) {
++                        f = f.getAbsoluteFile();
++                    }
++                    for (final File filename : f.listFiles()) {
++                        if (filename.isDirectory())
++                            continue;
++
++                        String mime = null;
++                        try {
++                            final org.apache.http.entity.mime.MimeTypes mimeTypes = org.apache.http.entity.mime.MimeTypes.getInstance();
++                            mime = "application/octet-stream";
++                            if(filename.getName().contains(".")){
++                                final String ext = filename.getName().substring(filename.getName().lastIndexOf('.')+1, filename.getName().length());
++                                mime = mimeTypes.getMimeType(ext);
++                                if(mime==null){
++                                    mime = "application/octet-stream";
++                                }
++                            }
++                        } catch (final Exception e) {
++                            // TODO Auto-generated catch block
++                            e.printStackTrace();
++                            System.exit(1);
++                        }
++
++                        final FileBody contentBody = new FileBody(filename, org.apache.http.entity.ContentType.create(mime, "UTF8"));
++                        mentity.addPart(UUID.randomUUID().toString(), contentBody);
++
++                    }
++
++                    entity = mentity;
++
++                }
++
++            }
++
+         } else if (config.getPayloadText() != null) {
+             final StringEntity se = new StringEntity(config.getPayloadText(),
+                     ContentType.parse(config.getContentType()));
+@@ -122,6 +278,11 @@
+                     new BasicHttpEntityEnclosingRequest("PUT", url.getPath(), ver);
+             httpput.setEntity(entity);
+             request = httpput;
++        } else if ("PATCH".equals(config.getMethod()) || "LINK".equals(config.getMethod()) || "UNLINK".equals(config.getMethod())) {
++            final BasicHttpEntityEnclosingRequest httpput =
++                    new BasicHttpEntityEnclosingRequest(config.getMethod(), url.getPath(), ver);
++            httpput.setEntity(entity);
++            request = httpput;
+         } else {
+             String path = url.getPath();
+             if (url.getQuery() != null && url.getQuery().length() > 0) {
+@@ -159,8 +320,7 @@
+ 
+     public String execute() throws Exception {
+         final Results results = doExecute();
+-        ResultProcessor.printResults(results);
+-        return "";
++        return ResultProcessor.printResults(results);
+     }
+ 
+     public Results doExecute() throws Exception {
+@@ -220,6 +380,19 @@
+             workerPool.execute(workers[i]);
+         }
+ 
++        if (config.getDurationSec() > 0) {
++            // wait duration seconds
++            // System.out.println("wait "+duration_sec);
++            try {
++                Thread.sleep(config.getDurationSec()  * 1000);
++            } catch (final InterruptedException ie) {
++            }
++            // Signal timeout to workers
++            for (int i = 0; i < config.getThreads(); i++) {
++                workers[i].setTimedOut();
++            }
++        }
++
+         while (workerPool.getCompletedTaskCount() < config.getThreads()) {
+             Thread.yield();
+             try {
+@@ -229,7 +402,71 @@
+         }
+ 
+         workerPool.shutdown();
++
++        if(this.cp!=null)
++            this.cp.stop();
++
++        if(this.xmlP!=null)
++            this.xmlP.stop();
++
+         return ResultProcessor.collectResults(workers, host, config.getUrl().toString());
+     }
+ 
++    private void loadfilesBusta(final Config config)  throws IOException {
++
++        //String dir = config.getPayloadFile().getParent();
++        final File headerfile = config.getBustaFileHeader();
++        //        if (dir != null)
++        //            headerfile = new File(new File(dir),"headeregov.xml");
++        //        else
++        //            headerfile = new File("headeregov.xml");
++
++        final BufferedReader br;
++        String line;
++
++
++        //System.out.println(".header:"+header);
++        if (this.header == null){
++            header=new StringBuffer();
++
++            br = new BufferedReader(new FileReader(headerfile));
++
++            while ((line = br.readLine()) != null)
++                header.append(line).append('\n');
++            br.close();
++
++        }
++        if (payload == null) {
++            payload=new FileEntity(config.getPayloadFile());
++            payload.setContentType(config.getContentType());
++        }
++
++    }
++
++    private void loadfilesXmlTemplate(final Config config)  throws IOException {
++
++        //String dir = config.getPayloadFile().getParent();
++        final File payloadFile = config.getPayloadFile();
++        //        if (dir != null)
++        //            headerfile = new File(new File(dir),"headeregov.xml");
++        //        else
++        //            headerfile = new File("headeregov.xml");
++
++        final BufferedReader br;
++        String line;
++
++        //System.out.println(".header:"+header);
++        if (this.xmlTemplate == null){
++            xmlTemplate=new StringBuffer();
++
++            br = new BufferedReader(new FileReader(payloadFile));
++
++            while ((line = br.readLine()) != null)
++                xmlTemplate.append(line).append('\n');
++            br.close();
++
++        }
++
++    }
++
+ }
+diff -urN httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/ResultProcessor.java httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/ResultProcessor.java
+--- httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/ResultProcessor.java	2019-10-23 15:36:25.000000000 +0200
++++ httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/ResultProcessor.java	2020-02-17 12:45:44.203132028 +0100
+@@ -27,16 +27,21 @@
+ package org.apache.http.benchmark;
+ 
+ import java.text.NumberFormat;
++import java.util.ArrayList;
++import java.util.List;
+ 
+ import org.apache.http.HttpHost;
+ 
+ public class ResultProcessor {
+ 
++    static NumberFormat nf0 = NumberFormat.getInstance();
+     static NumberFormat nf2 = NumberFormat.getInstance();
+     static NumberFormat nf3 = NumberFormat.getInstance();
+     static NumberFormat nf6 = NumberFormat.getInstance();
+ 
+     static {
++        nf0.setMaximumFractionDigits(0);
++        nf0.setMinimumFractionDigits(0);
+         nf2.setMaximumFractionDigits(2);
+         nf2.setMinimumFractionDigits(2);
+         nf3.setMaximumFractionDigits(3);
+@@ -53,6 +58,12 @@
+         long keepAliveCount  = 0;
+         long totalBytesRcvd  = 0;
+         long totalBytesSent  = 0;
++        long fifty = 0;
++        long sixty = 0;
++        long seventy = 0;
++        long eighty = 0;
++        long ninety = 0;
++        double rpsSUM = 0;
+ 
+         final Stats stats = workers[0].getStats();
+ 
+@@ -65,6 +76,12 @@
+             keepAliveCount += s.getKeepAliveCount();
+             totalBytesRcvd += s.getTotalBytesRecv();
+             totalBytesSent += s.getTotalBytesSent();
++            fifty = Math.max(fifty, s.getPercentile(50));
++            sixty = Math.max(sixty, s.getPercentile(60));
++            seventy = Math.max(seventy, s.getPercentile(70));
++            eighty = Math.max(eighty, s.getPercentile(80));
++            ninety = Math.max(ninety, s.getNinetyPercentile());
++            rpsSUM += s.getRPSfromTimes();
+         }
+ 
+         final Results results = new Results();
+@@ -83,40 +100,195 @@
+         results.totalBytesRcvd = totalBytesRcvd;
+         results.totalBytesSent = totalBytesSent;
+         results.totalBytes = totalBytesRcvd + (totalBytesSent > 0 ? totalBytesSent : 0);
++
++        results.fifty = fifty;
++        results.sixty = sixty;
++        results.seventy = seventy;
++        results.eighty = eighty;
++        results.ninety = ninety;
++        results.rpsSUM = rpsSUM;
++
++        results.workers = workers;
++
+         return results;
+     }
+ 
+-    static void printResults(final Results results) {
++    static String printResults(final Results results) {
+         final int threads = results.getConcurrencyLevel();
+         final double totalTimeMs  = (results.getTotalTimeNano() / threads) / 1000000; // convert nano secs to milli secs
+         final double timePerReqMs = totalTimeMs / results.getSuccessCount();
+         final double totalTimeSec = totalTimeMs / 1000;
+         final double reqsPerSec   = results.getSuccessCount() / totalTimeSec;
++        @SuppressWarnings("unused")
++        final double RPSTimes = results.rpsSUM;// workers.length;
++
++        final StringBuilder sb = new StringBuilder(1024);
+ 
+-        System.out.println("\nServer Software:\t\t" + results.getServerName());
+-        System.out.println( "Server Hostname:\t\t" + results.getHostName());
+-        System.out.println( "Server Port:\t\t\t" + Integer.valueOf(results.getHostPort()));
+-        System.out.println( "Document Path:\t\t\t" + results.getDocumentPath());
+-        System.out.println( "Document Length:\t\t" + results.getContentLength() + " bytes\n");
+-        System.out.println( "Concurrency Level:\t\t" + results.getConcurrencyLevel());
+-        System.out.println( "Time taken for tests:\t\t" + nf6.format(totalTimeSec) + " seconds");
+-        System.out.println( "Complete requests:\t\t" + results.getSuccessCount());
+-        System.out.println( "Failed requests:\t\t" + results.getFailureCount());
+-        System.out.println( "Write errors:\t\t\t" + results.getWriteErrors());
+-        System.out.println( "Kept alive:\t\t\t" + results.getKeepAliveCount());
+-        System.out.println( "Total transferred:\t\t" + results.getTotalBytes() + " bytes");
+-        System.out.println( "Requests per second:\t\t" + nf2.format(reqsPerSec) + " [#/sec] (mean)");
+-        System.out.println( "Time per request:\t\t" + nf3.format(timePerReqMs
++        printAndAppend(sb, "\nServer Software:\t\t" + results.getServerName());
++        printAndAppend(sb,  "Server Hostname:\t\t" + results.getHostName());
++        printAndAppend(sb,  "Server Port:\t\t\t" + Integer.valueOf(results.getHostPort()));
++        printAndAppend(sb,  "Document Path:\t\t\t" + results.getDocumentPath());
++        printAndAppend(sb,  "Document Length:\t\t" + results.getContentLength() + " bytes\n");
++        printAndAppend(sb,  "Concurrency Level:\t\t" + results.getConcurrencyLevel());
++        printAndAppend(sb,  "Time taken for tests:\t\t" + nf6.format(totalTimeSec) + " seconds");
++        printAndAppend(sb,  "Complete requests:\t\t" + results.getSuccessCount());
++        printAndAppend(sb,  "Failed requests:\t\t" + results.getFailureCount());
++        printAndAppend(sb,  "Write errors:\t\t\t" + results.getWriteErrors());
++        printAndAppend(sb,  "Kept alive:\t\t\t" + results.getKeepAliveCount());
++        printAndAppend(sb,  "Total transferred:\t\t" + results.getTotalBytes() + " bytes");
++        printAndAppend(sb,  "Requests per second:\t\t" + nf2.format(reqsPerSec) + " [#/sec] (mean)");
++        // NOTA: verificare se va bene, a volte non sembra
++        //printAndAppend(sb, "RPS from times:\t\t\t" + nf2.format(RPSTimes)+ " [#/sec] (mean)");
++        printAndAppend(sb,  "Time per request:\t\t" + nf3.format(timePerReqMs
+                 * results.getConcurrencyLevel()) + " [ms] (mean)");
+-        System.out.println( "Time per request:\t\t" + nf3.format(timePerReqMs) +
++        printAndAppend(sb,  "Time per request:\t\t" + nf3.format(timePerReqMs) +
+             " [ms] (mean, across all concurrent requests)");
+-        System.out.println( "Transfer rate:\t\t\t" +
++        printAndAppend(sb,  "Transfer rate:\t\t\t" +
+             nf2.format(results.getTotalBytesRcvd() / 1000 / totalTimeSec) + " [Kbytes/sec] received");
+-        System.out.println( "\t\t\t\t" +
++        printAndAppend(sb,  "\t\t\t\t" +
+             (results.getTotalBytesSent() > 0 ? nf2.format(results.getTotalBytesSent()
+                     / 1000 / totalTimeSec) : Integer.valueOf(-1)) + " kb/s sent");
+-        System.out.println( "\t\t\t\t" +
++        printAndAppend(sb,  "\t\t\t\t" +
+             nf2.format(results.getTotalBytes() / 1000 / totalTimeSec) + " kb/s total");
++        printAndAppend(sb, "Percentile of the requests served within a certain time (ms)");
++        printAndAppend(sb, " 50%:\t\t" + nf2.format((double) (results.fifty / 1000000)));
++        printAndAppend(sb, " 60%:\t\t" + nf2.format((double) (results.sixty / 1000000)));
++        printAndAppend(sb, " 70%:\t\t"+ nf2.format((double) (results.seventy / 1000000)));
++        printAndAppend(sb, " 80%:\t\t"+ nf2.format((double) (results.eighty / 1000000)));
++        printAndAppend(sb, " 90%:\t\t"+ nf2.format((double) (results.ninety / 1000000)));
++
++        printFrequencies(sb, results.workers);
++
++        printDebug(sb, results.workers);
++
++        return sb.toString();
++    }
++
++    private static void printAndAppend(final StringBuilder sb, final String s) {
++        printAndAppend(sb, s, true);
++    }
++    private static void printAndAppend(final StringBuilder sb, final String s, final boolean returnLine) {
++        //System.out.println(s);
++        sb.append(s);
++        if(returnLine){
++            sb.append("\r\n");
++        }
++    }
++
++    public static void printFrequencies(final StringBuilder sb, final BenchmarkWorker[] workers) {
++        long mintime = Long.MAX_VALUE;
++        long maxtime = 0;
++        long minfreq = 0;
++        @SuppressWarnings("unused")
++        long maxfreq = 0;
++
++        // Determinazione dell'intervallo
++        for (int i = 0; i < workers.length; i++) {
++            final Stats s = workers[i].getStats();
++            final long worker_min = s.getMinInvocationTime();
++            if (worker_min < mintime) {
++                mintime = worker_min;
++                minfreq = 1;
++            } else if (worker_min == mintime)
++                minfreq++;
++
++            final long worker_max = s.getMaxInvocationTime();
++            if (worker_max > maxtime) {
++                maxtime = worker_max;
++                maxfreq = 1;
++            } else if (worker_max == maxtime)
++                maxfreq++;
++
++        }
++
++        // calcolo delle frequenze
++        // intervallo = max - min
++        // suddivisione = intervallo / quantita_suddivisioni
++        // freq[quantita_suddivisioni]
++        // indice=min
++        // while indice < max
++        // foreach worker:
++        // f = worker.statistica.getFreq(indice,indice+suddivisione)
++        // freq[i] += f
++        // indice += suddivisione
++
++        printAndAppend(sb, String.format("Invocation time frequency distribution on interval (ms) ["
++                +0+"," + maxtime / 1000000 + "]:"));
++                        //+ mintime / 1000000 + "," + maxtime / 1000000 + "]:"));
++        final int quantita_suddivisioni = 10; // TODO renderlo dinamico sulla
++                                        // lunghezza dell'intervallo
++        final long interval = maxtime - mintime;
++        final long ampiezza = interval / quantita_suddivisioni;
++
++        final List<Long> numero = new ArrayList<Long>();
++
++        //printAndAppend(sb, String.format("Freqs: %-6d", minfreq),false);
++        numero.add(minfreq);
++        // System.err.println("[0,"+mintime+"] --> "+minfreq);
++        long indice = mintime;
++        while (indice < maxtime) {
++            long sum = 0;
++            // long limite_superiore = ((indice+ampiezza) >= maxtime) ? maxtime
++            // : (indice + ampiezza);
++            long limite_superiore = indice + ampiezza;
++
++            if (maxtime - limite_superiore < ampiezza) {
++                limite_superiore = maxtime;
++                // System.err.print("*");
++            }
++
++            for (int i = 0; i < workers.length; i++) {
++                final Stats s = workers[i].getStats();
++                sum += s.getFrequencyIn(indice, limite_superiore);
++            }
++            // System.err.println("["+indice+","+limite_superiore+"] --> "+sum);
++            indice = limite_superiore;
++
++    //            if (indice >= maxtime)
++    //                printAndAppend(sb, String.format("%-6d%n", sum),false);
++    //            else
++    //                printAndAppend(sb, String.format("%-6d", sum),false);
++            numero.add(sum);
++        }
++
++        //printAndAppend(sb, String.format("Interval/Freq: "),false);
++        int indexNumber = 0;
++        long precIndex = 0;
++        indice = mintime;
++        while (indice < maxtime) {
++            final long newIndice = (indice / 1000000);
++            printAndAppend(sb, String.format(" [%d-%d]   \t%d ", precIndex, newIndice, numero.get(indexNumber++)));
++            precIndex = newIndice;
++            indice += ampiezza;
++            if (maxtime - indice < ampiezza)
++                indice = maxtime;
++        }
++        final long newIndice = (indice / 1000000);
++        try{
++            printAndAppend(sb, String.format(" [%d-%d]   \t%d %n", precIndex, newIndice, numero.get(indexNumber++)));
++        }catch(final Exception e){
++            printAndAppend(sb, String.format(" [%d-%d]   \tERR%d %n", precIndex, newIndice, -1));
++        }
++
++    }
++
++
++    public static void printDebug(final StringBuilder sb, final BenchmarkWorker[] workers) {
++
++        // Determinazione dell'intervallo
++        for (int i = 0; i < workers.length; i++) {
++
++            if(workers[i].getDetails()!=null && workers[i].getDetails().length()>0){
++
++                sb.append("==================================\n");
++                sb.append("Worker-"+i+": \n\n");
++                sb.append(workers[i].getDetails());
++                sb.append("\n\n");
++
++            }
++
++        }
++
+     }
+ 
+ }
+diff -urN httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/Results.java httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/Results.java
+--- httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/Results.java	2019-10-23 15:36:25.000000000 +0200
++++ httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/Results.java	2020-02-17 12:45:44.204132036 +0100
+@@ -47,6 +47,15 @@
+     long totalBytesRcvd;
+     long totalBytesSent;
+     long totalBytes;
++    long fifty = 0;
++    long sixty = 0;
++    long seventy = 0;
++    long eighty = 0;
++    long ninety = 0;
++    double rpsSUM = 0;
++
++    BenchmarkWorker[] workers;
++
+ 
+     Results() {
+         super();
+@@ -126,6 +135,12 @@
+                 .append(", totalBytesRcvd=").append(totalBytesRcvd)
+                 .append(", totalBytesSent=").append(totalBytesSent)
+                 .append(", totalBytes=").append(totalBytes)
++                .append(", fifty=").append(fifty)
++                .append(", sixty=").append(sixty)
++                .append(", seventy=").append(seventy)
++                .append(", eighty=").append(eighty)
++                .append(", ninety=").append(ninety)
++                .append(", rpsSUM=").append(rpsSUM)
+                 .append("]");
+         return builder.toString();
+     }
+diff -urN httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/Stats.java httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/Stats.java
+--- httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/Stats.java	2019-10-23 15:36:25.000000000 +0200
++++ httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/Stats.java	2020-02-17 12:45:44.205132044 +0100
+@@ -26,6 +26,9 @@
+  */
+ package org.apache.http.benchmark;
+ 
++import java.util.ArrayList;
++import java.util.Collections;
++
+ /**
+  * Helper to gather statistics for an {@link HttpBenchmark HttpBenchmark}.
+  *
+@@ -44,6 +47,8 @@
+     private long totalBytesRecv = 0;
+     private long totalBytesSent = 0;
+     private long contentLength = -1;
++    private ArrayList<Long> times = new ArrayList<Long>();
++    private boolean ordered = false;
+ 
+     public Stats() {
+         super();
+@@ -140,4 +145,93 @@
+         this.serverName = serverName;
+     }
+ 
++    public void addInvocationTime(final long duration) {
++        this.times.add(duration);
++        ordered = false;
++    }
++
++    public long getPercentile(final int perc) {
++        // http://www.allinterview.com/showanswers/61469.html
++        // The 90th percentile tells you the value for which 90% of
++        // the data points are smaller and 10% are bigger.
++        // Statistically, to calculate the 90th percentile value:
++        // 1. Sort the transaction instances by their value.
++        // 2. Remove the top 10% instances.
++        // 3. The highest value left is the 90th percentile.
++        //
++        // Example:
++        // There are ten instances of transaction "t1" with the values
++        // 1,3,2,4,5,20,7,8,9,6 (in sec).
++        // 1. Sort by value -- 1,2,3,4,5,6,7,8,9,20.
++        // 2. Remove top 10 % -- remove the value "20."
++        // 3. The highest value left is the 90th percentile -- 9 is
++        // the 90th percentile value.
++        long perc_time = 0;
++        if (times.size() == 0)
++            return perc_time;
++        if (!ordered) {
++            Collections.sort(times);
++            ordered = true;
++        }
++        final double percentile_position = perc * (times.size() + 1) / 100;
++
++        final int i = (int) Math.floor(percentile_position);
++        // System.out.println(i);
++        // ArrayList are 0-indexed
++        try {
++            perc_time = times.get(i - 1);
++        } catch (final ArrayIndexOutOfBoundsException aiobe) {
++            aiobe.printStackTrace();
++        }
++        return perc_time;
++    }
++
++    public long getNinetyPercentile() {
++        return getPercentile(90);
++    }
++
++    public ArrayList<Long> getAllTimes() {
++        return times;
++    }
++
++    public double getRPSfromTimes() {
++        double sum = 0;
++        if (times.size() == 0)
++            return sum;
++        for (final long x : times)
++            sum += x;
++        // Times are in ns; must be converted in sec.
++        final double res = times.size() / (sum / 1000000000);
++        return res;
++    }
++
++    public long getMinInvocationTime() {
++        if (!ordered) {
++            Collections.sort(times);
++            ordered = true;
++        }
++        return (times.size() > 0) ? times.get(0) : 0L;
++    }
++
++    public long getMaxInvocationTime() {
++        if (!ordered) {
++            Collections.sort(times);
++            ordered = true;
++        }
++        return (times.size() > 0) ? times.get(times.size() - 1) : 0L;
++    }
++
++    public long getFrequencyIn(final long start, final long end) {
++        long sum = 0;
++        if (start < end) {
++            for (final long x : times)
++                if (x > start && x <= end)
++                    sum++;
++        } else if (start == end)
++            for (final long x : times)
++                if (x == start)
++                    sum++;
++        return sum;
++    }
++
+ }
+diff -urN httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/TemplateUtils.java httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/TemplateUtils.java
+--- httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/TemplateUtils.java	1970-01-01 01:00:00.000000000 +0100
++++ httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/TemplateUtils.java	2020-02-17 12:45:44.207132061 +0100
+@@ -0,0 +1,326 @@
++/*
++ * ====================================================================
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing,
++ * software distributed under the License is distributed on an
++ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++ * KIND, either express or implied.  See the License for the
++ * specific language governing permissions and limitations
++ * under the License.
++ * ====================================================================
++ *
++ * This software consists of voluntary contributions made by many
++ * individuals on behalf of the Apache Software Foundation.  For more
++ * information on the Apache Software Foundation, please see
++ * <http://www.apache.org/>.
++ *
++ */
++package org.apache.http.benchmark;
++
++public class TemplateUtils {
++
++    private static final String TEMPLATE_ID_SERIAL = "@ID_SERIAL@";
++    private static final String TEMPLATE_ID_DATE = "@ID_DATE@";
++    private static final String TEMPLATE_DATE = "@DATE@";
++
++    private static final java.text.SimpleDateFormat datam = new java.text.SimpleDateFormat("yyyy-MM-dd_HH:mm");
++    private static final java.text.SimpleDateFormat datas = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
++    private static final String SERIAL_FORMAT = "%07d";
++
++
++    /* **** Contatore che mantiene il numero incrementale all'interno del minuto ***** */
++
++    private static int countID_withDate = 1;
++
++    private static java.io.File timestamp_withDate = new java.io.File(".lastRun");
++
++    static {
++        java.io.FileReader fr = null;
++        java.io.BufferedReader br = null;
++        try {
++            if(timestamp_withDate.exists()==false){
++                countID_withDate = 1;
++            }
++            else{
++                fr = new java.io.FileReader(timestamp_withDate);
++                br = new java.io.BufferedReader(fr);
++                final String last = br.readLine();
++                br.close();
++                final String[] date_id = last.split(":");
++                final long x = Long.parseLong(date_id[0]);
++                final long y = System.currentTimeMillis();
++                if (y - x >= 60000)
++                    countID_withDate = 1;
++                else
++                    countID_withDate = Integer.parseInt(date_id[1]);
++            }
++        } catch (final java.io.IOException e) {
++            e.printStackTrace(System.out);
++            // setto random la seconda cifra dell'ID egov (suppongo che non
++            // possano essere passati piu'
++            // centomila messaggi in un minuto)
++            countID_withDate = (new java.util.Random().nextInt(8) + 1) * 100000;
++        } finally {
++            try {
++                if (br != null)
++                    br.close();
++                if (fr != null)
++                    fr.close();
++            } catch (final java.io.IOException e) {
++            }
++        }
++
++    }
++
++    public static synchronized int getCountInMinute(){
++        return countID_withDate++;
++    }
++
++    public static void stopCountInMinute() {
++        synchronized (timestamp_withDate) {
++            java.io.FileWriter fw = null;
++            java.io.BufferedWriter bw = null;
++            try {
++                fw = new java.io.FileWriter(timestamp_withDate);
++                bw = new java.io.BufferedWriter(fw);
++                bw.write("" + System.currentTimeMillis() + ":" + countID_withDate);
++            } catch (final java.io.IOException e) {
++                // TODO Auto-generated catch block
++                e.printStackTrace();
++            } finally {
++                try {
++                    if (bw != null)
++                        bw.close();
++                    if (fw != null)
++                        fw.close();
++                } catch (final java.io.IOException e) {
++                }
++            }
++        }
++    }
++
++
++
++    /* **** Contatore che mantiene il numero incrementale all'interno del minuto ***** */
++
++    private static int countID_absolute = 1;
++
++    private static java.io.File timestamp_absolute = new java.io.File(".lastRunAbsolute");
++
++    static {
++        java.io.FileReader fr = null;
++        java.io.BufferedReader br = null;
++        try {
++            if(timestamp_absolute.exists()==false){
++                countID_absolute = 0;
++            }
++            else{
++                fr = new java.io.FileReader(timestamp_absolute);
++                br = new java.io.BufferedReader(fr);
++                final String last = br.readLine();
++                br.close();
++                final String[] date_id = last.split(":");
++                //            long x = Long.parseLong(date_id[0]);
++                //            long y = System.currentTimeMillis();
++                //            if (y - x >= 60000)
++                //                countID_absolute = 1;
++                //            else
++                countID_absolute = Integer.parseInt(date_id[1]);
++            }
++        } catch (final java.io.IOException e) {
++            e.printStackTrace(System.out);
++            // setto random la seconda cifra dell'ID egov (suppongo che non
++            // possano essere passati piu'
++            // centomila messaggi in un minuto)
++            countID_absolute = (new java.util.Random().nextInt(8) + 1) * 100000;
++        } finally {
++            try {
++                if (br != null)
++                    br.close();
++                if (fr != null)
++                    fr.close();
++            } catch (final java.io.IOException e) {
++            }
++        }
++
++    }
++
++    public static synchronized int getCountAbsolute(){
++        return countID_absolute++;
++    }
++
++    public static void stopCountAbsolute() {
++        synchronized (timestamp_absolute) {
++            java.io.FileWriter fw = null;
++            java.io.BufferedWriter bw = null;
++            try {
++                fw = new java.io.FileWriter(timestamp_absolute);
++                bw = new java.io.BufferedWriter(fw);
++                bw.write("" + System.currentTimeMillis() + ":" + countID_absolute);
++            } catch (final java.io.IOException e) {
++                // TODO Auto-generated catch block
++                e.printStackTrace();
++            } finally {
++                try {
++                    if (bw != null)
++                        bw.close();
++                    if (fw != null)
++                        fw.close();
++                } catch (final java.io.IOException e) {
++                }
++            }
++        }
++    }
++
++
++
++
++    // **** metodi di instanza *****
++
++    long templateReplacedValueLength = 0;
++    long templateLength = 0;
++    long actualCountCalcolato = -1;
++
++    public void template(final StringBuffer xml, final java.io.OutputStream osParam, final long actualCount, final boolean idAbsolute) throws java.io.IOException{
++        final java.util.HashMap<String, String> mappa = new java.util.HashMap<String, String>();
++        final java.util.Date now = new java.util.Date();
++        //mappa.put("@DATAS@", datas.format(now));
++        //mappa.put("@DATAM@", datam.format(now));
++        //mappa.put(TEMPLATE_ID_SERIAL, String.format("%07d", getCount()));
++        // replace values in header string
++        int i = xml.indexOf("@");
++
++        //final java.io.ByteArrayOutputStream os = new java.io.ByteArrayOutputStream();
++        final java.io.OutputStream os = osParam;
++
++        int delimiter=0;
++        while ( i > -1 ) {
++
++            if(os!=null)
++                os.write(xml.substring(delimiter, i).getBytes());
++            final StringBuffer keyBuffer = new StringBuffer("@");
++            i++;
++            while( (i<xml.length()) && (xml.charAt(i) != '@') && (xml.charAt(i) != '<') && (xml.charAt(i) != '>') && (xml.charAt(i) != ' ')  )
++                keyBuffer.append(xml.charAt(i++));
++            if((xml.charAt(i) == '@') || (xml.charAt(i) == '<') || (xml.charAt(i) == '>') || (xml.charAt(i) == ' ')){
++                keyBuffer.append(xml.charAt(i));
++            }
++            i++;
++            delimiter = i;
++            final StringBuffer format = new StringBuffer();
++            if(i<xml.length() && xml.charAt(i)=='{'){
++                i++;
++                while( (i<xml.length()) && (xml.charAt(i) != '}')  )
++                    format.append(xml.charAt(i++));
++                i++;
++                delimiter = i;
++            }
++
++            final String key = keyBuffer.toString();
++
++            //System.out.println("KEY ["+key+"]");
++
++            this.templateLength = this.templateLength + key.length();
++            if(TEMPLATE_ID_SERIAL.equals(key)){
++                String formatToUse = SERIAL_FORMAT;
++                if(format.length()>0){
++                    formatToUse = format.toString();
++                    this.templateLength = this.templateLength + format.length() + 2;
++                }
++                //System.out.println("TROVATO ["+key+"] FORMAT["+formatToUse+"] actualCount["+actualCount+"] ...");
++                if(actualCount<0){
++                    // lo stesso id potrebbe essere usato più volte nel solito messaggio
++                    if(this.actualCountCalcolato<0){
++                        //System.out.println("Calcolo idAbsolute["+idAbsolute+"]");
++                        if(idAbsolute){
++                            this.actualCountCalcolato = getCountAbsolute();
++                        }
++                        else{
++                            this.actualCountCalcolato = getCountInMinute();
++                        }
++                    }
++                }
++                else{
++                    this.actualCountCalcolato = actualCount;
++                }
++                final String serial = String.format(formatToUse, this.actualCountCalcolato);
++                //System.out.println("TROVATO ["+key+"] FORMAT["+formatToUse+"] actualCount["+actualCount+"] this.actualCountCalcolato["+this.actualCountCalcolato+"] serial["+serial+"]");
++                this.templateReplacedValueLength = this.templateReplacedValueLength + serial.length();
++                if(os!=null)
++                    os.write(serial.getBytes());
++            }
++            else if(TEMPLATE_ID_DATE.equals(key)){
++                java.text.SimpleDateFormat formatToUse = datam;
++                if(format.length()>0){
++                    final String f = format.toString();
++                    formatToUse = new java.text.SimpleDateFormat(f);
++                    this.templateLength = this.templateLength + format.length() + 2;
++                }
++                final String date = formatToUse.format(now);
++                this.templateReplacedValueLength = this.templateReplacedValueLength + date.length();
++                if(os!=null)
++                    os.write(date.getBytes());
++            }
++            else if(TEMPLATE_DATE.equals(key)){
++                java.text.SimpleDateFormat formatToUse = datas;
++                if(format.length()>0){
++                    final String f = format.toString();
++                    formatToUse = new java.text.SimpleDateFormat(f);
++                    this.templateLength = this.templateLength + format.length() + 2;
++                }
++                final String date = formatToUse.format(now);
++                this.templateReplacedValueLength = this.templateReplacedValueLength + date.length();
++                if(os!=null)
++                    os.write(date.getBytes());
++            }
++            else{
++                final String value = mappa.get(key);
++                //System.out.println("ELSE ["+key+"] ["+value+"]");
++                if( value != null ){
++                    this.templateReplacedValueLength = this.templateReplacedValueLength + value.length();
++                    if(os!=null)
++                        os.write(value.getBytes());
++                }
++                else{
++                    this.templateReplacedValueLength = this.templateReplacedValueLength + key.length();
++                    if(os!=null)
++                        os.write(key.getBytes());
++                }
++            }
++
++            //header.indexOf("@", delimiter)
++            while( (i<xml.length()) && (xml.charAt(i) != '@') ) {
++                i++;
++            }
++            //System.out.println("FINE I=["+i+"] xml=["+xml.length()+"]");
++            if (i >= xml.length())
++                i = -1;
++            //System.out.println("I=["+i+"]");
++
++            //i = header.indexOf("@", delimiter);
++        }
++        if (delimiter<xml.length()){
++            if(os!=null){
++                os.write(xml.substring(delimiter, xml.length()).getBytes());
++            }
++        }
++        if(os!=null){
++            this.actualCountCalcolato=-1;
++        }
++
++        //os.flush();
++        //os.close();
++        //System.out.println("Template ["+os.toString()+"]");
++        //osParam.write(os.toByteArray());
++    }
++
++}
+diff -urN httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/XMLEntityTemplate.java httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/XMLEntityTemplate.java
+--- httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/XMLEntityTemplate.java	1970-01-01 01:00:00.000000000 +0100
++++ httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/XMLEntityTemplate.java	2020-02-17 12:45:44.208132070 +0100
+@@ -0,0 +1,43 @@
++/*
++ * ====================================================================
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing,
++ * software distributed under the License is distributed on an
++ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++ * KIND, either express or implied.  See the License for the
++ * specific language governing permissions and limitations
++ * under the License.
++ * ====================================================================
++ *
++ * This software consists of voluntary contributions made by many
++ * individuals on behalf of the Apache Software Foundation.  For more
++ * information on the Apache Software Foundation, please see
++ * <http://www.apache.org/>.
++ *
++ */
++
++package org.apache.http.benchmark;
++
++import org.apache.http.entity.ContentProducer;
++import org.apache.http.entity.EntityTemplate;
++
++public class XMLEntityTemplate extends EntityTemplate {
++
++    String mimetype;
++
++    public XMLEntityTemplate(final ContentProducer cp, final String mimetype) {
++        super(cp);
++        this.mimetype = mimetype;
++        setContentType(this.mimetype);
++    }
++
++}
+diff -urN httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/XmlTemplateContentProducer.java httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/XmlTemplateContentProducer.java
+--- httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/XmlTemplateContentProducer.java	1970-01-01 01:00:00.000000000 +0100
++++ httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/benchmark/XmlTemplateContentProducer.java	2020-02-17 12:45:44.208132070 +0100
+@@ -0,0 +1,82 @@
++/*
++ * ====================================================================
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing,
++ * software distributed under the License is distributed on an
++ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++ * KIND, either express or implied.  See the License for the
++ * specific language governing permissions and limitations
++ * under the License.
++ * ====================================================================
++ *
++ * This software consists of voluntary contributions made by many
++ * individuals on behalf of the Apache Software Foundation.  For more
++ * information on the Apache Software Foundation, please see
++ * <http://www.apache.org/>.
++ *
++ */
++
++package org.apache.http.benchmark;
++
++import java.io.IOException;
++import java.io.OutputStream;
++
++import org.apache.http.entity.ContentProducer;
++
++public class XmlTemplateContentProducer implements ContentProducer {
++
++    private static StringBuffer payload;
++
++
++    public XmlTemplateContentProducer(final StringBuffer p){
++        payload = p ;
++    }
++
++    public long getContentLength() {
++
++        // update Length
++        try{
++            this.writeTo(null); // con null vengono solo calcolati i templates
++        }catch(final Exception e){
++            throw new RuntimeException(e.getMessage(),e);
++        }
++
++        final long newCount = (payload.length() - this.templateLength) + this.templateReplacedValueLength;
++        //System.out.println("newX:"+newCount);
++        return newCount;
++    }
++
++
++    private long templateLength = 0;
++    private long templateReplacedValueLength = 0;
++    private long actualCount = -1;
++
++    public void writeTo(final OutputStream os) throws IOException {
++
++        this.templateLength = 0;
++        this.templateReplacedValueLength = 0;
++
++        // Scrivo l'header http sostituendo i templates
++        final TemplateUtils tUtils = new TemplateUtils();
++        tUtils.template(payload, os, this.actualCount, true);
++        this.templateLength = tUtils.templateLength;
++        this.templateReplacedValueLength = tUtils.templateReplacedValueLength;
++        //System.out.println("templateLength["+templateLength+"]");
++        //System.out.println("templateReplacedValueLength["+templateReplacedValueLength+"]");
++        this.actualCount = tUtils.actualCountCalcolato;
++
++    }
++
++    public void stop() {
++        TemplateUtils.stopCountAbsolute();
++    }
++}
+diff -urN httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/content/FileBodyTemplate.java httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/content/FileBodyTemplate.java
+--- httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/content/FileBodyTemplate.java	1970-01-01 01:00:00.000000000 +0100
++++ httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/content/FileBodyTemplate.java	2020-02-17 12:45:44.210132087 +0100
+@@ -0,0 +1,76 @@
++/*
++ * ====================================================================
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing,
++ * software distributed under the License is distributed on an
++ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++ * KIND, either express or implied.  See the License for the
++ * specific language governing permissions and limitations
++ * under the License.
++ * ====================================================================
++ *
++ * This software consists of voluntary contributions made by many
++ * individuals on behalf of the Apache Software Foundation.  For more
++ * information on the Apache Software Foundation, please see
++ * <http://www.apache.org/>.
++ *
++ */
++
++package org.apache.http.entity.mime.content;
++
++import java.io.IOException;
++import java.io.OutputStream;
++
++import org.apache.http.benchmark.BustaContentProducer;
++import org.apache.http.benchmark.XmlTemplateContentProducer;
++import org.apache.http.entity.ContentProducer;
++import org.apache.http.entity.ContentType;
++
++public class FileBodyTemplate extends AbstractContentBody {
++
++    private final ContentProducer contentproducer ;
++
++    public FileBodyTemplate(final ContentProducer cp,final String mimetype) {
++        super(ContentType.parse(mimetype));
++        this.contentproducer = cp;
++    }
++
++    public void writeTo(final OutputStream out) throws IOException {
++        this.contentproducer.writeTo(out);
++    }
++
++
++    public String getFilename() {
++        return null;
++    }
++
++
++    public String getCharset() {
++        return null;
++    }
++
++
++    public long getContentLength() {
++        if(this.contentproducer instanceof BustaContentProducer)
++            return ((BustaContentProducer)this.contentproducer).getContentLength();
++        else if(this.contentproducer instanceof XmlTemplateContentProducer)
++            return ((XmlTemplateContentProducer)this.contentproducer).getContentLength();
++        else
++            throw new RuntimeException("ContentProducerType ["+this.contentproducer.getClass().getName()+"] not supported");
++    }
++
++
++    public String getTransferEncoding() {
++        return null;
++    }
++
++}
+diff -urN httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/HttpMultipartRelated.java httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/HttpMultipartRelated.java
+--- httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/HttpMultipartRelated.java	1970-01-01 01:00:00.000000000 +0100
++++ httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/HttpMultipartRelated.java	2020-02-17 12:52:09.832385439 +0100
+@@ -0,0 +1,271 @@
++/*
++ * ====================================================================
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing,
++ * software distributed under the License is distributed on an
++ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++ * KIND, either express or implied.  See the License for the
++ * specific language governing permissions and limitations
++ * under the License.
++ * ====================================================================
++ *
++ * This software consists of voluntary contributions made by many
++ * individuals on behalf of the Apache Software Foundation.  For more
++ * information on the Apache Software Foundation, please see
++ * <http://www.apache.org/>.
++ *
++ */
++
++package org.apache.http.entity.mime;
++
++import java.io.ByteArrayOutputStream;
++import java.io.IOException;
++import java.io.OutputStream;
++import java.nio.ByteBuffer;
++import java.nio.CharBuffer;
++import java.nio.charset.Charset;
++import java.util.ArrayList;
++import java.util.List;
++
++import org.apache.http.entity.mime.content.ContentBody;
++import org.apache.http.util.ByteArrayBuffer;
++
++public class HttpMultipartRelated {
++
++    private static ByteArrayBuffer encode(
++            final Charset charset, final String string) {
++        final ByteBuffer encoded = charset.encode(CharBuffer.wrap(string));
++        final ByteArrayBuffer bab = new ByteArrayBuffer(encoded.remaining());
++        bab.append(encoded.array(), encoded.position(), encoded.remaining());
++        return bab;
++    }
++
++    private static void writeBytes(
++            final ByteArrayBuffer b, final OutputStream out) throws IOException {
++        out.write(b.buffer(), 0, b.length());
++    }
++
++    private static void writeBytes(
++            final String s, final Charset charset, final OutputStream out) throws IOException {
++        final ByteArrayBuffer b = encode(charset, s);
++        writeBytes(b, out);
++    }
++
++    private static void writeBytes(
++            final String s, final OutputStream out) throws IOException {
++        final ByteArrayBuffer b = encode(MIME.DEFAULT_CHARSET, s);
++        writeBytes(b, out);
++    }
++
++    private static void writeField(
++            final MinimalField field, final OutputStream out) throws IOException {
++        writeBytes(field.getName(), out);
++        writeBytes(FIELD_SEP, out);
++        writeBytes(field.getBody(), out);
++        writeBytes(CR_LF, out);
++    }
++
++    private static void writeField(
++            final MinimalField field, final Charset charset, final OutputStream out) throws IOException {
++        writeBytes(field.getName(), charset, out);
++        writeBytes(FIELD_SEP, out);
++        writeBytes(field.getBody(), charset, out);
++        writeBytes(CR_LF, out);
++    }
++
++    private static final ByteArrayBuffer FIELD_SEP = encode(MIME.DEFAULT_CHARSET, ": ");
++    private static final ByteArrayBuffer CR_LF = encode(MIME.DEFAULT_CHARSET, "\r\n");
++    private static final ByteArrayBuffer TWO_DASHES = encode(MIME.DEFAULT_CHARSET, "--");
++
++
++    private final String subType;
++    private final Charset charset;
++    private String boundary;
++    private final List<RelatedBodyPart> parts;
++
++    private final HttpMultipartMode mode;
++
++    /**
++     * Creates an instance with the specified settings.
++     *
++     * @param subType mime subtype - must not be {@code null}
++     * @param charset the character set to use. May be {@code null}, in which case {@link MIME#DEFAULT_CHARSET} - i.e. US-ASCII -
++     * @param boundary to use  - must not be {@code null}
++     * @param mode the mode to use
++     * @throws IllegalArgumentException if charset is null or boundary is null
++     */
++    public HttpMultipartRelated(final String subType, final Charset charset, final String boundary, final HttpMultipartMode mode) {
++        super();
++        if (subType == null) {
++            throw new IllegalArgumentException("Multipart subtype may not be null");
++        }
++        //         if (boundary == null) {
++        //             throw new IllegalArgumentException("Multipart boundary may not be null");
++        //         }
++        this.subType = subType;
++        this.charset = charset != null ? charset : MIME.DEFAULT_CHARSET;
++        this.boundary = boundary;
++        this.parts = new ArrayList<RelatedBodyPart>();
++        this.mode = mode;
++    }
++
++    /**
++     * Creates an instance with the specified settings.
++     * Mode is set to {@link HttpMultipartMode#STRICT}
++     *
++     * @param subType mime subtype - must not be {@code null}
++     * @param charset the character set to use. May be {@code null}, in which case {@link MIME#DEFAULT_CHARSET} - i.e. US-ASCII -
++     * @param boundary to use  - must not be {@code null}
++     * @throws IllegalArgumentException if charset is null or boundary is null
++     */
++    public HttpMultipartRelated(final String subType, final Charset charset, final String boundary) {
++        this(subType, charset, boundary, HttpMultipartMode.STRICT);
++    }
++
++    public HttpMultipartRelated(final String subType, final String boundary) {
++        this(subType, null, boundary);
++    }
++
++    public String getSubType() {
++        return this.subType;
++    }
++
++    public Charset getCharset() {
++        return this.charset;
++    }
++
++    public HttpMultipartMode getMode() {
++        return this.mode;
++    }
++
++    public List<RelatedBodyPart> getBodyParts() {
++        return this.parts;
++    }
++
++    public void addBodyPart(final RelatedBodyPart part) {
++        if (part == null) {
++            return;
++        }
++        this.parts.add(part);
++    }
++
++    public String getBoundary() {
++        return this.boundary;
++    }
++
++    public void setBoundary(final String boundary) {
++        this.boundary = boundary;
++    }
++
++    private void doWriteTo(
++            final HttpMultipartMode mode,
++            final OutputStream out,
++            final boolean writeContent) throws IOException {
++
++        if (getBoundary() == null) {
++            throw new IllegalArgumentException("Multipart boundary may not be null");
++        }
++
++        final ByteArrayBuffer boundary = encode(this.charset, getBoundary());
++        for (final RelatedBodyPart part: this.parts) {
++            writeBytes(TWO_DASHES, out);
++            writeBytes(boundary, out);
++            writeBytes(CR_LF, out);
++
++            final Header header = part.getHeader();
++
++            switch (mode) {
++            case STRICT:
++                for (final MinimalField field: header) {
++                    writeField(field, out);
++                }
++                break;
++            case BROWSER_COMPATIBLE:
++                // Only write Content-Disposition
++                // Use content charset
++                final MinimalField cd = part.getHeader().getField(MIME.CONTENT_DISPOSITION);
++                writeField(cd, this.charset, out);
++                final String filename = part.getBody().getFilename();
++                if (filename != null) {
++                    final MinimalField ct = part.getHeader().getField(MIME.CONTENT_TYPE);
++                    writeField(ct, this.charset, out);
++                }
++                break;
++            case RFC6532:
++                // For RFC6532, we output all fields with UTF-8 encoding.
++                for (final MinimalField field: header) {
++                    writeField(field, MIME.UTF8_CHARSET, out);
++                }
++                break;
++            default:
++                break;
++            }
++            writeBytes(CR_LF, out);
++
++            if (writeContent) {
++                part.getBody().writeTo(out);
++            }
++            writeBytes(CR_LF, out);
++        }
++        writeBytes(TWO_DASHES, out);
++        writeBytes(boundary, out);
++        writeBytes(TWO_DASHES, out);
++        writeBytes(CR_LF, out);
++        out.flush();
++    }
++
++    /**
++     * Writes out the content in the multipart/related encoding. This method
++     * produces slightly different formatting depending on its compatibility
++     * mode.
++     *
++     * @param out outputStream
++     * @see #getMode()
++     */
++    public void writeTo(final OutputStream out) throws IOException {
++        doWriteTo(this.mode, out, true);
++    }
++
++    /**
++     * Determines the total length of the multipart content (content length of
++     * individual parts plus that of extra elements required to delimit the parts
++     * from one another). If any of the @{link BodyPart}s contained in this object
++     * is of a streaming entity of unknown length the total length is also unknown.
++     * This method buffers only a small amount of data in order to determine the
++     * total length of the entire entity. The content of individual parts is not
++     * buffered.
++     * @return total length of the multipart entity if known, <code>-1</code>
++     *   otherwise.
++     */
++    public long getTotalLength() {
++        long contentLen = 0;
++        for (final RelatedBodyPart part: this.parts) {
++            final ContentBody body = part.getBody();
++            final long len = body.getContentLength();
++            if (len >= 0) {
++                contentLen += len;
++            } else {
++                return -1;
++            }
++        }
++        final ByteArrayOutputStream out = new ByteArrayOutputStream();
++        try {
++            doWriteTo(this.mode, out, false);
++            final byte[] extra = out.toByteArray();
++            return contentLen + extra.length;
++        } catch (final IOException ex) {
++            // Should never happen
++            return -1;
++        }
++
++    }
++}
+diff -urN httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/mime.types httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/mime.types
+--- httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/mime.types	1970-01-01 01:00:00.000000000 +0100
++++ httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/mime.types	2020-02-17 12:45:44.216132137 +0100
+@@ -0,0 +1,1506 @@
++/*
++ * ====================================================================
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing,
++ * software distributed under the License is distributed on an
++ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++ * KIND, either express or implied.  See the License for the
++ * specific language governing permissions and limitations
++ * under the License.
++ * ====================================================================
++ *
++ * This software consists of voluntary contributions made by many
++ * individuals on behalf of the Apache Software Foundation.  For more
++ * information on the Apache Software Foundation, please see
++ * <http://www.apache.org/>.
++ *
++ */
++
++# This is a comment. I love comments.     -*- indent-tabs-mode: t -*-
++
++# This file controls what Internet media types are sent to the client for
++# given file extension(s).  Sending the correct media type to the client
++# is important so they know how to handle the content of the file.
++# Extra types can either be added here or by using an AddType directive
++# in your config files. For more information about Internet media types,
++# please read RFC 2045, 2046, 2047, 2048, and 2077.  The Internet media type
++# registry is at <http://www.iana.org/assignments/media-types/>.
++
++# IANA types
++
++# MIME type Extensions
++application/1d-interleaved-parityfec
++application/3gpp-ims+xml
++application/activemessage
++application/andrew-inset ez
++application/applefile
++application/atom+xml atom
++application/atomcat+xml atomcat
++application/atomicmail
++application/atomsvc+xml atomsvc
++application/auth-policy+xml apxml
++application/batch-SMTP
++application/beep+xml
++application/calendar+xml xcs
++application/cals-1840
++application/ccmp+xml ccmp
++application/ccxml+xml ccxml
++application/cdmi-capability cdmia
++application/cdmi-container cdmic
++application/cdmi-domain cdmid
++application/cdmi-object cdmio
++application/cdmi-queue cdmiq
++application/cea-2018+xml
++application/cellml+xml cellml cml
++application/cfw
++application/cnrp+xml
++application/commonground
++application/conference-info+xml
++application/cpl+xml cpl
++application/csta+xml
++application/CSTAdata+xml
++application/cybercash
++application/davmount+xml davmount
++application/dca-rft
++application/dec-dx
++application/dialog-info+xml
++application/dicom dcm
++application/dns
++application/dskpp+xml xmls
++application/dssc+der dssc
++application/dssc+xml xdssc
++application/dvcs dvc
++application/ecmascript
++application/EDI-Consent
++application/EDI-X12
++application/EDIFACT
++application/emma+xml emma
++application/epp+xml
++application/eshop
++application/exi exi
++application/fastinfoset finf
++application/fastsoap
++# fits, fit, fts: image/fits
++application/fits
++application/font-tdpfr pfr
++application/framework-attributes+xml
++application/H224
++application/hal+xml hal
++application/held+xml
++application/http
++application/hyperstudio stk
++application/ibe-key-request+xml
++application/ibe-pkg-reply+xml
++application/ibe-pp-data
++application/iges
++application/im-iscomposing+xml
++application/index
++application/index.cmd
++application/index.obj
++application/index.response
++application/index.vnd
++application/inkml+xml ink inkml
++application/iotp
++application/ipfix ipfix
++application/ipp
++application/isup
++application/javascript js
++application/json json
++application/kpml-request+xml
++application/kpml-response+xml
++application/lost+xml lostxml
++application/mac-binhex40 hqx
++application/macwriteii
++application/mads+xml mads
++application/marc mrc
++application/marcxml+xml mrcx
++application/mathematica nb ma mb
++application/mathml-content+xml
++application/mathml-presentation+xml
++application/mathml+xml mml
++application/mbms-associated-procedure-description+xml
++application/mbms-deregister+xml
++application/mbms-envelope+xml
++application/mbms-msk-response+xml
++application/mbms-msk+xml
++application/mbms-protection-description+xml
++application/mbms-reception-report+xml
++application/mbms-register-response+xml
++application/mbms-register+xml
++application/mbms-user-service-description+xml
++application/mbox mbox
++application/media_control+xml
++application/mediaservercontrol+xml
++application/metalink4+xml meta4
++application/mets+xml mets
++application/mikey
++application/mods+xml mods
++application/moss-keys
++application/moss-signature
++application/mosskey-data
++application/mosskey-request
++application/mp21 m21 mp21
++# mp4, mpg4: video/mp4, see RFC 4337
++application/mp4
++application/mpeg4-generic
++application/mpeg4-iod
++application/mpeg4-iod-xmt
++application/msc-ivr+xml
++application/msc-mixer+xml
++application/msword doc
++application/mxf mxf
++application/nasdata
++application/news-checkgroups
++application/news-groupinfo
++application/news-transmission
++application/nss
++application/ocsp-request orq
++application/ocsp-response ors
++application/octet-stream bin lha lzh exe class so dll img iso
++application/oda oda
++application/oebps-package+xml opf
++application/ogg ogx
++application/oxps oxps
++application/parityfec
++# xer: application/xcap-error+xml
++application/patch-ops-error+xml
++application/pdf pdf
++application/pgp-encrypted
++application/pgp-keys
++application/pgp-signature sig
++application/pidf-diff+xml
++application/pidf+xml
++application/pkcs10 p10
++application/pkcs7-mime p7m p7c
++application/pkcs7-signature p7s
++application/pkcs8 p8
++# ac: application/vnd.nokia.n-gage.ac+xml
++application/pkix-attr-cert
++application/pkix-cert cer
++application/pkix-crl crl
++application/pkix-pkipath pkipath
++application/pkixcmp
++application/pls+xml pls
++application/poc-settings+xml
++application/postscript ps eps ai
++application/prs.alvestrand.titrax-sheet
++application/prs.cww cw cww
++application/prs.nprend rnd rct
++application/prs.plucker
++application/prs.rdf-xml-crypt rdf-crypt
++application/prs.xsf+xml xsf
++application/pskc+xml pskcxml
++application/qsig
++application/rdf+xml rdf
++application/reginfo+xml rif
++application/relax-ng-compact-syntax rnc
++application/remote-printing
++application/resource-lists-diff+xml rld
++application/resource-lists+xml rl
++application/riscos
++application/rlmi+xml
++application/rls-services+xml rs
++application/rpki-ghostbusters gbr
++application/rpki-manifest mft
++application/rpki-roa roa
++application/rpki-updown
++application/rtf rtf
++application/rtx
++application/samlassertion+xml
++application/samlmetadata+xml
++application/sbml+xml
++application/scvp-cv-request scq
++application/scvp-cv-response scs
++application/scvp-vp-request spq
++application/scvp-vp-response spp
++application/sdp sdp
++application/set-payment
++application/set-payment-initiation
++application/set-registration
++application/set-registration-initiation
++application/sgml
++application/sgml-open-catalog soc
++application/shf+xml shf
++application/sieve siv sieve
++application/simple-filter+xml cl
++application/simple-message-summary
++application/simpleSymbolContainer
++application/slate
++# obsoleted by application/smil+xml
++application/smil smil smi sml
++# smil, smi: application/smil for now
++application/smil+xml
++application/soap+fastinfoset
++application/soap+xml
++application/sparql-query rq
++application/sparql-results+xml srx
++application/spirits-event+xml
++application/srgs gram
++application/srgs+xml grxml
++application/sru+xml sru
++application/ssml+xml ssml
++application/tamp-apex-update tau
++application/tamp-apex-update-confirm auc
++application/tamp-community-update tcu
++application/tamp-community-update-confirm cuc
++application/tamp-error ter
++application/tamp-sequence-adjust tsa
++application/tamp-sequence-adjust-confirm sac
++# tsq: application/timestamp-query
++application/tamp-status-query
++# tsr: application/timestamp-reply
++application/tamp-status-response
++application/tamp-update tur
++application/tamp-update-confirm tuc
++application/tei+xml tei teiCorpus odd
++application/thraud+xml tfi
++application/timestamp-query tsq
++application/timestamp-reply tsr
++application/timestamped-data tsd
++application/tve-trigger
++application/ulpfec
++application/vcard+xml
++application/vemmi
++application/vnd.3gpp.bsf+xml
++application/vnd.3gpp.pic-bw-large plb
++application/vnd.3gpp.pic-bw-small psb
++application/vnd.3gpp.pic-bw-var pvb
++# sms: application/vnd.3gpp2.sms
++application/vnd.3gpp.sms
++application/vnd.3gpp2.bcmcsinfo+xml
++application/vnd.3gpp2.sms sms
++application/vnd.3gpp2.tcap tcap
++application/vnd.3M.Post-it-Notes pwn
++application/vnd.accpac.simply.aso aso
++application/vnd.accpac.simply.imp imp
++application/vnd.acucobol acu
++application/vnd.acucorp atc acutc
++application/vnd.adobe.formscentral.fcdt fcdt
++application/vnd.adobe.fxp fxp fxpl
++application/vnd.adobe.partial-upload
++application/vnd.adobe.xdp+xml xdp
++application/vnd.adobe.xfdf xfdf
++application/vnd.aether.imp
++application/vnd.ah-barcode
++application/vnd.ahead.space ahead
++application/vnd.airzip.filesecure.azf azf
++application/vnd.airzip.filesecure.azs azs
++application/vnd.americandynamics.acc acc
++application/vnd.amiga.ami ami
++application/vnd.amundsen.maze+xml
++application/vnd.anser-web-certificate-issue-initiation cii
++# Not in IANA listing, but is on FTP site?
++application/vnd.anser-web-funds-transfer-initiation fti
++# atx: audio/ATRAC-X
++application/vnd.antix.game-component
++application/vnd.apple.installer+xml dist distz pkg mpkg
++# m3u: application/x-mpegurl for now
++application/vnd.apple.mpegurl m3u8
++application/vnd.aristanetworks.swi swi
++application/vnd.astraea-software.iota iota
++application/vnd.audiograph aep
++application/vnd.autopackage package
++application/vnd.avistar+xml
++application/vnd.blueice.multipass mpm
++application/vnd.bluetooth.ep.oob ep
++application/vnd.bmi bmi
++application/vnd.businessobjects rep
++application/vnd.cab-jscript
++application/vnd.canon-cpdl
++application/vnd.canon-lips
++application/vnd.cendio.thinlinc.clientconf tlclient
++application/vnd.chemdraw+xml cdxml
++application/vnd.chipnuts.karaoke-mmd mmd
++application/vnd.cinderella cdy
++application/vnd.cirpack.isdn-ext
++application/vnd.claymore cla
++application/vnd.cloanto.rp9 rp9
++application/vnd.clonk.c4group c4g c4d c4f c4p c4u
++application/vnd.cluetrust.cartomobile-config c11amc
++application/vnd.cluetrust.cartomobile-config-pkg c11amz
++application/vnd.collection+json
++# icc: application/vnd.iccprofile
++application/vnd.commerce-battelle ica icf icd ic0 ic1 ic2 ic3 ic4 ic5 ic6 ic7 ic8
++application/vnd.commonspace csp cst
++application/vnd.contact.cmsg cdbcmsg
++application/vnd.cosmocaller cmc
++application/vnd.crick.clicker clkx
++application/vnd.crick.clicker.keyboard clkk
++application/vnd.crick.clicker.palette clkp
++application/vnd.crick.clicker.template clkt
++application/vnd.crick.clicker.wordbank clkw
++application/vnd.criticaltools.wbs+xml wbs
++application/vnd.ctc-posml pml
++application/vnd.ctct.ws+xml
++application/vnd.cups-pdf
++application/vnd.cups-postscript
++application/vnd.cups-ppd ppd
++application/vnd.cups-raster
++application/vnd.cups-raw
++application/vnd.curl curl
++application/vnd.cybank
++application/vnd.dart dart
++application/vnd.data-vision.rdz rdz
++application/vnd.dece.data uvf uvvf uvd uvvd
++application/vnd.dece.ttml+xml uvt uvvt
++application/vnd.dece.unspecified uvx uvvx
++application/vnd.dece.zip uvz uvvz
++application/vnd.denovo.fcselayout-link fe_launch
++application/vnd.dir-bi.plate-dl-nosuffix
++application/vnd.dna dna
++application/vnd.dolby.mobile.1
++application/vnd.dolby.mobile.2
++application/vnd.dpgraph dpg mwc dpgraph
++application/vnd.dreamfactory dfac
++application/vnd.dvb.ait ait
++# class: application/octet-stream
++application/vnd.dvb.dvbj
++application/vnd.dvb.esgcontainer
++application/vnd.dvb.ipdcdftnotifaccess
++application/vnd.dvb.ipdcesgaccess
++application/vnd.dvb.ipdcesgaccess2
++application/vnd.dvb.ipdcesgpdd
++application/vnd.dvb.ipdcroaming
++application/vnd.dvb.iptv.alfec-base
++application/vnd.dvb.iptv.alfec-enhancement
++application/vnd.dvb.notif-aggregate-root+xml
++application/vnd.dvb.notif-container+xml
++application/vnd.dvb.notif-generic+xml
++application/vnd.dvb.notif-ia-msglist+xml
++application/vnd.dvb.notif-ia-registration-request+xml
++application/vnd.dvb.notif-ia-registration-response+xml
++application/vnd.dvb.notif-init+xml
++# pfr: application/font-tdpfr
++application/vnd.dvb.pfr
++application/vnd.dvb.service svc
++# dxr: application/x-director
++application/vnd.dxr
++application/vnd.dynageo geo
++application/vnd.easykaraoke.cdgdownload
++application/vnd.ecdis-update
++application/vnd.ecowin.chart mag
++application/vnd.ecowin.filerequest
++application/vnd.ecowin.fileupdate
++application/vnd.ecowin.series
++application/vnd.ecowin.seriesrequest
++application/vnd.ecowin.seriesupdate
++application/vnd.enliven nml
++application/vnd.eprints.data+xml
++application/vnd.epson.esf esf
++application/vnd.epson.msf msf
++application/vnd.epson.quickanime qam
++application/vnd.epson.salt slt
++application/vnd.epson.ssf ssf
++application/vnd.ericsson.quickcall qcall qca
++application/vnd.eszigno3+xml es3 et3
++application/vnd.etsi.aoc+xml
++application/vnd.etsi.cug+xml
++application/vnd.etsi.iptvcommand+xml
++application/vnd.etsi.iptvdiscovery+xml
++application/vnd.etsi.iptvprofile+xml
++application/vnd.etsi.iptvsad-bc+xml
++application/vnd.etsi.iptvsad-cod+xml
++application/vnd.etsi.iptvsad-npvr+xml
++application/vnd.etsi.iptvservice+xml
++application/vnd.etsi.iptvsync+xml
++application/vnd.etsi.iptvueprofile+xml
++application/vnd.etsi.mcid+xml
++application/vnd.etsi.overload-control-policy-dataset+xml
++application/vnd.etsi.sci+xml
++application/vnd.etsi.simservs+xml
++application/vnd.etsi.tsl.der
++application/vnd.etsi.tsl+xml
++application/vnd.eudora.data
++application/vnd.ezpix-album ez2
++application/vnd.ezpix-package ez3
++application/vnd.f-secure.mobile
++application/vnd.fdf fdf
++application/vnd.fdsn.mseed msd mseed
++application/vnd.fdsn.seed seed dataless
++application/vnd.ffsns
++# all extensions: application/vnd.hbci
++application/vnd.fints
++application/vnd.FloGraphIt gph
++application/vnd.fluxtime.clip ftc
++application/vnd.font-fontforge-sfd sfd
++application/vnd.framemaker fm
++application/vnd.frogans.fnc fnc
++application/vnd.frogans.ltf ltf
++application/vnd.fsc.weblaunch fsc
++application/vnd.fujitsu.oasys oas
++application/vnd.fujitsu.oasys2 oa2
++application/vnd.fujitsu.oasys3 oa3
++application/vnd.fujitsu.oasysgp fg5
++application/vnd.fujitsu.oasysprs bh2
++application/vnd.fujixerox.ART-EX
++application/vnd.fujixerox.ART4
++application/vnd.fujixerox.ddd ddd
++application/vnd.fujixerox.docuworks xdw
++application/vnd.fujixerox.docuworks.binder xbd
++application/vnd.fujixerox.HBPL
++application/vnd.fut-misnet
++application/vnd.fuzzysheet fzs
++application/vnd.genomatix.tuxedo txd
++application/vnd.geocube+xml g3 g³
++application/vnd.geogebra.file ggb
++application/vnd.geogebra.tool ggt
++application/vnd.geometry-explorer gex gre
++application/vnd.geonext gxt
++application/vnd.geoplan g2w
++application/vnd.geospace g3w
++application/vnd.globalplatform.card-content-mgt
++application/vnd.globalplatform.card-content-mgt-response
++# application/vnd.gmx deprecated 2009-03-04
++application/vnd.google-earth.kml+xml kml
++application/vnd.google-earth.kmz kmz
++application/vnd.grafeq gqf gqs
++application/vnd.gridmp
++application/vnd.groove-account gac
++application/vnd.groove-help ghf
++application/vnd.groove-identity-message gim
++application/vnd.groove-injector grv
++application/vnd.groove-tool-message gtm
++application/vnd.groove-tool-template tpl
++application/vnd.groove-vcard vcg
++application/vnd.hal+json
++application/vnd.HandHeld-Entertainment+xml zmm
++application/vnd.hbci hbci hbc kom upa pkd bpd
++# rep: application/vnd.businessobjects
++application/vnd.hcl-bireports
++application/vnd.hhe.lesson-player les
++application/vnd.hp-HPGL hpgl
++application/vnd.hp-hpid hpi hpid
++application/vnd.hp-hps hps
++application/vnd.hp-jlyt jlt
++application/vnd.hp-PCL pcl
++application/vnd.hp-PCLXL
++application/vnd.httphone
++application/vnd.hydrostatix.sof-data sfd-hdstx
++application/vnd.hzn-3d-crossword x3d
++application/vnd.ibm.afplinedata
++application/vnd.ibm.electronic-media emm
++application/vnd.ibm.MiniPay mpy
++application/vnd.ibm.modcap list3820 listafp afp pseg3820
++application/vnd.ibm.rights-management irm
++application/vnd.ibm.secure-container sc
++application/vnd.iccprofile icc icm
++application/vnd.igloader igl
++application/vnd.immervision-ivp ivp
++application/vnd.immervision-ivu ivu
++application/vnd.informedcontrol.rms+xml
++# application/vnd.informix-visionary obsoleted by application/vnd.visionary
++application/vnd.infotech.project
++application/vnd.infotech.project+xml
++application/vnd.innopath.wamp.notification
++application/vnd.insors.igm igm
++application/vnd.intercon.formnet xpw xpx
++application/vnd.intergeo i2g
++application/vnd.intertrust.digibox
++application/vnd.intertrust.nncp
++application/vnd.intu.qbo qbo
++application/vnd.intu.qfx qfx
++application/vnd.iptc.g2.conceptitem+xml
++application/vnd.iptc.g2.knowledgeitem+xml
++application/vnd.iptc.g2.newsitem+xml
++application/vnd.iptc.g2.packageitem+xml
++application/vnd.ipunplugged.rcprofile rcprofile
++application/vnd.irepository.package+xml irp
++application/vnd.is-xpr xpr
++application/vnd.isac.fcs fcs
++application/vnd.jam jam
++application/vnd.japannet-directory-service
++application/vnd.japannet-jpnstore-wakeup
++application/vnd.japannet-payment-wakeup
++application/vnd.japannet-registration
++application/vnd.japannet-registration-wakeup
++application/vnd.japannet-setstore-wakeup
++application/vnd.japannet-verification
++application/vnd.japannet-verification-wakeup
++application/vnd.jcp.javame.midlet-rms rms
++application/vnd.jisp jisp
++application/vnd.joost.joda-archive joda
++application/vnd.kahootz ktz ktr
++application/vnd.kde.karbon karbon
++application/vnd.kde.kchart chrt
++application/vnd.kde.kformula kfo
++application/vnd.kde.kivio flw
++application/vnd.kde.kontour kon
++application/vnd.kde.kpresenter kpr kpt
++application/vnd.kde.kspread ksp
++application/vnd.kde.kword kwd kwt
++application/vnd.kenameaapp htke
++application/vnd.kidspiration kia
++application/vnd.Kinar kne knp sdf
++application/vnd.koan skp skd skm skt
++application/vnd.kodak-descriptor sse
++application/vnd.las.las+xml lasxml
++application/vnd.liberty-request+xml
++application/vnd.llamagraphics.life-balance.desktop lbd
++application/vnd.llamagraphics.life-balance.exchange+xml lbe
++application/vnd.lotus-1-2-3 123 wk4 wk3 wk1
++application/vnd.lotus-approach apr vew
++application/vnd.lotus-freelance prz pre
++application/vnd.lotus-notes nsf ntf ndl ns4 ns3 ns2 nsh nsg
++application/vnd.lotus-organizer or3 or2 org
++application/vnd.lotus-screencam scm
++application/vnd.lotus-wordpro lwp sam
++application/vnd.macports.portpkg portpkg
++application/vnd.marlin.drm.actiontoken+xml
++application/vnd.marlin.drm.conftoken+xml
++application/vnd.marlin.drm.license+xml
++application/vnd.marlin.drm.mdcf mdc
++application/vnd.mcd mcd
++application/vnd.medcalcdata mc1
++application/vnd.mediastation.cdkey cdkey
++application/vnd.meridian-slingshot
++application/vnd.MFER mwf
++application/vnd.mfmp mfm
++application/vnd.micrografx.flo flo
++application/vnd.micrografx.igx igx
++application/vnd.mif mif
++application/vnd.minisoft-hp3000-save
++application/vnd.mitsubishi.misty-guard.trustweb
++application/vnd.Mobius.DAF daf
++application/vnd.Mobius.DIS dis
++application/vnd.Mobius.MBK mbk
++application/vnd.Mobius.MQY mqy
++application/vnd.Mobius.MSL msl
++application/vnd.Mobius.PLC plc
++application/vnd.Mobius.TXF txf
++application/vnd.mophun.application mpn
++application/vnd.mophun.certificate mpc
++application/vnd.motorola.flexsuite
++application/vnd.motorola.flexsuite.adsi
++application/vnd.motorola.flexsuite.fis
++application/vnd.motorola.flexsuite.gotap
++application/vnd.motorola.flexsuite.kmr
++application/vnd.motorola.flexsuite.ttc
++application/vnd.motorola.flexsuite.wem
++application/vnd.motorola.iprm
++application/vnd.mozilla.xul+xml xul
++application/vnd.ms-artgalry cil
++application/vnd.ms-asf asf
++application/vnd.ms-cab-compressed cab
++application/vnd.ms-excel xls
++application/vnd.ms-excel.template.macroEnabled.12 xltm
++application/vnd.ms-excel.addin.macroEnabled.12 xlam
++application/vnd.ms-excel.sheet.binary.macroEnabled.12 xlsb
++application/vnd.ms-excel.sheet.macroEnabled.12 xlsm
++application/vnd.ms-fontobject eot
++application/vnd.ms-htmlhelp chm
++application/vnd.ms-ims ims
++application/vnd.ms-lrm lrm
++application/vnd.ms-office.activeX+xml
++application/vnd.ms-officetheme thmx
++application/vnd.ms-playready.initiator+xml
++application/vnd.ms-powerpoint ppt
++application/vnd.ms-powerpoint.addin.macroEnabled.12 ppam
++application/vnd.ms-powerpoint.presentation.macroEnabled.12 pptm
++application/vnd.ms-powerpoint.slide.macroEnabled.12 sldm
++application/vnd.ms-powerpoint.slideshow.macroEnabled.12 ppsm
++application/vnd.ms-powerpoint.template.macroEnabled.12 potm
++application/vnd.ms-project mpp
++application/vnd.ms-tnef tnef tnf
++application/vnd.ms-wmdrm.lic-chlg-req
++application/vnd.ms-wmdrm.lic-resp
++application/vnd.ms-wmdrm.meter-chlg-req
++application/vnd.ms-wmdrm.meter-resp
++application/vnd.ms-word.document.macroEnabled.12 docm
++application/vnd.ms-word.template.macroEnabled.12 dotm
++application/vnd.ms-works wcm wdb wks wps
++application/vnd.ms-wpl wpl
++application/vnd.ms-xpsdocument xps
++application/vnd.mseq mseq
++application/vnd.msign
++application/vnd.multiad.creator crtr
++application/vnd.multiad.creator.cif cif
++application/vnd.music-niff
++application/vnd.musician mus
++application/vnd.muvee.style msty
++application/vnd.mynfc taglet
++application/vnd.ncd.control
++application/vnd.ncd.reference
++application/vnd.nervana entity request bkm kcm
++application/vnd.netfpx
++# ntf: application/vnd.lotus-notes
++application/vnd.nitf nitf
++application/vnd.neurolanguage.nlu nlu
++application/vnd.noblenet-directory nnd
++application/vnd.noblenet-sealer nns
++application/vnd.noblenet-web nnw
++application/vnd.nokia.catalogs
++application/vnd.nokia.conml+wbxml
++application/vnd.nokia.conml+xml
++application/vnd.nokia.iptv.config+xml
++application/vnd.nokia.iSDS-radio-presets
++application/vnd.nokia.landmark+wbxml
++application/vnd.nokia.landmark+xml
++application/vnd.nokia.landmarkcollection+xml
++application/vnd.nokia.n-gage.ac+xml ac
++application/vnd.nokia.n-gage.data ngdat
++application/vnd.nokia.n-gage.symbian.install n-gage
++application/vnd.nokia.ncd
++application/vnd.nokia.pcd+wbxml
++application/vnd.nokia.pcd+xml
++application/vnd.nokia.radio-preset rpst
++application/vnd.nokia.radio-presets rpss
++application/vnd.novadigm.EDM edm
++application/vnd.novadigm.EDX edx
++application/vnd.novadigm.EXT ext
++application/vnd.ntt-local.file-transfer
++application/vnd.ntt-local.sip-ta_remote
++application/vnd.ntt-local.sip-ta_tcp_stream
++application/vnd.oasis.opendocument.chart odc
++application/vnd.oasis.opendocument.chart-template otc
++application/vnd.oasis.opendocument.database odb
++application/vnd.oasis.opendocument.formula odf
++application/vnd.oasis.opendocument.formula-template otf
++application/vnd.oasis.opendocument.graphics odg
++application/vnd.oasis.opendocument.graphics-template otg
++application/vnd.oasis.opendocument.image odi
++application/vnd.oasis.opendocument.image-template oti
++application/vnd.oasis.opendocument.presentation odp
++application/vnd.oasis.opendocument.presentation-template otp
++application/vnd.oasis.opendocument.spreadsheet ods
++application/vnd.oasis.opendocument.spreadsheet-template ots
++application/vnd.oasis.opendocument.text odt
++application/vnd.oasis.opendocument.text-master odm
++application/vnd.oasis.opendocument.text-template ott
++application/vnd.oasis.opendocument.text-web oth
++application/vnd.obn
++application/vnd.oftn.l10n+json
++application/vnd.oipf.contentaccessdownload+xml
++application/vnd.oipf.contentaccessstreaming+xml
++application/vnd.oipf.cspg-hexbinary
++application/vnd.oipf.dae.svg+xml
++application/vnd.oipf.dae.xhtml+xml
++application/vnd.oipf.mippvcontrolmessage+xml
++application/vnd.oipf.pae.gem
++application/vnd.oipf.spdiscovery+xml
++application/vnd.oipf.spdlist+xml
++application/vnd.oipf.ueprofile+xml
++application/vnd.olpc-sugar xo
++application/vnd.oma.bcast.associated-procedure-parameter+xml
++application/vnd.oma.bcast.drm-trigger+xml
++application/vnd.oma.bcast.imd+xml
++application/vnd.oma.bcast.ltkm
++application/vnd.oma.bcast.notification+xml
++application/vnd.oma.bcast.provisioningtrigger
++application/vnd.oma.bcast.sgboot
++application/vnd.oma.bcast.sgdd+xml
++application/vnd.oma.bcast.sgdu
++application/vnd.oma.bcast.simple-symbol-container
++application/vnd.oma.bcast.smartcard-trigger+xml
++application/vnd.oma.bcast.sprov+xml
++application/vnd.oma.bcast.stkm
++application/vnd.oma.cab-address-book+xml
++application/vnd.oma.cab-feature-handler+xml
++application/vnd.oma.cab-pcc+xml
++application/vnd.oma.cab-user-prefs+xml
++application/vnd.oma.dcd
++application/vnd.oma.dcdc
++application/vnd.oma.dd2+xml dd2
++application/vnd.oma.drm.risd+xml
++application/vnd.oma.group-usage-list+xml
++application/vnd.oma.pal+xml
++application/vnd.oma.poc.detailed-progress-report+xml
++application/vnd.oma.poc.final-report+xml
++application/vnd.oma.poc.groups+xml
++application/vnd.oma.poc.invocation-descriptor+xml
++application/vnd.oma.poc.optimized-progress-report+xml
++application/vnd.oma.push
++application/vnd.oma.scidm.messages+xml
++application/vnd.oma.xcap-directory+xml
++application/vnd.oma-scws-config
++application/vnd.oma-scws-http-request
++application/vnd.oma-scws-http-response
++application/vnd.omads-email+xml
++application/vnd.omads-file+xml
++application/vnd.omads-folder+xml
++application/vnd.omaloc-supl-init
++application/vnd.openofficeorg.extension oxt
++application/vnd.openxmlformats-officedocument.custom-properties+xml
++application/vnd.openxmlformats-officedocument.customXmlProperties+xml
++application/vnd.openxmlformats-officedocument.drawing+xml
++application/vnd.openxmlformats-officedocument.drawingml.chart+xml
++application/vnd.openxmlformats-officedocument.drawingml.chartshapes+xml
++application/vnd.openxmlformats-officedocument.drawingml.diagramColors+xml
++application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml
++application/vnd.openxmlformats-officedocument.drawingml.diagramLayout+xml
++application/vnd.openxmlformats-officedocument.drawingml.diagramStyle+xml
++application/vnd.openxmlformats-officedocument.extended-properties+xml
++application/vnd.openxmlformats-officedocument.presentationml.commentAuthors+xml
++application/vnd.openxmlformats-officedocument.presentationml.comments+xml
++application/vnd.openxmlformats-officedocument.presentationml.handoutMaster+xml
++application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml
++application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml
++application/vnd.openxmlformats-officedocument.presentationml.presProps+xml
++application/vnd.openxmlformats-officedocument.presentationml.presentation pptx
++application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml
++application/vnd.openxmlformats-officedocument.presentationml.slide sldx
++application/vnd.openxmlformats-officedocument.presentationml.slide+xml
++application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml
++application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml
++application/vnd.openxmlformats-officedocument.presentationml.slideUpdateInfo+xml
++application/vnd.openxmlformats-officedocument.presentationml.slideshow ppsx
++application/vnd.openxmlformats-officedocument.presentationml.slideshow.main+xml
++application/vnd.openxmlformats-officedocument.presentationml.tableStyles+xml
++application/vnd.openxmlformats-officedocument.presentationml.tags+xml
++application/vnd.openxmlformats-officedocument.presentationml.template potx
++application/vnd.openxmlformats-officedocument.presentationml.template.main+xml
++application/vnd.openxmlformats-officedocument.presentationml.viewProps+xml
++application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml
++application/vnd.openxmlformats-officedocument.spreadsheetml.chartsheet+xml
++application/vnd.openxmlformats-officedocument.spreadsheetml.comments+xml
++application/vnd.openxmlformats-officedocument.spreadsheetml.connections+xml
++application/vnd.openxmlformats-officedocument.spreadsheetml.dialogsheet+xml
++application/vnd.openxmlformats-officedocument.spreadsheetml.externalLink+xml
++application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheDefinition+xml
++application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheRecords+xml
++application/vnd.openxmlformats-officedocument.spreadsheetml.pivotTable+xml
++application/vnd.openxmlformats-officedocument.spreadsheetml.queryTable+xml
++application/vnd.openxmlformats-officedocument.spreadsheetml.revisionHeaders+xml
++application/vnd.openxmlformats-officedocument.spreadsheetml.revisionLog+xml
++application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml
++application/vnd.openxmlformats-officedocument.spreadsheetml.sheet xlsx
++application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml
++application/vnd.openxmlformats-officedocument.spreadsheetml.sheetMetadata+xml
++application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml
++application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml
++application/vnd.openxmlformats-officedocument.spreadsheetml.tableSingleCells+xml
++application/vnd.openxmlformats-officedocument.spreadsheetml.template xltx
++application/vnd.openxmlformats-officedocument.spreadsheetml.template.main+xml
++application/vnd.openxmlformats-officedocument.spreadsheetml.userNames+xml
++application/vnd.openxmlformats-officedocument.spreadsheetml.volatileDependencies+xml
++application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml
++application/vnd.openxmlformats-officedocument.theme+xml
++application/vnd.openxmlformats-officedocument.themeOverride+xml
++application/vnd.openxmlformats-officedocument.vmlDrawing
++application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml
++application/vnd.openxmlformats-officedocument.wordprocessingml.document docx
++application/vnd.openxmlformats-officedocument.wordprocessingml.document.glossary+xml
++application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml
++application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml
++application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml
++application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml
++application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml
++application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml
++application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml
++application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml
++application/vnd.openxmlformats-officedocument.wordprocessingml.template dotx
++application/vnd.openxmlformats-officedocument.wordprocessingml.template.main+xml
++application/vnd.openxmlformats-officedocument.wordprocessingml.webSettings+xml
++application/vnd.openxmlformats-package.core-properties+xml
++application/vnd.openxmlformats-package.digital-signature-xmlsignature+xml
++application/vnd.openxmlformats-package.relationships+xml
++application/vnd.osa.netdeploy ndc
++application/vnd.osgeo.mapguide.package mgp
++# jar: application/x-java-archive
++application/vnd.osgi.bundle
++application/vnd.osgi.dp dp
++application/vnd.otps.ct-kip+xml
++application/vnd.palm prc pdb pqa oprc
++application/vnd.paos+xml
++application/vnd.pawaafile paw
++application/vnd.pg.format     str
++application/vnd.pg.osasli ei6
++application/vnd.piaccess.application-license pil
++application/vnd.picsel efif
++application/vnd.pmi.widget wg
++application/vnd.poc.group-advertisement+xml
++application/vnd.pocketlearn plf
++application/vnd.powerbuilder6 pbd
++application/vnd.powerbuilder6-s
++application/vnd.powerbuilder7
++application/vnd.powerbuilder7-s
++application/vnd.powerbuilder75
++application/vnd.powerbuilder75-s
++application/vnd.preminet preminet
++application/vnd.previewsystems.box box vbox
++application/vnd.proteus.magazine mgz
++application/vnd.publishare-delta-tree qps
++# pti: image/prs.pti
++application/vnd.pvi.ptid1 ptid
++application/vnd.pwg-multiplexed
++application/vnd.pwg-xhtml-print+xml
++application/vnd.qualcomm.brew-app-res bar
++application/vnd.Quark.QuarkXPress qxd qxt qwd qwt qxl qxb
++application/vnd.quobject-quoxdocument quox quiz
++application/vnd.radisys.moml+xml
++application/vnd.radisys.msml-audit-conf+xml
++application/vnd.radisys.msml-audit-conn+xml
++application/vnd.radisys.msml-audit-dialog+xml
++application/vnd.radisys.msml-audit-stream+xml
++application/vnd.radisys.msml-audit+xml
++application/vnd.radisys.msml-conf+xml
++application/vnd.radisys.msml-dialog-base+xml
++application/vnd.radisys.msml-dialog-fax-detect+xml
++application/vnd.radisys.msml-dialog-fax-sendrecv+xml
++application/vnd.radisys.msml-dialog-group+xml
++application/vnd.radisys.msml-dialog-speech+xml
++application/vnd.radisys.msml-dialog-transform+xml
++application/vnd.radisys.msml-dialog+xml
++application/vnd.radisys.msml+xml
++application/vnd.rainstor.data tree
++application/vnd.rapid
++application/vnd.realvnc.bed bed
++application/vnd.recordare.musicxml mxl
++application/vnd.recordare.musicxml+xml
++application/vnd.RenLearn.rlprint
++application/vnd.rig.cryptonote cryptonote
++application/vnd.route66.link66+xml link66
++# gbr: application/rpki-ghostbusters
++application/vnd.rs-274x
++application/vnd.ruckus.download
++application/vnd.s3sms
++application/vnd.sailingtracker.track st
++application/vnd.sbm.cid
++application/vnd.sbm.mid2
++application/vnd.scribus scd sla slaz
++application/vnd.sealed.3df s3df
++application/vnd.sealed.csf scsf
++application/vnd.sealed.doc sdoc sdo s1w
++application/vnd.sealed.eml seml sem
++application/vnd.sealed.mht smht smh
++application/vnd.sealed.net
++# spp: application/scvp-vp-response
++application/vnd.sealed.ppt sppt s1p
++application/vnd.sealed.tiff stif
++application/vnd.sealed.xls sxls sxl s1e
++# stm: audio/x-stm
++application/vnd.sealedmedia.softseal.html stml s1h
++application/vnd.sealedmedia.softseal.pdf spdf spd s1a
++application/vnd.seemail see
++application/vnd.sema sema
++application/vnd.semd semd
++application/vnd.semf semf
++application/vnd.shana.informed.formdata ifm
++application/vnd.shana.informed.formtemplate itp
++application/vnd.shana.informed.interchange iif
++application/vnd.shana.informed.package ipk
++application/vnd.SimTech-MindMapper twd twds
++application/vnd.smaf mmf
++application/vnd.smart.notebook notebook
++application/vnd.smart.teacher teacher
++application/vnd.software602.filler.form+xml fo
++application/vnd.software602.filler.form-xml-zip zfo
++application/vnd.solent.sdkm+xml sdkm sdkd
++application/vnd.spotfire.dxp dxp
++application/vnd.spotfire.sfs sfs
++application/vnd.sss-cod
++application/vnd.sss-dtf
++application/vnd.sss-ntf
++application/vnd.stepmania.package smzip
++application/vnd.stepmania.stepchart sm
++application/vnd.street-stream
++application/vnd.sun.wadl+xml wadl
++application/vnd.sus-calendar sus susp
++application/vnd.svd
++application/vnd.swiftview-ics
++application/vnd.syncml.dm.notification
++application/vnd.syncml.ds.notification
++application/vnd.syncml.dm+wbxml bdm
++application/vnd.syncml.dm+xml xdm
++application/vnd.syncml+xml xsm
++application/vnd.tao.intent-module-archive tao
++application/vnd.tcpdump.pcap pcap cap dmp
++application/vnd.tmobile-livetv tmo
++application/vnd.trid.tpt tpt
++application/vnd.triscape.mxs mxs
++application/vnd.trueapp tra
++application/vnd.truedoc
++# cab: application/vnd.ms-cab-compressed
++application/vnd.ubisoft.webplayer
++application/vnd.ufdl ufdl ufd frm
++application/vnd.uiq.theme utz
++application/vnd.umajin umj
++application/vnd.unity unityweb
++application/vnd.uoml+xml uoml uo
++application/vnd.uplanet.alert
++application/vnd.uplanet.alert-wbxml
++application/vnd.uplanet.bearer-choice
++application/vnd.uplanet.bearer-choice-wbxml
++application/vnd.uplanet.cacheop
++application/vnd.uplanet.cacheop-wbxml
++application/vnd.uplanet.channel
++application/vnd.uplanet.channel-wbxml
++application/vnd.uplanet.list
++application/vnd.uplanet.list-wbxml
++application/vnd.uplanet.listcmd
++application/vnd.uplanet.listcmd-wbxml
++application/vnd.uplanet.signal
++application/vnd.vcx vcx
++# sxi: application/vnd.sun.xml.impress
++application/vnd.vd-study mxi study-inter model-inter
++# mcd: application/vnd.mcd
++application/vnd.vectorworks vwx
++application/vnd.verimatrix.vcas
++application/vnd.vidsoft.vidconference vsc
++application/vnd.visio vsd vst vsw vss
++application/vnd.visionary vis
++# vsc: application/vnd.vidsoft.vidconference
++application/vnd.vividence.scriptfile
++application/vnd.vsf vsf
++application/vnd.wap.sic sic
++application/vnd.wap.slc slc
++application/vnd.wap.wbxml wbxml
++application/vnd.wap.wmlc wmlc
++application/vnd.wap.wmlscriptc wmlsc
++application/vnd.webturbo wtb
++application/vnd.wfa.wsc wsc
++application/vnd.wmc wmc
++application/vnd.wmf.bootstrap
++# nb: application/mathematica for now
++application/vnd.wolfram.mathematica
++application/vnd.wolfram.mathematica.package m
++application/vnd.wolfram.player nbp
++application/vnd.wordperfect wpd
++application/vnd.wqd wqd
++application/vnd.wrq-hp3000-labelled
++application/vnd.wt.stf stf
++application/vnd.wv.csp+xml
++application/vnd.wv.csp+wbxml wv
++application/vnd.wv.ssp+xml
++application/vnd.xara xar
++application/vnd.xfdl xfdl xfd
++application/vnd.xfdl.webform
++application/vnd.xmi+xml
++application/vnd.xmpie.cpkg cpkg
++application/vnd.xmpie.dpkg dpkg
++# dpkg: application/vnd.xmpie.dpkg
++application/vnd.xmpie.plan
++application/vnd.xmpie.ppkg ppkg
++application/vnd.xmpie.xlim xlim
++application/vnd.yamaha.hv-dic hvd
++application/vnd.yamaha.hv-script hvs
++application/vnd.yamaha.hv-voice hvp
++application/vnd.yamaha.openscoreformat osf
++application/vnd.yamaha.openscoreformat.osfpvg+xml
++application/vnd.yamaha.remote-setup
++application/vnd.yamaha.smaf-audio saf
++application/vnd.yamaha.smaf-phrase spf
++application/vnd.yamaha.through-ngn
++application/vnd.yamaha.tunnel-udpencap
++application/vnd.yellowriver-custom-menu cmp
++application/vnd.zul zir zirz
++application/vnd.zzazz.deck+xml zaz
++application/voicexml+xml vxml
++application/vq-rtcp-xr
++application/watcherinfo+xml wif
++application/whoispp-query
++application/whoispp-response
++application/widget wgt
++application/wita
++application/wordperfect5.1
++application/wsdl+xml wsdl
++application/wspolicy+xml wspolicy
++application/x400-bp
++application/xcap-att+xml xav
++application/xcap-caps+xml xca
++application/xcap-diff+xml xdf
++application/xcap-el+xml xel
++application/xcap-error+xml xer
++application/xcap-ns+xml xns
++application/xcon-conference-info-diff+xml
++application/xcon-conference-info+xml
++application/xenc+xml
++application/xhtml+xml xhtml xhtm xht
++# application/xhtml-voice+xml obsoleted by application/xv+xml
++# xml, xsd, rng: text/xml
++application/xml
++# mod: audio/x-mod
++application/xml-dtd dtd
++# ent: text/xml-external-parsed-entity
++application/xml-external-parsed-entity
++application/xmpp+xml
++application/xop+xml xop
++application/xslt+xml xsl xslt
++application/xv+xml mxml xhvml xvml xvm
++application/yang yang
++application/yin+xml yin
++application/zip zip apc aps adc asc
++audio/1d-interleaved-parityfec
++audio/32kadpcm 726
++# 3gp, 3gpp: video/3gpp
++audio/3gpp
++# 3g2, 3gpp2: video/3gpp2
++audio/3gpp2
++audio/ac3 ac3
++audio/AMR amr
++audio/AMR-WB awb
++audio/amr-wb+
++audio/asc acn
++# aa3, omg: audio/ATRAC3
++audio/ATRAC-ADVANCED-LOSSLESS aal
++# aa3, omg: audio/ATRAC3
++audio/ATRAC-X atx
++audio/ATRAC3 at3 aa3 omg
++audio/basic au snd
++audio/BV16
++audio/BV32
++audio/clearmode
++audio/CN
++audio/DAT12
++audio/dls dls
++audio/dsr-es201108
++audio/dsr-es202050
++audio/dsr-es202211
++audio/dsr-es202212
++audio/DV
++audio/DVI4
++audio/eac3
++audio/EVRC evc
++# qcp: audio/qcelp
++audio/EVRC-QCP
++audio/EVRC0
++audio/EVRC1
++audio/EVRCB evb
++audio/EVRCB0
++audio/EVRCWB evw
++audio/EVRCWB0
++audio/EVRCWB1
++audio/fwdred
++audio/G719
++audio/G722
++audio/G7221
++audio/G723
++audio/G726-16
++audio/G726-24
++audio/G726-32
++audio/G726-40
++audio/G728
++audio/G729
++audio/G7291
++audio/G729D
++audio/G729E
++audio/GSM
++audio/GSM-EFR
++audio/GSM-HR-08
++audio/iLBC lbc
++audio/ip-mr_v2.5
++# wav: audio/wav
++audio/L16 l16
++audio/L20
++audio/L24
++audio/L8
++audio/LPC
++audio/mobile-xmf mxmf
++# mp4, mpg4: video/mp4, see RFC 4337
++audio/mp4
++audio/MP4A-LATM
++audio/MPA
++audio/mpa-robust
++audio/mpeg mp3 mpga mp1 mp2
++audio/mpeg4-generic
++audio/ogg oga ogg spx
++audio/parityfec
++audio/PCMA
++audio/PCMA-WB
++audio/PCMU
++audio/PCMU-WB
++audio/prs.sid sid psid
++audio/qcelp qcp
++audio/RED
++audio/rtp-enc-aescm128
++audio/rtp-midi
++audio/rtx
++audio/SMV smv
++# qcp: audio/qcelp, see RFC 3625
++audio/SMV-QCP
++audio/SMV0
++# mid: audio/midi
++audio/sp-midi
++audio/speex
++audio/t140c
++audio/t38
++audio/telephone-event
++audio/tone
++audio/UEMCLIP
++audio/ulpfec
++audio/VDVI
++audio/VMR-WB
++audio/vnd.3gpp.iufp
++audio/vnd.4SB
++audio/vnd.audikoz koz
++audio/vnd.CELP
++audio/vnd.cisco.nse
++audio/vnd.cmles.radio-events
++audio/vnd.cns.anp1
++audio/vnd.cns.inf1
++audio/vnd.dece.audio uva uvva
++audio/vnd.digital-winds eol
++audio/vnd.dlna.adts
++audio/vnd.dolby.heaac.1
++audio/vnd.dolby.heaac.2
++audio/vnd.dolby.mlp mlp
++audio/vnd.dolby.mps
++audio/vnd.dolby.pl2
++audio/vnd.dolby.pl2x
++audio/vnd.dolby.pl2z
++audio/vnd.dolby.pulse.1
++audio/vnd.dra
++# wav: audio/wav, cpt: application/mac-compactpro
++audio/vnd.dts dts
++audio/vnd.dts.hd dtshd
++# dvb: video/vnd.dvb.file
++audio/vnd.dvb.file
++audio/vnd.everad.plj plj
++# rm: audio/x-pn-realaudio
++audio/vnd.hns.audio
++audio/vnd.lucent.voice lvp
++audio/vnd.ms-playready.media.pya pya
++# mxmf: audio/mobile-xmf
++audio/vnd.nokia.mobile-xmf
++audio/vnd.nortel.vbk vbk
++audio/vnd.nuera.ecelp4800 ecelp4800
++audio/vnd.nuera.ecelp7470 ecelp7470
++audio/vnd.nuera.ecelp9600 ecelp9600
++audio/vnd.octel.sbc
++# audio/vnd.qcelp deprecated in favour of audio/qcelp
++audio/vnd.rhetorex.32kadpcm
++audio/vnd.rip rip
++audio/vnd.sealedmedia.softseal.mpeg smp3 smp s1m
++audio/vnd.vmx.cvsd
++audio/vorbis
++audio/vorbis-config
++image/cgm
++image/fits fits fit fts
++image/g3fax
++image/gif gif
++image/ief ief
++image/jp2 jp2 jpg2
++image/jpeg jpg jpeg jpe jfif
++image/jpm jpm jpgm
++image/jpx jpx jpf
++image/ktx ktx
++image/naplps
++image/png png
++image/prs.btif btif btf
++image/prs.pti pti
++image/svg+xml svg svgz
++image/t38 t38
++image/tiff tiff tif
++image/tiff-fx tfx
++image/vnd.adobe.photoshop psd
++image/vnd.cns.inf2
++image/vnd.dece.graphic uvi uvvi uvg uvvg
++image/vnd.djvu djvu djv
++# sub: text/vnd.dvb.subtitle
++image/vnd.dvb.subtitle
++image/vnd.dwg
++image/vnd.dxf dxf
++image/vnd.fastbidsheet fbs
++image/vnd.fpx fpx
++image/vnd.fst fst
++image/vnd.fujixerox.edmics-mmr mmr
++image/vnd.fujixerox.edmics-rlc rlc
++image/vnd.globalgraphics.pgb pgb
++image/vnd.microsoft.icon ico
++image/vnd.mix
++image/vnd.ms-modi mdi
++image/vnd.net-fpx
++image/vnd.radiance hdr rgbe xyze
++image/vnd.sealed.png spng spn s1n
++image/vnd.sealedmedia.softseal.gif sgif sgi s1g
++image/vnd.sealedmedia.softseal.jpg sjpg sjp s1j
++image/vnd.svf
++image/vnd.wap.wbmp wbmp
++image/vnd.xiff xif
++message/CPIM
++message/delivery-status
++message/disposition-notification
++message/external-body
++message/feedback-report
++message/global u8msg
++message/global-delivery-status u8dsn
++message/global-disposition-notification u8mdn
++message/global-headers u8hdr
++message/http
++# cl: application/simple-filter+xml
++message/imdn+xml
++# message/news obsoleted by message/rfc822
++message/partial
++message/rfc822 eml mail art
++message/s-http
++message/sip
++message/sipfrag
++message/tracking-status
++message/vnd.si.simp
++model/iges igs iges
++model/mesh msh mesh silo
++model/vnd.collada+xml dae
++model/vnd.dwf dwf
++# 3dml, 3dm: text/vnd.in3d.3dml
++model/vnd.flatland.3dml
++model/vnd.gdl gdl gsm win dor lmp rsm msm ism
++model/vnd.gs-gdl
++model/vnd.gtw gtw
++model/vnd.moml+xml moml
++model/vnd.mts mts
++model/vnd.parasolid.transmit.binary x_b xmt_bin
++model/vnd.parasolid.transmit.text x_t xmt_txt
++model/vnd.vtu vtu
++model/vrml wrl vrml
++multipart/alternative
++multipart/appledouble
++multipart/byteranges
++multipart/digest
++multipart/encrypted
++multipart/form-data
++multipart/header-set
++multipart/mixed
++multipart/parallel
++multipart/related
++multipart/report
++multipart/signed
++multipart/voice-message vpm
++text/1d-interleaved-parityfec
++text/calendar ics ifb
++text/css css
++text/csv csv
++text/directory
++text/dns soa zone
++# text/ecmascript obsoleted by application/ecmascript
++text/enriched
++text/fwdred
++text/html html htm
++# text/javascript obsoleted by application/javascript
++text/n3  n3
++text/parityfec
++text/plain txt asc text pm el c h cc hh cxx hxx f90 properties
++text/prs.fallenstein.rst rst
++text/prs.lines.tag tag dsc
++text/RED
++text/rfc822-headers
++text/richtext rtx
++# rtf: application/rtf
++text/rtf
++text/rtp-enc-aescm128
++text/rtx
++text/sgml sgml sgm
++text/t140
++text/tab-separated-values tsv
++text/troff
++text/turtle ttl
++text/ulpfec
++text/uri-list uris uri
++text/vcard vcf vcard
++text/vnd.abc abc
++# curl: application/vnd.curl
++text/vnd.curl
++text/vnd.DMClientScript dms
++text/vnd.dvb.subtitle sub
++text/vnd.esmertec.theme-descriptor jtd
++text/vnd.fly fly
++text/vnd.fmi.flexstor flx
++text/vnd.graphviz gv dot
++text/vnd.in3d.3dml 3dml 3dm
++text/vnd.in3d.spot spot spo
++text/vnd.IPTC.NewsML
++text/vnd.IPTC.NITF
++text/vnd.latex-z
++text/vnd.motorola.reflex
++text/vnd.ms-mediapackage mpf
++text/vnd.net2phone.commcenter.command ccc
++text/vnd.radisys.msml-basic-layout
++text/vnd.si.uricatalogue uric
++text/vnd.sun.j2me.app-descriptor jad
++text/vnd.trolltech.linguist ts
++text/vnd.wap.si si
++text/vnd.wap.sl sl
++text/vnd.wap.wml wml
++text/vnd.wap.wmlscript wmls
++text/xml xml xsd rng
++text/xml-external-parsed-entity ent
++video/1d-interleaved-parityfec
++video/3gpp 3gp 3gpp
++video/3gpp2 3g2 3gpp2
++video/3gpp-tt
++video/BMPEG
++video/BT656
++video/CelB
++video/DV
++video/H261
++video/H263
++video/H263-1998
++video/H263-2000
++video/H264
++video/H264-RCDO
++video/H264-SVC
++video/JPEG
++video/jpeg2000
++video/mj2 mj2 mjp2
++video/MP1S
++video/MP2P
++video/MP2T
++video/mp4 mp4 mpg4
++video/MP4V-ES
++video/mpeg mpeg mpg mpe
++video/mpeg4-generic
++video/MPV
++video/nv
++video/ogg ogv
++video/parityfec
++video/pointer
++video/quicktime mov qt
++video/raw
++video/rtp-enc-aescm128
++video/rtx
++video/SMPTE292M
++video/ulpfec
++video/vc1
++video/vnd.CCTV
++video/vnd.dece.hd uvh uvvh
++video/vnd.dece.mobile uvm uvvm
++video/vnd.dece.mp4 uvu uvvu
++video/vnd.dece.pd uvp uvvp
++video/vnd.dece.sd uvs uvvs
++video/vnd.dece.video uvv uvvv
++video/vnd.directv.mpeg
++video/vnd.directv.mpeg-tts
++video/vnd.dlna.mpeg-tts
++video/vnd.dvb.file dvb
++video/vnd.fvt fvt
++# rm: audio/x-pn-realaudio
++video/vnd.hns.video
++video/vnd.iptvforum.1dparityfec-1010
++video/vnd.iptvforum.1dparityfec-2005
++video/vnd.iptvforum.2dparityfec-1010
++video/vnd.iptvforum.2dparityfec-2005
++video/vnd.iptvforum.ttsavc
++video/vnd.iptvforum.ttsmpeg2
++video/vnd.motorola.video
++video/vnd.motorola.videop
++video/vnd.mpegurl mxu m4u
++video/vnd.ms-playready.media.pyv pyv
++video/vnd.nokia.interleaved-multimedia nim
++video/vnd.nokia.videovoip
++# mp4: video/mp4
++video/vnd.objectvideo
++video/vnd.sealed.mpeg1 smpg s11
++# smpg: video/vnd.sealed.mpeg1
++video/vnd.sealed.mpeg4 s14
++video/vnd.sealed.swf sswf ssw
++video/vnd.sealedmedia.softseal.mov smov smo s1q
++# uvu, uvvu: video/vnd.dece.mp4
++video/vnd.uvvu.mp4
++video/vnd.vivo
++
++# Non-IANA types
++
++application/epub+zip epub
++application/mac-compactpro cpt
++application/metalink+xml metalink
++application/rss+xml rss
++application/vnd.android.package-archive apk
++application/vnd.oma.dd+xml dd
++application/vnd.oma.drm.content dcf
++# odf: application/vnd.oasis.opendocument.formula
++application/vnd.oma.drm.dcf o4a o4v
++application/vnd.oma.drm.message dm
++application/vnd.oma.drm.rights+wbxml drc
++application/vnd.oma.drm.rights+xml dr
++application/vnd.sun.xml.calc sxc
++application/vnd.sun.xml.calc.template stc
++application/vnd.sun.xml.draw sxd
++application/vnd.sun.xml.draw.template std
++application/vnd.sun.xml.impress sxi
++application/vnd.sun.xml.impress.template sti
++application/vnd.sun.xml.math sxm
++application/vnd.sun.xml.writer sxw
++application/vnd.sun.xml.writer.global sxg
++application/vnd.sun.xml.writer.template stw
++application/vnd.symbian.install sis
++application/vnd.wap.mms-message mms
++application/x-annodex anx
++application/x-bcpio bcpio
++application/x-bittorrent torrent
++application/x-bzip2 bz2
++application/x-cdlink vcd
++application/x-chess-pgn pgn
++application/x-cpio cpio
++application/x-csh csh
++application/x-director dcr dir dxr
++application/x-dvi dvi
++application/x-futuresplash spl
++application/x-gtar gtar
++application/x-gzip gz tgz
++application/x-hdf hdf
++application/x-java-archive jar
++application/x-java-jnlp-file jnlp
++application/x-java-pack200 pack
++application/x-killustrator kil
++application/x-latex latex
++application/x-netcdf nc cdf
++application/x-perl pl
++application/x-rpm rpm
++application/x-sh sh
++application/x-shar shar
++application/x-shockwave-flash swf
++application/x-stuffit sit
++application/x-sv4cpio sv4cpio
++application/x-sv4crc sv4crc
++application/x-tar tar
++application/x-tcl tcl
++application/x-tex tex
++application/x-texinfo texinfo texi
++application/x-troff t tr roff
++application/x-troff-man man 1 2 3 4 5 6 7 8
++application/x-troff-me me
++application/x-troff-ms ms
++application/x-ustar ustar
++application/x-wais-source src
++application/x-xpinstall xpi
++application/x-xspf+xml xspf
++application/x-xz xz
++audio/midi mid midi kar
++audio/x-aiff aif aiff aifc
++audio/x-annodex axa
++audio/x-flac flac
++audio/x-mod mod ult uni m15 mtm 669 med
++audio/x-mpegurl m3u
++audio/x-ms-wax wax
++audio/x-ms-wma wma
++audio/x-pn-realaudio ram rm
++audio/x-realaudio ra
++audio/x-s3m s3m
++audio/x-stm stm
++audio/x-wav wav
++chemical/x-xyz xyz
++image/bmp bmp
++image/x-cmu-raster ras
++image/x-portable-anymap pnm
++image/x-portable-bitmap pbm
++image/x-portable-graymap pgm
++image/x-portable-pixmap ppm
++image/x-rgb rgb
++image/x-targa tga
++image/x-xbitmap xbm
++image/x-xpixmap xpm
++image/x-xwindowdump xwd
++text/cache-manifest manifest
++text/html-sandboxed sandboxed
++text/x-pod pod
++text/x-setext etx
++video/webm webm
++video/x-annodex axv
++video/x-flv flv
++video/x-javafx fxm
++video/x-ms-asf asx
++video/x-ms-wm wm
++video/x-ms-wmv wmv
++video/x-ms-wmx wmx
++video/x-ms-wvx wvx
++video/x-msvideo avi
++video/x-sgi-movie movie
++x-conference/x-cooltalk ice
++x-epoc/x-sisx-app sisx
+diff -urN httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/MimeTypes.java httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/MimeTypes.java
+--- httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/MimeTypes.java	1970-01-01 01:00:00.000000000 +0100
++++ httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/MimeTypes.java	2020-02-17 12:45:44.217132146 +0100
+@@ -0,0 +1,144 @@
++/*
++ * ====================================================================
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing,
++ * software distributed under the License is distributed on an
++ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++ * KIND, either express or implied.  See the License for the
++ * specific language governing permissions and limitations
++ * under the License.
++ * ====================================================================
++ *
++ * This software consists of voluntary contributions made by many
++ * individuals on behalf of the Apache Software Foundation.  For more
++ * information on the Apache Software Foundation, please see
++ * <http://www.apache.org/>.
++ *
++ */
++
++package org.apache.http.entity.mime;
++
++import java.io.BufferedReader;
++import java.io.InputStream;
++import java.io.InputStreamReader;
++import java.util.Hashtable;
++
++public class MimeTypes {
++
++    private Hashtable<String, Object> mapMimeToExt = new Hashtable<String, Object>();
++    private Hashtable<String, String> mapExtToMime = new Hashtable<String, String>();
++
++    MimeTypes() throws Exception{
++
++        InputStream is =null;
++        BufferedReader br = null;
++        InputStreamReader ir = null;
++        try{
++            final String file = "/org/apache/http/entity/mime/mime.types";
++            is = MimeTypes.class.getResourceAsStream(file);
++            if(is==null){
++                throw new Exception("File ["+file+"] in classpath not found");
++            }
++
++            ir = new InputStreamReader(is);
++            br = new BufferedReader(ir);
++            String line;
++            while ((line = br.readLine()) != null) {
++                line = line.trim();
++                if(!line.startsWith("#") && !line.startsWith("/*") && !line.startsWith("*/") && !line.startsWith(" *")){
++                    if(line.contains("\t")){
++                        throw new Exception("Line["+line+"] contains tabs");
++                    }
++                    final String [] tmp = line.split(" ");
++                    if(tmp.length<2){
++                        //System.out.println("TYPE["+tmp[0]+"] without exts");
++                        this.mapMimeToExt.put(tmp[0].trim(), "NULL");
++                    }else{
++                        final StringBuffer bf = new StringBuffer();
++                        for (int i = 1; i < tmp.length; i++) {
++                            bf.append(" EXT-"+i+"=["+tmp[i].trim()+"]");
++                            this.mapExtToMime.put(tmp[i].trim(),tmp[0].trim());
++                        }
++                        //System.out.println("TYPE["+tmp[0]+"]"+bf.toString());
++                        this.mapMimeToExt.put(tmp[0].trim(), tmp[1].trim());
++                    }
++                }
++            }
++
++        }catch(final Exception e){
++            throw new Exception(e.getMessage(),e);
++        }finally{
++            try{
++                if(br!=null){
++                    br.close();
++                }
++            }catch(final Exception eClose){}
++            try{
++                if(ir!=null){
++                    ir.close();
++                }
++            }catch(final Exception eClose){}
++            try{
++                if(is!=null){
++                    is.close();
++                }
++            }catch(final Exception eClose){}
++        }
++    }
++
++    public String getMimeType(final String ext){
++        return this.mapExtToMime.get(ext.trim().toLowerCase());
++    }
++    public String getExtension(final String mime){
++        final Object o = this.mapMimeToExt.get(mime.trim().toLowerCase());
++        if(o==null){
++            return null;
++        }
++        if(o instanceof String && ((String)o).equals("NULL")){
++            return null;
++        }
++        return (String) o;
++    }
++
++    public boolean existsExtension(final String ext){
++        return this.mapExtToMime.containsKey(ext.trim().toLowerCase());
++    }
++    public boolean existsMimeType(final String mime, final boolean checkExistsExtension){
++        if(this.mapMimeToExt.containsKey(mime.trim().toLowerCase())){
++            if(checkExistsExtension){
++                final String ext = this.getExtension(mime);
++                return ext!=null;
++            }
++            else{
++                return true;
++            }
++        }else{
++            return false;
++        }
++    }
++
++    // static
++
++    private static MimeTypes mimeTypes = null;
++    private static synchronized void init() throws Exception{
++        if(mimeTypes==null){
++            mimeTypes = new MimeTypes();
++        }
++    }
++    public static MimeTypes getInstance() throws Exception{
++        if(mimeTypes==null){
++            init();
++        }
++        return mimeTypes;
++    }
++
++}
+diff -urN httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/MultipartRelatedEntity.java httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/MultipartRelatedEntity.java
+--- httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/MultipartRelatedEntity.java	1970-01-01 01:00:00.000000000 +0100
++++ httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/MultipartRelatedEntity.java	2020-02-17 12:45:44.217132146 +0100
+@@ -0,0 +1,224 @@
++/*
++ * ====================================================================
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing,
++ * software distributed under the License is distributed on an
++ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++ * KIND, either express or implied.  See the License for the
++ * specific language governing permissions and limitations
++ * under the License.
++ * ====================================================================
++ *
++ * This software consists of voluntary contributions made by many
++ * individuals on behalf of the Apache Software Foundation.  For more
++ * information on the Apache Software Foundation, please see
++ * <http://www.apache.org/>.
++ *
++ */
++package org.apache.http.entity.mime;
++
++import java.io.ByteArrayInputStream;
++import java.io.ByteArrayOutputStream;
++import java.io.IOException;
++import java.io.InputStream;
++import java.io.OutputStream;
++import java.util.Iterator;
++import java.util.List;
++import java.util.Random;
++
++import org.apache.http.Header;
++import org.apache.http.HttpEntity;
++import org.apache.http.entity.mime.content.ContentBody;
++import org.apache.http.message.BasicHeader;
++import org.apache.http.protocol.HTTP;
++import org.apache.james.mime4j.field.Fields;
++import org.apache.james.mime4j.message.MessageImpl;
++import org.apache.james.mime4j.dom.Message;
++
++public class MultipartRelatedEntity implements HttpEntity {
++
++    /**
++     * The pool of ASCII chars to be used for generating a multipart boundary.
++     */
++    private final static char[] MULTIPART_CHARS = "-_1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
++            .toCharArray();
++
++    private final Message message;
++    private final HttpMultipartRelated multipart;
++    private final Header contentType;
++
++    private long length;
++    private volatile boolean dirty; // used to decide whether to recalculate
++    // length
++
++    public MultipartRelatedEntity(final ContentBody rootPart) {
++        this(rootPart, null, HttpMultipartMode.STRICT);
++    }
++
++    public MultipartRelatedEntity(final ContentBody rootPart, final String boundary) {
++        this(rootPart, boundary, HttpMultipartMode.STRICT);
++    }
++
++    public MultipartRelatedEntity(final ContentBody rootPart,
++            final String boundary, final HttpMultipartMode modeParam) {
++        super();
++
++        HttpMultipartMode mode = modeParam;
++        if (mode == null) {
++            mode = HttpMultipartMode.STRICT;
++        }
++
++        this.multipart = new HttpMultipartRelated("related",null,boundary,mode);
++
++        this.contentType = new BasicHeader(HTTP.CONTENT_TYPE,generateContentType(boundary, rootPart));
++        this.dirty = true;
++
++        this.message = new MessageImpl();
++        final org.apache.james.mime4j.message.HeaderImpl header = new org.apache.james.mime4j.message.HeaderImpl();
++        this.message.setHeader(header);
++
++
++
++        //this.multipart.setParent(message);
++
++        this.message.getHeader().addField(
++                Fields.contentType(this.contentType.getValue()));
++    }
++
++    public void addPart(final String name, final ContentBody contentBody) {
++        this.multipart.addBodyPart(new RelatedBodyPart(name, contentBody));
++        this.dirty = true;
++    }
++
++    // RFC238 state:
++    // The Multipart/Related content-type addresses the MIME representation
++    // of compound objects. The object is categorized by a "type"
++    // parameter. Additional parameters are provided to indicate a specific
++    // starting body part or root and auxiliary information which may be
++    // required when unpacking or processing the object.
++
++    protected String generateContentType(final String boundary,final ContentBody rootpart) {
++        final StringBuilder buffer = new StringBuilder();
++        buffer.append("multipart/related; boundary=\"");
++        if (boundary != null) {
++            buffer.append(boundary);
++        } else {
++            final Random rand = new Random();
++            final int count = rand.nextInt(11) + 30; // a random size from 30 to 40
++            final int start_boundary = buffer.length();
++            for (int i = 0; i < count; i++) {
++                buffer.append(MULTIPART_CHARS[rand
++                                              .nextInt(MULTIPART_CHARS.length)]);
++            }
++            this.multipart.setBoundary(buffer.substring(start_boundary, start_boundary+count));
++        }
++
++        final RelatedBodyPart rbp = new RelatedBodyPart("root", rootpart);
++
++        this.multipart.addBodyPart(rbp);
++        buffer.append("\"; type=\"");
++        String content = rootpart.getMimeType();
++        if(content.contains(";")){
++            // elimino eventuali charset
++            final String [] tmp = content.split(";");
++            //for (int i = 0; i < tmp.length; i++) {
++            if(tmp.length>0)
++                content = tmp[0]; // dovrebbe essere il primo tipo.
++            //    break;
++            //}
++        }
++        buffer.append(content);
++        buffer.append('"');
++
++        //buffer.append("; start=\"");
++        //buffer.append(rbp.getContentId());
++        //buffer.append('"');
++
++        return buffer.toString();
++
++    }
++
++    //@Override
++    public void consumeContent() throws IOException {
++        if (isStreaming()) {
++            throw new UnsupportedOperationException(
++                    "Streaming entity does not implement #consumeContent()");
++        }
++
++    }
++
++    //@Override
++    public InputStream getContent() throws IOException, IllegalStateException {
++        //        throw new UnsupportedOperationException(
++        //                "Multipart form entity does not implement #getContent()");
++        final ByteArrayOutputStream bout = new ByteArrayOutputStream();
++        this.writeTo(bout);
++        bout.flush();
++        bout.close();
++        return new ByteArrayInputStream(bout.toByteArray());
++    }
++
++    //@Override
++    public Header getContentEncoding() {
++        return null;
++    }
++
++    //@Override
++    public long getContentLength() {
++        if (this.dirty) {
++            this.length = this.multipart.getTotalLength();
++            this.dirty = false;
++        }
++        return this.length;
++    }
++
++    public void setDirty(final boolean dirty) {
++        this.dirty = dirty;
++    }
++
++    //@Override
++    public Header getContentType() {
++        return this.contentType;
++
++    }
++
++    //@Override
++    public boolean isChunked() {
++        return !isRepeatable();
++    }
++
++    //@Override
++    public boolean isRepeatable() {
++        final List<?> parts = this.multipart.getBodyParts();
++        for (final Iterator<?> it = parts.iterator(); it.hasNext();) {
++            final RelatedBodyPart part = (RelatedBodyPart) it.next();
++            final ContentBody body = (ContentBody) part.getBody();
++            if (body.getContentLength() < 0) {
++                return false;
++            }
++        }
++        return true;
++    }
++
++    //@Override
++    public boolean isStreaming() {
++        return !isRepeatable();
++    }
++
++    //@Override
++    public void writeTo(final OutputStream outstream) throws IOException {
++        this.multipart.writeTo(outstream);
++        //
++
++    }
++
++}
+diff -urN httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/RelatedBodyPart.java httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/RelatedBodyPart.java
+--- httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/RelatedBodyPart.java	1970-01-01 01:00:00.000000000 +0100
++++ httpcomponents-core-4.4.15-src/httpcore-ab/src/main/java/org/apache/http/entity/mime/RelatedBodyPart.java	2020-02-17 12:45:44.218132154 +0100
+@@ -0,0 +1,124 @@
++/*
++ * ====================================================================
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing,
++ * software distributed under the License is distributed on an
++ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++ * KIND, either express or implied.  See the License for the
++ * specific language governing permissions and limitations
++ * under the License.
++ * ====================================================================
++ *
++ * This software consists of voluntary contributions made by many
++ * individuals on behalf of the Apache Software Foundation.  For more
++ * information on the Apache Software Foundation, please see
++ * <http://www.apache.org/>.
++ *
++ */
++
++package org.apache.http.entity.mime;
++
++import org.apache.http.entity.mime.content.ContentBody;
++
++
++public class RelatedBodyPart {
++
++
++    private static final String MIME_CONTENT_ID = "Content-ID";
++    private final String name;
++    private final org.apache.http.entity.mime.Header header;
++
++    private final ContentBody body;
++
++    //public FormBodyPart(final String name, final ContentBody body) {
++    public RelatedBodyPart(final String name, final ContentBody body) {
++        if (name == null) {
++            throw new IllegalArgumentException("Name may not be null");
++        }
++        if (body == null) {
++            throw new IllegalArgumentException("Body may not be null");
++        }
++        this.name = name;
++        this.body = body;
++        this.header = new org.apache.http.entity.mime.Header();
++
++
++        generateContentType(body);
++        generateContentID(body);
++        generateTransferEncoding(body);
++    }
++
++    public String getName() {
++        return this.name;
++    }
++
++    public ContentBody getBody() {
++        return this.body;
++    }
++
++    public org.apache.http.entity.mime.Header getHeader() {
++        return this.header;
++    }
++
++    public void addField(final String name, final String value) {
++        if (name == null) {
++            throw new IllegalArgumentException("Field name may not be null");
++        }
++        this.header.addField(new MinimalField(name, value));
++    }
++
++    private void setField(final String name, final String value) {
++        this.header.setField(new MinimalField(name, value));
++    }
++
++    protected void generateContentID(final ContentBody desc) {
++
++        final StringBuilder buffer = new StringBuilder();
++        buffer.append('<');
++        // TODO Scrivere qualcosa per generare l' ID
++        buffer.append(this.name);
++        buffer.append('>');
++
++        setField(MIME_CONTENT_ID, buffer.toString());
++    }
++
++
++    protected void generateContentType(final ContentBody desc) {
++        if (desc.getMimeType() != null) {
++            final StringBuilder buffer = new StringBuilder();
++            buffer.append(desc.getMimeType());
++            if (desc.getCharset() != null) {
++                buffer.append("; charset=");
++                buffer.append(desc.getCharset());
++            }
++            addField(MIME.CONTENT_TYPE, buffer.toString());
++        } else {
++            addField(MIME.CONTENT_TYPE, "text/plain");
++        }
++
++    }
++
++    protected void generateTransferEncoding(final ContentBody desc) {
++        if (desc.getTransferEncoding() != null) {
++            addField(MIME.CONTENT_TRANSFER_ENC, desc.getTransferEncoding());
++        } else {
++            addField(MIME.CONTENT_TRANSFER_ENC, "binary\n");
++        }
++
++    }
++
++    public String getContentId() {
++        final MinimalField f = (MinimalField) getHeader().getField(MIME_CONTENT_ID);
++        return f.getBody();
++
++    }
++}

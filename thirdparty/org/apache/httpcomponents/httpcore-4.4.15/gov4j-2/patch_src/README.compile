@@ -1,0 +1,14 @@
+ NOTA: Usare java 8 e maven 3.6.1 o superiore
+
+wget https://archive.apache.org/dist/httpcomponents/httpcore/source/httpcomponents-core-4.4.15-src.tar.gz
+mkdir httpcomponents-core-4.4.15-src; cd httpcomponents-core-4.4.15-src; tar xzf ../httpcomponents-core-4.4.15-src.tar.gz; cd ..;
+
+patch -p0 < sorgenti.patch
+patch -p0 < pom.patch
+cd httpcomponents-core-4.4.15-src/httpcore-ab/
+mvn clean install
+mvn javadoc:javadoc 
+cd ../../
+
+
+
