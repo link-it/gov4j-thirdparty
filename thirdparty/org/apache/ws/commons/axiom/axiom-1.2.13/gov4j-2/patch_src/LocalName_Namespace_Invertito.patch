@@ -1,0 +1,20 @@
+--- axiom-1.2.13/modules/axiom-dom/src/main/java/org/apache/axiom/om/impl/dom/ElementImpl.java	2016-11-07 15:05:27.704978928 +0100
++++ axiom-1.2.13/modules/axiom-dom/src/main/java/org/apache/axiom/om/impl/dom/ElementImpl.java	2016-11-07 15:08:14.000000000 +0100
+@@ -746,6 +746,17 @@
+ 
+         if (namespace != null) {
+             String prefix = namespace.getPrefix();
++			String namespaceAsString = namespace.getNamespaceURI();
++
++			// FIX
++			if(namespaceAsString!=null && (namespaceAsString.startsWith("xmlns:") || namespaceAsString.equals("xmlns"))){
++				// per un qualche motivo localName e namespace sono invertiti				
++				String tmp = prefix;
++				prefix = namespaceAsString;
++				namespaceAsString = tmp;
++				namespace = new OMNamespaceImpl(namespaceAsString, prefix);
++			}
++
+             if (prefix == null) {
+                 prefix = OMSerializerUtil.getNextNSPrefix();
+                 namespace = new OMNamespaceImpl(namespace.getNamespaceURI(), prefix);

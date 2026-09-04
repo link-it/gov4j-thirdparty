@@ -1,0 +1,7 @@
+Caused by: java.lang.NoSuchMethodError: org.apache.james.mime4j.stream.MimeConfig: method <init>()V not found
+	at org.apache.axiom.attachments.MIMEMessage.<init>(MIMEMessage.java:126) ~[axiom-api-1.2.13-gov4j-1.jar:1.2.13]
+	at org.apache.axiom.attachments.Attachments.<init>(Attachments.java:93) ~[axiom-api-1.2.13-gov4j-1.jar:1.2.13]
+	at org.apache.axiom.attachments.Attachments.<init>(Attachments.java:110) ~[axiom-api-1.2.13-gov4j-1.jar:1.2.13]
+	
+Il problema nasce dal fatto che dalla versione apache-mime4j-core-0.8.2.jar e apache-mime4j-dom-0.8.2.jar la classe MimeConfig non ha più un costruttore di default.
+Nella precedente versione apache-mime4j-*-0.7.2.jar invece esisteva.

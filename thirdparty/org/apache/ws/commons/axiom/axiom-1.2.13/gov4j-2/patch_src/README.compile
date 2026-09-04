@@ -1,0 +1,25 @@
+ NOTA: Usare java 8 e maven 3.6.1 o superiore
+
+wget https://archive.apache.org/dist/ws/axiom/1.2.13/axiom-1.2.13-source-release.zip
+unzip axiom-1.2.13-source-release.zip
+
+patch -p0 < NamespaceDilect_api.patch
+patch -p0 < MimeConfigInitNotFound.patch
+cd axiom-1.2.13/modules/axiom-api/
+mvn clean install -DskipTests=true
+mvn javadoc:javadoc 
+cd ../../../
+
+patch -p0 < OPPT-602.patch
+patch -p0 < LocalName_Namespace_Invertito.patch
+cd axiom-1.2.13/modules/axiom-dom/
+mvn clean install -DskipTests=true
+mvn javadoc:javadoc
+cd ../../../
+cd axiom-1.2.13/modules/axiom-impl/
+mvn clean install -DskipTests=true
+mvn javadoc:javadoc
+cd ../../../
+
+
+

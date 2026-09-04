@@ -1,0 +1,2 @@
+Una busta SOAPEnvelope con struttura errata veniva serializzata "correttamente" senza la parte contenente il frammento di xml corrotto.
+Con la patch, la serializzazione si blocca non appena incontra un errore.

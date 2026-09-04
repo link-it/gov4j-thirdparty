@@ -1,0 +1,23 @@
+--- axiom-1.2.13.orig/modules/axiom-api/src/main/java/org/apache/axiom/attachments/MIMEMessage.java	2012-04-02 22:07:14.000000000 +0200
++++ axiom-1.2.13/modules/axiom-api/src/main/java/org/apache/axiom/attachments/MIMEMessage.java	2020-01-07 12:56:58.000000000 +0100
+@@ -123,8 +123,7 @@
+             filterIS = null;
+         }
+         
+-        MimeConfig config = new MimeConfig();
+-        config.setStrictParsing(true);
++        MimeConfig config = MimeConfig.STRICT;
+         parser = new MimeTokenStream(config);
+         parser.setRecursionMode(RecursionMode.M_NO_RECURSE);
+         parser.parseHeadless(is, contentTypeString);
+--- axiom-1.2.13.orig/modules/axiom-parent/pom.xml	2012-04-02 22:07:18.000000000 +0200
++++ axiom-1.2.13/modules/axiom-parent/pom.xml	2020-01-07 12:57:38.727909494 +0100
+@@ -438,7 +438,7 @@
+             <dependency>
+                 <groupId>org.apache.james</groupId>
+                 <artifactId>apache-mime4j-core</artifactId>
+-                <version>0.7.2</version>
++                <version>0.8.2</version>
+             </dependency>
+             <dependency>
+                 <groupId>org.osgi</groupId>

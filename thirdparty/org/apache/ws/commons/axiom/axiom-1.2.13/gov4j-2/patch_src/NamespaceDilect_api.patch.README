@@ -1,0 +1,22 @@
+===== Problematica 1 =====
+
+Per risolvere la problematica:
+WARN  [org.apache.axiom.util.stax.dialect.StAXDialectDetector] (http--0.0.0.0-8080-2) Unable to determine dialect of the StAX implementation at jar:file:/opt/local/SVN_INTERNO/branches/customers/Sogei/ambiente/07_2015_DisaccoppiamentoDB/jboss-as-7.1.1.Final.pddoe_run/jboss-modules.jar!/
+Su Jboss7
+
+Si adotta la patch indicata nella versione:
+- https://issues.apache.org/jira/browse/AXIOM-426
+Patch inclusa nella versione 1.2.15
+
+
+===== Problematica 2 =====
+
+Per risolvere la problematica:
+Caused by: java.lang.IllegalArgumentException: Namespace URI may not be null
+	at org.apache.axiom.om.impl.dom.NamespaceImpl.<init>(OMNamespaceImpl.java:38)
+	at org.apache.axiom.om.impl.dom.ElementImpl.addNamespaceDeclaration(ElementImpl.java:732)
+	at org.apache.axiom.om.impl.builder.StAXOMBuilder.processNamespaceData(StAXOMBuilder.java:608)
+
+Si adotta la patch indicata nella versione:
+- https://issues.apache.org/jira/browse/AXIOM-441
+Patch inclusa nella versione 1.2.14

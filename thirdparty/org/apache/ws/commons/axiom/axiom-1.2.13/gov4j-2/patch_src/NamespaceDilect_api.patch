@@ -1,0 +1,249 @@
+diff -urN axiom-1.2.13.orig/modules/axiom-api/src/main/java/org/apache/axiom/om/impl/builder/StAXOMBuilder.java axiom-1.2.13/modules/axiom-api/src/main/java/org/apache/axiom/om/impl/builder/StAXOMBuilder.java
+--- axiom-1.2.13.orig/modules/axiom-api/src/main/java/org/apache/axiom/om/impl/builder/StAXOMBuilder.java	2012-04-02 22:07:14.000000000 +0200
++++ axiom-1.2.13/modules/axiom-api/src/main/java/org/apache/axiom/om/impl/builder/StAXOMBuilder.java	2019-01-25 07:17:02.650384279 +0100
+@@ -325,6 +325,9 @@
+     protected OMNode createWithCustomBuilder(CustomBuilder customBuilder, OMFactory factory) {
+         
+         String namespace = parser.getNamespaceURI();
++        if (namespace == null) {
++            namespace = "";
++        }
+         String localPart = parser.getLocalName();
+         
+         if (log.isDebugEnabled()) {
+@@ -591,14 +594,19 @@
+             // check whether this is the default namespace and make sure we have not declared that earlier
+             String namespaceURI = parser.getNamespaceURI(i);
+             
+-            // NOTE_A:
+-            // By default most parsers don't intern the namespace.
+-            // Unfortunately the property to detect interning on the delegate parsers is hard to detect.
+-            // Woodstox has a proprietary property on the XMLInputFactory.
+-            // IBM has a proprietary property on the XMLStreamReader.
+-            // For now only force the interning if requested.
+-            if (isNamespaceURIInterning()) {
+-                namespaceURI = namespaceURI.intern();
++            if (namespaceURI == null) {
++                // No need to care about interning here; String literals are always interned
++                namespaceURI = "";
++            } else {
++                // NOTE_A:
++                // By default most parsers don't intern the namespace.
++                // Unfortunately the property to detect interning on the delegate parsers is hard to detect.
++                // Woodstox has a proprietary property on the XMLInputFactory.
++                // IBM has a proprietary property on the XMLStreamReader.
++                // For now only force the interning if requested.
++                if (isNamespaceURIInterning()) {
++                    namespaceURI = namespaceURI.intern();
++                }
+             }
+             
+             if (prefix == null) {
+diff -urN axiom-1.2.13.orig/modules/axiom-api/src/main/java/org/apache/axiom/om/util/StAXUtils.java axiom-1.2.13/modules/axiom-api/src/main/java/org/apache/axiom/om/util/StAXUtils.java
+--- axiom-1.2.13.orig/modules/axiom-api/src/main/java/org/apache/axiom/om/util/StAXUtils.java	2012-04-02 22:07:14.000000000 +0200
++++ axiom-1.2.13/modules/axiom-api/src/main/java/org/apache/axiom/om/util/StAXUtils.java	2019-01-25 07:20:51.460045847 +0100
+@@ -514,7 +514,7 @@
+                             factory.setProperty((String)entry.getKey(), entry.getValue());
+                         }
+                     }
+-                    StAXDialect dialect = StAXDialectDetector.getDialect(factory.getClass());
++                    StAXDialect dialect = StAXDialectDetector.getDialect(factory);
+                     if (configuration != null) {
+                         factory = configuration.configure(factory, dialect);
+                     }
+@@ -639,7 +639,7 @@
+                             factory.setProperty((String)entry.getKey(), entry.getValue());
+                         }
+                     }
+-                    StAXDialect dialect = StAXDialectDetector.getDialect(factory.getClass());
++                    StAXDialect dialect = StAXDialectDetector.getDialect(factory);
+                     if (configuration != null) {
+                         factory = configuration.configure(factory, dialect);
+                     }
+diff -urN axiom-1.2.13.orig/modules/axiom-api/src/main/java/org/apache/axiom/util/stax/dialect/JBossFactoryUnwrapper.java axiom-1.2.13/modules/axiom-api/src/main/java/org/apache/axiom/util/stax/dialect/JBossFactoryUnwrapper.java
+--- axiom-1.2.13.orig/modules/axiom-api/src/main/java/org/apache/axiom/util/stax/dialect/JBossFactoryUnwrapper.java	1970-01-01 01:00:00.000000000 +0100
++++ axiom-1.2.13/modules/axiom-api/src/main/java/org/apache/axiom/util/stax/dialect/JBossFactoryUnwrapper.java	2019-01-25 07:20:04.647705898 +0100
+@@ -0,0 +1,85 @@
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements. See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership. The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License. You may obtain a copy of the License at
++ *
++ * http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing,
++ * software distributed under the License is distributed on an
++ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++ * KIND, either express or implied. See the License for the
++ * specific language governing permissions and limitations
++ * under the License.
++ */
++package org.apache.axiom.util.stax.dialect;
++
++import java.lang.reflect.Field;
++import java.security.AccessController;
++import java.security.PrivilegedAction;
++
++import javax.xml.stream.XMLInputFactory;
++import javax.xml.stream.XMLOutputFactory;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
++/**
++ * Utility class to remove the {@link XMLInputFactory} or {@link XMLOutputFactory} wrapper added by
++ * JBoss 7. This class gives access the actual (implementation dependent) factory. This is important
++ * to correct detect the StAX dialect.
++ */
++final class JBossFactoryUnwrapper {
++    private static final Log log = LogFactory.getLog(JBossFactoryUnwrapper.class);
++    
++    private final Class wrapperClass;
++    private final Field actual;
++    
++    private JBossFactoryUnwrapper(Class factoryType) throws Exception {
++        wrapperClass = Class.forName("__redirected.__" + factoryType.getSimpleName());
++        try {
++            actual = wrapperClass.getDeclaredField("actual");
++            AccessController.doPrivileged(new PrivilegedAction() {
++                public Object run() {
++                    actual.setAccessible(true);
++                    return null;
++                }
++            });
++        } catch (Exception ex) {
++            log.error("Found JBoss wrapper class for " + factoryType.getSimpleName() + ", but unwrapping is not supported", ex);
++            throw ex;
++        }
++    }
++
++    /**
++     * Get the unwrapper for the given factory type.
++     * 
++     * @param factoryType
++     *            the factory type ({@link XMLInputFactory} or {@link XMLOutputFactory})
++     * @return the unwrapper, or <code>null</code> if the unwrapper could not be created (which
++     *         usually means that the code is not executed inside JBoss)
++     */
++    static JBossFactoryUnwrapper create(Class factoryType) {
++        try {
++            return new JBossFactoryUnwrapper(factoryType);
++        } catch (Exception ex) {
++            return null;
++        }
++    }
++    
++    Object unwrap(Object factory) {
++        if (wrapperClass.isInstance(factory)) {
++            try {
++                return actual.get(factory);
++            } catch (IllegalAccessException ex) {
++                throw new IllegalAccessError(ex.getMessage());
++            }
++        } else {
++            return factory;
++        }
++    }
++}
+diff -urN axiom-1.2.13.orig/modules/axiom-api/src/main/java/org/apache/axiom/util/stax/dialect/StAXDialectDetector.java axiom-1.2.13/modules/axiom-api/src/main/java/org/apache/axiom/util/stax/dialect/StAXDialectDetector.java
+--- axiom-1.2.13.orig/modules/axiom-api/src/main/java/org/apache/axiom/util/stax/dialect/StAXDialectDetector.java	2012-04-02 22:07:14.000000000 +0200
++++ axiom-1.2.13/modules/axiom-api/src/main/java/org/apache/axiom/util/stax/dialect/StAXDialectDetector.java	2019-01-25 07:19:36.930504622 +0100
+@@ -62,6 +62,9 @@
+     private static final Attributes.Name BUNDLE_VERSION =
+             new Attributes.Name("Bundle-Version");
+ 
++    private static final JBossFactoryUnwrapper jbossXMLInputFactoryUnwrapper = JBossFactoryUnwrapper.create(XMLInputFactory.class);
++    private static final JBossFactoryUnwrapper jbossXMLOutputFactoryUnwrapper = JBossFactoryUnwrapper.create(XMLOutputFactory.class);
++    
+     /**
+      * Map that stores detected dialects by location. The location is the URL corresponding to the
+      * root folder of the classpath entry from which the StAX implementation is loaded. Note that
+@@ -119,7 +122,7 @@
+      * @see StAXDialect#normalize(XMLInputFactory)
+      */
+     public static XMLInputFactory normalize(XMLInputFactory factory) {
+-        return getDialect(factory.getClass()).normalize(factory);
++        return getDialect(factory).normalize(factory);
+     }
+     
+     /**
+@@ -131,7 +134,7 @@
+      * @see StAXDialect#normalize(XMLOutputFactory)
+      */
+     public static XMLOutputFactory normalize(XMLOutputFactory factory) {
+-        return getDialect(factory.getClass()).normalize(factory);
++        return getDialect(factory).normalize(factory);
+     }
+     
+     /**
+@@ -154,6 +157,34 @@
+         return getDialect(implementationClass.getClassLoader(), rootUrl);
+     }
+ 
++    /**
++     * Detect the StAX dialect of a given {@link XMLInputFactory} instance.
++     * 
++     * @param factory
++     *            the factory instance
++     * @return the detected dialect
++     */
++    public static StAXDialect getDialect(XMLInputFactory factory) {
++        if (jbossXMLInputFactoryUnwrapper != null) {
++            factory = (XMLInputFactory)jbossXMLInputFactoryUnwrapper.unwrap(factory);
++        }
++        return getDialect(factory.getClass());
++    }
++    
++    /**
++     * Detect the StAX dialect of a given {@link XMLOutputFactory} instance.
++     * 
++     * @param factory
++     *            the factory instance
++     * @return the detected dialect
++     */
++    public static StAXDialect getDialect(XMLOutputFactory factory) {
++        if (jbossXMLOutputFactoryUnwrapper != null) {
++            factory = (XMLOutputFactory)jbossXMLOutputFactoryUnwrapper.unwrap(factory);
++        }
++        return getDialect(factory.getClass());
++    }
++    
+     private static StAXDialect getDialect(ClassLoader classLoader, URL rootUrl) {
+         StAXDialect dialect = (StAXDialect)dialectByUrl.get(rootUrl);
+         if (dialect != null) {
+@@ -265,16 +296,22 @@
+         // Try Sun's implementation found in JREs
+         cls = loadClass(classLoader, rootUrl, "com.sun.xml.internal.stream.XMLOutputFactoryImpl");
+         if (cls != null) {
+-            // Check if the implementation has the bug fixed here:
+-            // https://sjsxp.dev.java.net/source/browse/sjsxp/zephyr/src/com/sun/xml/stream/ZephyrWriterFactory.java?rev=1.8&r1=1.4&r2=1.5
+-            boolean isUnsafeStreamResult;
+-            try {
+-                cls.getDeclaredField("fStreamResult");
+-                isUnsafeStreamResult = true;
+-            } catch (NoSuchFieldException ex) {
+-                isUnsafeStreamResult = false;
++            // Some JREs (such as IBM Java 1.7) include com.sun.xml.internal.stream.XMLOutputFactoryImpl
++            // for compatibility (in which case it extends the XMLOutputFactory implementation from
++            // another StAX implementation, e.g. XLXP). Detect this situation by checking the superclass.
++            Class superClass = cls.getSuperclass();
++            if (superClass == XMLOutputFactory.class || superClass.getName().startsWith("com.sun.")) {
++                // Check if the implementation has the bug fixed here:
++                // https://sjsxp.dev.java.net/source/browse/sjsxp/zephyr/src/com/sun/xml/stream/ZephyrWriterFactory.java?rev=1.8&r1=1.4&r2=1.5
++                boolean isUnsafeStreamResult;
++                try {
++                    cls.getDeclaredField("fStreamResult");
++                    isUnsafeStreamResult = true;
++                } catch (NoSuchFieldException ex) {
++                    isUnsafeStreamResult = false;
++                }
++                return new SJSXPDialect(isUnsafeStreamResult);
+             }
+-            return new SJSXPDialect(isUnsafeStreamResult);
+         }
+         
+         // Try IBM's XL XP-J

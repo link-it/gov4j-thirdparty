@@ -1,0 +1,3 @@
+In alcuni casi, durante l'utilizzo della sicurezza, venivano invertiti i localName ed i namespace degli attributi.
+
+Il problema è stato risolto con la patch.

@@ -1,0 +1,214 @@
+--- axiom-1.2.13/modules/axiom-dom/src/main/java/org/apache/axiom/om/impl/dom/ChildNode.java	2012-04-02 22:07:16.000000000 +0200
++++ axiom-1.2.13/modules/axiom-dom/src/main/java/org/apache/axiom/om/impl/dom/ChildNode.java	2016-07-15 18:34:58.270046763 +0200
+@@ -355,8 +355,12 @@
+         XMLStreamWriter xmlStreamWriter = StAXUtils.createXMLStreamWriter(output);
+         try {
+             serialize(xmlStreamWriter);
+-        } finally {
+-            xmlStreamWriter.close();
++	    xmlStreamWriter.close(); // add per ovviare al problema indicato sotto
++        } 
++	finally {
++	    // Non deve essere effettuato il close nel caso venga lanciata una eccezione altrimenti viene serializzato un messaggio corretto.
++	    // anche se il sorgente contiene un xml non corretto. Viene eliminata la parte corretta.
++            // xmlStreamWriter.close();
+         }
+     }
+ 
+@@ -364,8 +368,11 @@
+         XMLStreamWriter xmlStreamWriter = StAXUtils.createXMLStreamWriter(writer);
+         try {
+             serialize(xmlStreamWriter);
++	    xmlStreamWriter.close(); // add per ovviare al problema indicato sotto
+         } finally {
+-            xmlStreamWriter.close();
++	    // Non deve essere effettuato il close nel caso venga lanciata una eccezione altrimenti viene serializzato un messaggio corretto.
++	    // anche se il sorgente contiene un xml non corretto. Viene eliminata la parte corretta.
++            // xmlStreamWriter.close();
+         }
+     }
+ 
+@@ -374,8 +381,11 @@
+         XMLStreamWriter xmlStreamWriter = StAXUtils.createXMLStreamWriter(output);
+         try {
+             serializeAndConsume(xmlStreamWriter);
++	    xmlStreamWriter.close(); // add per ovviare al problema indicato sotto
+         } finally {
+-            xmlStreamWriter.close();
++	    // Non deve essere effettuato il close nel caso venga lanciata una eccezione altrimenti viene serializzato un messaggio corretto.
++            // anche se il sorgente contiene un xml non corretto. Viene eliminata la parte corretta.
++            // xmlStreamWriter.close();
+         }
+     }
+ 
+@@ -383,8 +393,11 @@
+         XMLStreamWriter xmlStreamWriter = StAXUtils.createXMLStreamWriter(writer);
+         try {
+             serializeAndConsume(xmlStreamWriter);
++	    xmlStreamWriter.close(); // add per ovviare al problema indicato sotto
+         } finally {
+-            xmlStreamWriter.close();
++	    // Non deve essere effettuato il close nel caso venga lanciata una eccezione altrimenti viene serializzato un messaggio corretto.
++            // anche se il sorgente contiene un xml non corretto. Viene eliminata la parte corretta.
++            // xmlStreamWriter.close();
+         }
+     }
+ 
+@@ -395,8 +408,11 @@
+             internalSerialize(writer, true);
+             // TODO: the flush is necessary because of an issue with the lifecycle of MTOMXMLStreamWriter
+             writer.flush();
++	    writer.close(); // add per ovviare al problema indicato sotto
+         } finally {
+-            writer.close();
++	    // Non deve essere effettuato il close nel caso venga lanciata una eccezione altrimenti viene serializzato un messaggio corretto.
++            // anche se il sorgente contiene un xml non corretto. Viene eliminata la parte corretta.
++            // writer.close();
+         }
+     }
+ 
+@@ -409,8 +425,11 @@
+             internalSerialize(writer, true);
+             // TODO: the flush is necessary because of an issue with the lifecycle of MTOMXMLStreamWriter
+             writer.flush();
++	    writer.close(); // add per ovviare al problema indicato sotto
+         } finally {
+-            writer.close();
++	    // Non deve essere effettuato il close nel caso venga lanciata una eccezione altrimenti viene serializzato un messaggio corretto.
++            // anche se il sorgente contiene un xml non corretto. Viene eliminata la parte corretta.
++            // writer.close();
+         }
+     }
+ 
+@@ -421,8 +440,11 @@
+             internalSerialize(writer, false);
+             // TODO: the flush is necessary because of an issue with the lifecycle of MTOMXMLStreamWriter
+             writer.flush();
++	    writer.close(); // add per ovviare al problema indicato sotto
+         } finally {
+-            writer.close();
++	    // Non deve essere effettuato il close nel caso venga lanciata una eccezione altrimenti viene serializzato un messaggio corretto.
++            // anche se il sorgente contiene un xml non corretto. Viene eliminata la parte corretta.
++            // writer.close();
+         }
+     }
+ 
+@@ -435,8 +457,11 @@
+             // TODO: the flush is necessary because of an issue with the lifecycle of MTOMXMLStreamWriter
+             internalSerialize(writer, false);
+             writer.flush();
++	    writer.close(); // add per ovviare al problema indicato sotto
+         } finally {
+-            writer.close();
++            // Non deve essere effettuato il close nel caso venga lanciata una eccezione altrimenti viene serializzato un messaggio corretto.
++            // anche se il sorgente contiene un xml non corretto. Viene eliminata la parte corretta.
++            // writer.close();
+         }
+     }
+ 
+--- axiom-1.2.13/modules/axiom-impl/src/main/java/org/apache/axiom/om/impl/llom/OMSerializableImpl.java	2012-04-02 22:07:24.000000000 +0200
++++ axiom-1.2.13/modules/axiom-impl/src/main/java/org/apache/axiom/om/impl/llom/OMSerializableImpl.java	2016-07-15 18:34:58.296046763 +0200
+@@ -125,8 +125,11 @@
+         XMLStreamWriter xmlStreamWriter = StAXUtils.createXMLStreamWriter(output);
+         try {
+             serialize(xmlStreamWriter);
++	    xmlStreamWriter.close(); // add per ovviare al problema indicato sotto
+         } finally {
+-            xmlStreamWriter.close();
++	    // Non deve essere effettuato il close nel caso venga lanciata una eccezione altrimenti viene serializzato un messaggio corretto.
++            // anche se il sorgente contiene un xml non corretto. Viene eliminata la parte corretta.
++            // xmlStreamWriter.close();
+         }
+     }
+ 
+@@ -134,8 +137,11 @@
+         XMLStreamWriter xmlStreamWriter = StAXUtils.createXMLStreamWriter(writer);
+         try {
+             serialize(xmlStreamWriter);
++	    xmlStreamWriter.close(); // add per ovviare al problema indicato sotto
+         } finally {
+-            xmlStreamWriter.close();
++            // Non deve essere effettuato il close nel caso venga lanciata una eccezione altrimenti viene serializzato un messaggio corretto.
++            // anche se il sorgente contiene un xml non corretto. Viene eliminata la parte corretta.
++            // xmlStreamWriter.close();
+         }
+     }
+ 
+@@ -143,8 +149,11 @@
+         XMLStreamWriter xmlStreamWriter = StAXUtils.createXMLStreamWriter(output);
+         try {
+             serializeAndConsume(xmlStreamWriter);
++	    xmlStreamWriter.close(); // add per ovviare al problema indicato sotto
+         } finally {
+-            xmlStreamWriter.close();
++            // Non deve essere effettuato il close nel caso venga lanciata una eccezione altrimenti viene serializzato un messaggio corretto.
++            // anche se il sorgente contiene un xml non corretto. Viene eliminata la parte corretta.
++            // xmlStreamWriter.close();
+         }
+     }
+ 
+@@ -152,8 +161,11 @@
+         XMLStreamWriter xmlStreamWriter = StAXUtils.createXMLStreamWriter(writer);
+         try {
+             serializeAndConsume(xmlStreamWriter);
++	    xmlStreamWriter.close(); // add per ovviare al problema indicato sotto
+         } finally {
+-            xmlStreamWriter.close();
++            // Non deve essere effettuato il close nel caso venga lanciata una eccezione altrimenti viene serializzato un messaggio corretto.
++            // anche se il sorgente contiene un xml non corretto. Viene eliminata la parte corretta.
++            // xmlStreamWriter.close();
+         }
+     }
+ 
+@@ -163,8 +175,11 @@
+             internalSerialize(writer, true);
+             // TODO: the flush is necessary because of an issue with the lifecycle of MTOMXMLStreamWriter
+             writer.flush();
++	    writer.close(); // add per ovviare al problema indicato sotto
+         } finally {
+-            writer.close();
++	    // Non deve essere effettuato il close nel caso venga lanciata una eccezione altrimenti viene serializzato un messaggio corretto.
++            // anche se il sorgente contiene un xml non corretto. Viene eliminata la parte corretta.
++            // writer.close();
+         }
+     }
+ 
+@@ -176,8 +191,11 @@
+             internalSerialize(writer, true);
+             // TODO: the flush is necessary because of an issue with the lifecycle of MTOMXMLStreamWriter
+             writer.flush();
++	    writer.close(); // add per ovviare al problema indicato sotto
+         } finally {
+-            writer.close();
++            // Non deve essere effettuato il close nel caso venga lanciata una eccezione altrimenti viene serializzato un messaggio corretto.
++            // anche se il sorgente contiene un xml non corretto. Viene eliminata la parte corretta.
++            // writer.close();
+         }
+     }
+ 
+@@ -188,8 +206,11 @@
+             internalSerialize(writer, false);
+             // TODO: the flush is necessary because of an issue with the lifecycle of MTOMXMLStreamWriter
+             writer.flush();
++	    writer.close(); // add per ovviare al problema indicato sotto
+         } finally {
+-            writer.close();
++            // Non deve essere effettuato il close nel caso venga lanciata una eccezione altrimenti viene serializzato un messaggio corretto.
++            // anche se il sorgente contiene un xml non corretto. Viene eliminata la parte corretta.
++            // writer.close();
+         }
+     }
+ 
+@@ -202,8 +223,11 @@
+             internalSerialize(writer, false);
+             // TODO: the flush is necessary because of an issue with the lifecycle of MTOMXMLStreamWriter
+             writer.flush();
++	    writer.close(); // add per ovviare al problema indicato sotto
+         } finally {
+-            writer.close();
++            // Non deve essere effettuato il close nel caso venga lanciata una eccezione altrimenti viene serializzato un messaggio corretto.
++            // anche se il sorgente contiene un xml non corretto. Viene eliminata la parte corretta.
++            // writer.close();
+         }
+     }
+ }
