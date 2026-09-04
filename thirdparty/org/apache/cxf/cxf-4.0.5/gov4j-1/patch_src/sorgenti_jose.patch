@@ -1,0 +1,74 @@
+--- apache-cxf-4.0.5-src/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/jwe/AbstractJweEncryption.java	2021-06-04 19:43:02.000000000 +0200
++++ apache-cxf-4.0.5-src/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/jwe/AbstractJweEncryption.java	2021-06-10 09:42:11.830092703 +0200
+@@ -130,7 +130,7 @@
+             LOG.fine(ex.getMessage());
+             if (ex.getCause() instanceof NoSuchAlgorithmException) {
+                 LOG.warning("Unsupported algorithm: " + state.keyProps.getKeyAlgo());
+-                throw new JweException(JweException.Error.INVALID_CONTENT_ALGORITHM);
++                throw new JweException(JweException.Error.INVALID_CONTENT_ALGORITHM, ex);
+             }
+             throw new JweException(JweException.Error.CONTENT_ENCRYPTION_FAILURE, ex);
+         }
+--- apache-cxf-4.0.5-src/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/jwe/JweCompactConsumer.java	2021-06-04 19:43:02.000000000 +0200
++++ apache-cxf-4.0.5-src/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/jwe/JweCompactConsumer.java	2021-06-10 09:42:11.830092703 +0200
+@@ -63,7 +63,7 @@
+ 
+         } catch (Base64Exception ex) {
+             LOG.warning("Incorrect Base64 URL encoding");
+-            throw new JweException(JweException.Error.INVALID_COMPACT_JWE);
++            throw new JweException(JweException.Error.INVALID_COMPACT_JWE, ex);
+         }
+     }
+ 
+--- apache-cxf-4.0.5-src/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/jwe/JweUtils.java	2021-06-04 19:43:02.000000000 +0200
++++ apache-cxf-4.0.5-src/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/jwe/JweUtils.java	2021-06-10 09:42:11.831092706 +0200
+@@ -496,6 +496,11 @@
+                                                                JweHeaders inHeaders) {
+ 
+         Message m = PhaseInterceptorChain.getCurrentMessage();
++        return loadDecryptionProvider(props, m, inHeaders);
++    }
++
++    public static JweDecryptionProvider loadDecryptionProvider(Properties props, Message m,
++                                                               JweHeaders inHeaders) {
+         KeyDecryptionProvider keyDecryptionProvider = null;
+         ContentAlgorithm contentAlgo =
+             getContentEncryptionAlgorithm(m, props, null, ContentAlgorithm.A128GCM);
+@@ -843,7 +848,7 @@
+             return Arrays.copyOf(round1Hash, algoKeyBitLen / 8);
+         } catch (Exception ex) {
+             LOG.warning("Derived key calculation problem: round hash1 error");
+-            throw new JweException(JweException.Error.KEY_ENCRYPTION_FAILURE);
++            throw new JweException(JweException.Error.KEY_ENCRYPTION_FAILURE, ex);
+         }
+     }
+     private static byte[] generateKeyZ(ECPrivateKey privateKey, ECPublicKey publicKey) {
+@@ -854,7 +859,7 @@
+             return ka.generateSecret();
+         } catch (Exception ex) {
+             LOG.warning("Derived key calculation problem");
+-            throw new JweException(JweException.Error.KEY_ENCRYPTION_FAILURE);
++            throw new JweException(JweException.Error.KEY_ENCRYPTION_FAILURE, ex);
+         }
+     }
+     private static byte[] concatenateDatalenAndData(byte[] bytesASCII) {
+@@ -1034,7 +1039,7 @@
+             return JoseUtils.loadProperties(propLoc, m.getExchange().getBus());
+         } catch (Exception ex) {
+             LOG.warning("JWS init properties are not available");
+-            throw new JweException(JweException.Error.NO_INIT_PROPERTIES);
++            throw new JweException(JweException.Error.NO_INIT_PROPERTIES, ex);
+         }
+     }
+ }
+--- apache-cxf-4.0.5-src/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/jws/JwsUtils.java	2021-06-04 19:43:02.000000000 +0200
++++ apache-cxf-4.0.5-src/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/jws/JwsUtils.java	2021-06-10 09:42:11.832092709 +0200
+@@ -436,7 +436,7 @@
+             return JoseUtils.loadProperties(propLoc, m.getExchange().getBus());
+         } catch (Exception ex) {
+             LOG.warning("JWS init properties are not available");
+-            throw new JwsException(JwsException.Error.NO_INIT_PROPERTIES);
++            throw new JwsException(JwsException.Error.NO_INIT_PROPERTIES, ex);
+         }
+     }
+ 

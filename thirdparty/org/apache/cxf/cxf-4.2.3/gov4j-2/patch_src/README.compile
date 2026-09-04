@@ -1,0 +1,17 @@
+ NOTA: Utilizzare java 17 come compilazione
+
+wget https://archive.apache.org/dist/cxf/4.2.3/apache-cxf-4.2.3-src.tar.gz
+tar xzf apache-cxf-4.2.3-src.tar.gz
+
+patch -p0 < sorgenti.patch
+cd apache-cxf-4.2.3-src/core/
+mvn install
+mvn javadoc:javadoc
+cd ../../
+
+patch -p0 < sorgenti_jose.patch
+patch -p0 < sorgenti_jose_oaep.patch
+cd apache-cxf-4.2.3-src/rt/rs/security/jose-parent/jose
+mvn install
+mvn javadoc:javadoc
+cd ../../../../../../

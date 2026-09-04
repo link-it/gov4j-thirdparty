@@ -1,0 +1,3 @@
+- seguire le istruzioni presenti in patch_src/README.compile
+- per predisporre gli artefatti al deploy eseguire poi buildArtifact.sh
+- per effettuare il deploy andare in ogni directory cxf-* ed eseguire il comando 'mvn clean deploy'

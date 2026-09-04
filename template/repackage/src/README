@@ -1,0 +1,12 @@
+Versione modificata di GROUP_ID:ARTIFACT_ID:LIB_VERSION
+========================================================================================================================================================================
+
+Questa versione personalizzata dell'artefatto `GROUP_ID:ARTIFACT_ID:LIB_VERSION` è stata modificata rispetto all'originale per rispondere a esigenze specifiche.
+Il file JAR contiene le seguenti risorse aggiuntive per garantire massima trasparenza sul lavoro effettuato:
+
+1. **File README.repackage**  
+   File `.repackage` contenente un elenco dettagliato delle modifiche apportate all'artefatto originale, fornendo le istruzioni necessarie per riprodurre o applicare le stesse modifiche.
+
+2. **File README**  
+   Un file di descrizione che documenta le cause delle modifiche apportate, fornendo contesto e motivazioni dettagliate.
+

@@ -1,0 +1,12 @@
+diff --exclude target -urNbB apache-cxf-3.6.12-src.orig/core/src/main/java/org/apache/cxf/common/jaxb/JAXBUtils.java apache-cxf-3.6.12-src/core/src/main/java/org/apache/cxf/common/jaxb/JAXBUtils.java
+--- apache-cxf-3.6.12-src/core/src/main/java/org/apache/cxf/common/jaxb/JAXBUtils.java	2021-07-01 15:43:51.422594215 +0200
++++ apache-cxf-3.6.12-src/core/src/main/java/org/apache/cxf/common/jaxb/JAXBUtils.java	2021-07-01 15:34:19.795986299 +0200
+@@ -1170,7 +1170,7 @@
+                 //this class doesn't exist in JAXB 2.2 so expected
+                 LOG.log(Level.FINER, "Failed to create " + simpleClassName);
+             } else {
+-                LOG.log(Level.INFO, "Failed to create " + simpleClassName);
++                LOG.log(Level.FINER, "INFO: Failed to create " + simpleClassName);
+             }
+         }
+         return null;

@@ -1,0 +1,11 @@
+Sono state modificate le classi di utility 'JweUtils.java' e 'JwsUtils.java' per rendere pubblici (o aggiungere) dei metodi in cui viene fornito il messaggio cxf.
+Tale messaggio viene utilizzato con i formati 'jwk'. Se non fornito veniva recuperato dal contesto, che nelle modalità in cui viene usata la libreria in openspcoop era null.
+- Per localizzare le classi find rt/rs/security/jose-parent/jose/ -name Jw[e,s]Utils.java
+NOTA: Dalla versione 3.2.6 la modifica è stata necessaria solamente nel metodo 'loadDecryptionProvider' della classe JweUtils. Il metodi 'loadEncryptionProvider' e quelli nella classe JwsUtils.java contengono già il messaggio cxf e sono diventati pubblici.
+
+Nei package src/main/java/org/apache/cxf/rs/security/jose/jws e src/main/java/org/apache/cxf/rs/security/jose/jwe sono state aggiunte le eccezioni interne insieme alle eccezioni lanciate JwsException e JweException. Senza tali eccezioni i messaggi di errore erano poco comprensibili.
+Per localizzare tutte le invocazioni usare i seguenti grep:
+- cd rt/rs/security/jose-parent/jose/
+- grep -r "throw new JweException" src/main/java/org/apache/cxf/rs/security/jose/jwe
+- grep -r "throw new JwsException" src/main/java/org/apache/cxf/rs/security/jose/jws
+

@@ -1,0 +1,157 @@
+--- apache-cxf-3.6.8-src/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/jwe/AbstractJweEncryption.java	2021-06-04 19:43:02.000000000 +0200
++++ apache-cxf-3.6.8-src/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/jwe/AbstractJweEncryption.java	2021-06-10 09:42:11.830092703 +0200
+@@ -130,7 +130,7 @@
+             LOG.fine(ex.getMessage());
+             if (ex.getCause() instanceof NoSuchAlgorithmException) {
+                 LOG.warning("Unsupported algorithm: " + state.keyProps.getKeyAlgo());
+-                throw new JweException(JweException.Error.INVALID_CONTENT_ALGORITHM);
++                throw new JweException(JweException.Error.INVALID_CONTENT_ALGORITHM, ex);
+             }
+             throw new JweException(JweException.Error.CONTENT_ENCRYPTION_FAILURE, ex);
+         }
+--- apache-cxf-3.6.8-src/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/jwe/JweCompactConsumer.java	2021-06-04 19:43:02.000000000 +0200
++++ apache-cxf-3.6.8-src/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/jwe/JweCompactConsumer.java	2021-06-10 09:42:11.830092703 +0200
+@@ -63,7 +63,7 @@
+ 
+         } catch (Base64Exception ex) {
+             LOG.warning("Incorrect Base64 URL encoding");
+-            throw new JweException(JweException.Error.INVALID_COMPACT_JWE);
++            throw new JweException(JweException.Error.INVALID_COMPACT_JWE, ex);
+         }
+     }
+ 
+--- apache-cxf-3.6.8-src/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/jwe/JweUtils.java	2021-06-04 19:43:02.000000000 +0200
++++ apache-cxf-3.6.8-src/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/jwe/JweUtils.java	2021-06-10 09:42:11.831092706 +0200
+@@ -496,6 +496,11 @@
+                                                                JweHeaders inHeaders) {
+ 
+         Message m = PhaseInterceptorChain.getCurrentMessage();
++        return loadDecryptionProvider(props, m, inHeaders);
++    }
++
++    public static JweDecryptionProvider loadDecryptionProvider(Properties props, Message m,
++                                                               JweHeaders inHeaders) {
+         KeyDecryptionProvider keyDecryptionProvider = null;
+         ContentAlgorithm contentAlgo =
+             getContentEncryptionAlgorithm(m, props, null, ContentAlgorithm.A128GCM);
+@@ -843,7 +848,7 @@
+             return Arrays.copyOf(round1Hash, algoKeyBitLen / 8);
+         } catch (Exception ex) {
+             LOG.warning("Derived key calculation problem: round hash1 error");
+-            throw new JweException(JweException.Error.KEY_ENCRYPTION_FAILURE);
++            throw new JweException(JweException.Error.KEY_ENCRYPTION_FAILURE, ex);
+         }
+     }
+     private static byte[] generateKeyZ(ECPrivateKey privateKey, ECPublicKey publicKey) {
+@@ -854,7 +859,7 @@
+             return ka.generateSecret();
+         } catch (Exception ex) {
+             LOG.warning("Derived key calculation problem");
+-            throw new JweException(JweException.Error.KEY_ENCRYPTION_FAILURE);
++            throw new JweException(JweException.Error.KEY_ENCRYPTION_FAILURE, ex);
+         }
+     }
+     private static byte[] concatenateDatalenAndData(byte[] bytesASCII) {
+@@ -1034,7 +1039,7 @@
+             return JoseUtils.loadProperties(propLoc, m.getExchange().getBus());
+         } catch (Exception ex) {
+             LOG.warning("JWS init properties are not available");
+-            throw new JweException(JweException.Error.NO_INIT_PROPERTIES);
++            throw new JweException(JweException.Error.NO_INIT_PROPERTIES, ex);
+         }
+     }
+ }
+--- apache-cxf-3.6.8-src/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/jws/JwsUtils.java	2021-06-04 19:43:02.000000000 +0200
++++ apache-cxf-3.6.8-src/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/jws/JwsUtils.java	2021-06-10 09:42:11.832092709 +0200
+@@ -436,7 +436,7 @@
+             return JoseUtils.loadProperties(propLoc, m.getExchange().getBus());
+         } catch (Exception ex) {
+             LOG.warning("JWS init properties are not available");
+-            throw new JwsException(JwsException.Error.NO_INIT_PROPERTIES);
++            throw new JwsException(JwsException.Error.NO_INIT_PROPERTIES, ex);
+         }
+     }
+ 
+--- apache-cxf-3.6.8-src.orig/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/common/KeyManagementUtils.java	2024-12-04 16:19:10.000000000 +0100
++++ apache-cxf-3.6.8-src/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/common/KeyManagementUtils.java	2025-03-29 07:37:33.451702820 +0100
+@@ -64,10 +64,39 @@
+  */
+ public final class KeyManagementUtils {
+     private static final Logger LOG = LogUtils.getL7dLogger(KeyManagementUtils.class);
++    private static boolean keystoreJksPasswordRequired = true;   
++    private static boolean keystoreJksKeyPasswordRequired = true;     
++    private static boolean keystorePkcs12PasswordRequired = true;
++    private static boolean keystorePkcs12KeyPasswordRequired = true;
+ 
+     private KeyManagementUtils() {
+     }
+ 
++    public static boolean isKeystoreJksPasswordRequired() {
++        return keystoreJksPasswordRequired;
++    }
++    public static void setKeystoreJksPasswordRequired(boolean isKeystoreJksPasswordRequired) {
++        keystoreJksPasswordRequired = isKeystoreJksPasswordRequired;
++    }
++    public static boolean isKeystoreJksKeyPasswordRequired() {
++        return keystoreJksKeyPasswordRequired;
++    }
++    public static void setKeystoreJksKeyPasswordRequired(boolean isKeystoreJksKeyPasswordRequired) {
++        keystoreJksKeyPasswordRequired = isKeystoreJksKeyPasswordRequired;
++    }
++    public static boolean isKeystorePkcs12PasswordRequired() {
++        return keystorePkcs12PasswordRequired;
++    }
++    public static void setKeystorePkcs12PasswordRequired(boolean isKeystorePkcs12PasswordRequired) {
++        keystorePkcs12PasswordRequired = isKeystorePkcs12PasswordRequired;
++    }
++    public static boolean isKeystorePkcs12KeyPasswordRequired() {
++        return keystorePkcs12KeyPasswordRequired;
++    }
++    public static void setKeystorePkcs12KeyPasswordRequired(boolean isKeystorePkcs12KeyPasswordRequired) {
++        keystorePkcs12KeyPasswordRequired = isKeystorePkcs12KeyPasswordRequired;
++    }
++
+     public static List<String> loadAndEncodeX509CertificateOrChain(Message m, Properties props) {
+         X509Certificate[] chain = loadX509CertificateOrChain(m, props);
+         return encodeX509CertificateChain(chain);
+@@ -176,6 +205,17 @@
+             PrivateKeyPasswordProvider provider = loadPasswordProvider(m, props, keyOper);
+             keyPswdChars = provider != null ? provider.getPassword(props) : null;
+         }
++        if (keyPswdChars == null) {
++            boolean required = true;
++            if ("jks".equalsIgnoreCase(keyStore.getType())) {
++                required = keystoreJksKeyPasswordRequired;
++            } else if ("pkcs12".equalsIgnoreCase(keyStore.getType())) {
++                required = keystorePkcs12KeyPasswordRequired;
++            }         
++            if (!required) {
++                keyPswdChars = "".toCharArray();
++            } 
++        }
+         return CryptoUtils.loadPrivateKey(keyStore, keyPswdChars, theAlias);
+     }
+ 
+@@ -315,10 +355,20 @@
+                                         String keyStorePswd,
+                                         Bus bus) {
+         if (keyStorePswd == null) {
+-            throw new JoseException("No keystore password was defined");
++            boolean required = true;
++            if ("jks".equalsIgnoreCase(keyStoreType)) {
++                required = keystoreJksPasswordRequired;
++            } else if ("pkcs12".equalsIgnoreCase(keyStoreType)) {
++                required = keystorePkcs12PasswordRequired;
++            }
++            
++            if (required) {
++                throw new JoseException("No keystore password was defined");
++            }
+         }
+         try (InputStream is = JoseUtils.getResourceStream(keyStoreLoc, bus)) {
+-            return CryptoUtils.loadKeyStore(is, keyStorePswd.toCharArray(), keyStoreType);
++            char [] p = keyStorePswd != null ? keyStorePswd.toCharArray() : "".toCharArray();
++            return CryptoUtils.loadKeyStore(is, p, keyStoreType);
+         } catch (Exception ex) {
+             LOG.warning("Key store can not be loaded");
+             throw new JoseException(ex);

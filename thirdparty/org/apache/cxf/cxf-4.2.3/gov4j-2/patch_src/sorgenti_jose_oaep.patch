@@ -1,0 +1,92 @@
+--- apache-cxf-4.2.3-src/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/jwe/JweUtils.java
++++ apache-cxf-4.2.3-src/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/jwe/JweUtils.java
+@@ -29,9 +29,11 @@
+ import java.security.interfaces.RSAKey;
+ import java.security.interfaces.RSAPrivateKey;
+ import java.security.interfaces.RSAPublicKey;
++import java.security.spec.AlgorithmParameterSpec;
+ import java.security.spec.ECFieldFp;
+ import java.security.spec.ECPoint;
+ import java.security.spec.EllipticCurve;
++import java.security.spec.MGF1ParameterSpec;
+ import java.util.Arrays;
+ import java.util.Collections;
+ import java.util.List;
+@@ -40,6 +42,8 @@
+ 
+ import javax.crypto.KeyAgreement;
+ import javax.crypto.SecretKey;
++import javax.crypto.spec.OAEPParameterSpec;
++import javax.crypto.spec.PSource;
+ 
+ import org.apache.cxf.common.logging.LogUtils;
+ import org.apache.cxf.common.util.StringUtils;
+@@ -1046,4 +1050,25 @@
+             throw new JweException(JweException.Error.NO_INIT_PROPERTIES, ex);
+         }
+     }
++
++    /**
++     * Restituisce i parametri OAEP corrispondenti all'algoritmo JWA di key wrapping indicato,
++     * oppure null se l'algoritmo non utilizza OAEP.
++     *
++     * La trasformazione java 'RSA/ECB/OAEPWithSHA-XXXAndMGF1Padding' identifica il digest utilizzato per
++     * la funzione hash di OAEP, ma non quello utilizzato dalla mask generation function MGF1, che i vari
++     * provider JCE interpretano in modo differente: SunJCE utilizza SHA-1, che e' il default di
++     * OAEPParameterSpec, mentre BouncyCastle utilizza il medesimo digest indicato nel nome.
++     * RFC 7518 richiede, per RSA-OAEP-256, MGF1 sul digest SHA-256; indicando i parametri in modo
++     * esplicito il risultato non dipende piu' da quale provider risolve la trasformazione.
++     */
++    public static AlgorithmParameterSpec getOaepAlgorithmParameterSpec(String keyEncryptionJwaName) {
++        if (AlgorithmUtils.RSA_OAEP_ALGO.equals(keyEncryptionJwaName)) {
++            return new OAEPParameterSpec("SHA-1", "MGF1", MGF1ParameterSpec.SHA1, PSource.PSpecified.DEFAULT);
++        }
++        if (AlgorithmUtils.RSA_OAEP_256_ALGO.equals(keyEncryptionJwaName)) {
++            return new OAEPParameterSpec("SHA-256", "MGF1", MGF1ParameterSpec.SHA256, PSource.PSpecified.DEFAULT);
++        }
++        return null;
++    }
+ }
+--- apache-cxf-4.2.3-src/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/jwe/RSAKeyEncryptionAlgorithm.java
++++ apache-cxf-4.2.3-src/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/jwe/RSAKeyEncryptionAlgorithm.java
+@@ -19,6 +19,7 @@
+ package org.apache.cxf.rs.security.jose.jwe;
+ 
+ import java.security.interfaces.RSAPublicKey;
++import java.security.spec.AlgorithmParameterSpec;
+ 
+ import org.apache.cxf.rs.security.jose.jwa.AlgorithmUtils;
+ import org.apache.cxf.rs.security.jose.jwa.KeyAlgorithm;
+@@ -31,4 +32,9 @@
+         super(publicKey, jweAlgo, wrap, AlgorithmUtils.RSA_CEK_SET);
+     }
+ 
++    @Override
++    protected AlgorithmParameterSpec getAlgorithmParameterSpec(JweHeaders headers) {
++        return JweUtils.getOaepAlgorithmParameterSpec(headers.getKeyEncryptionAlgorithm().getJwaName());
++    }
++
+ }
+--- apache-cxf-4.2.3-src/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/jwe/RSAKeyDecryptionAlgorithm.java
++++ apache-cxf-4.2.3-src/rt/rs/security/jose-parent/jose/src/main/java/org/apache/cxf/rs/security/jose/jwe/RSAKeyDecryptionAlgorithm.java
+@@ -19,6 +19,7 @@
+ package org.apache.cxf.rs.security.jose.jwe;
+ 
+ import java.security.interfaces.RSAPrivateKey;
++import java.security.spec.AlgorithmParameterSpec;
+ 
+ import org.apache.cxf.helpers.JavaUtils;
+ import org.apache.cxf.rs.security.jose.jwa.AlgorithmUtils;
+@@ -39,6 +40,12 @@
+     protected int getKeyCipherBlockSize() {
+         return ((RSAPrivateKey)getCekDecryptionKey()).getModulus().toByteArray().length;
+     }
++
++    @Override
++    protected AlgorithmParameterSpec getAlgorithmParameterSpec(JweDecryptionInput jweDecryptionInput) {
++        return JweUtils.getOaepAlgorithmParameterSpec(
++            jweDecryptionInput.getJweHeaders().getKeyEncryptionAlgorithm().getJwaName());
++    }
+     @Override
+     protected void validateKeyEncryptionAlgorithm(String keyAlgo) {
+         super.validateKeyEncryptionAlgorithm(keyAlgo);

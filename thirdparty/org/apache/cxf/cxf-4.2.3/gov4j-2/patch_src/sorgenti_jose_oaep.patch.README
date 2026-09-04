@@ -1,0 +1,32 @@
+E' stata resa esplicita la parametrizzazione OAEP utilizzata dagli algoritmi di key wrapping RSA.
+
+CONTESTO
+La trasformazione java 'RSA/ECB/OAEPWithSHA-256AndMGF1Padding' indica il digest utilizzato dalla funzione hash di OAEP,
+ma non quello utilizzato dalla mask generation function MGF1. I provider JCE lo interpretano in modo differente:
+- SunJCE utilizza MGF1 su SHA-1, che e' il default di 'OAEPParameterSpec';
+- BouncyCastle utilizza MGF1 sul medesimo digest indicato nel nome della trasformazione.
+I due provider non sono quindi interoperabili su quella trasformazione, e RFC 7518 richiede, per 'RSA-OAEP-256',
+MGF1 sul digest SHA-256.
+
+Le classi 'RSAKeyEncryptionAlgorithm' e 'RSAKeyDecryptionAlgorithm' non indicavano alcun parametro, quindi il formato
+prodotto e quello atteso in lettura dipendevano da quale provider risolveva la trasformazione, e di conseguenza
+dall'ordine di registrazione dei provider nella jvm. Indicando i parametri in modo esplicito il comportamento diventa
+deterministico e conforme allo standard, indipendentemente dall'ordine dei provider.
+
+MODIFICHE
+- 'JweUtils': aggiunto il metodo 'getOaepAlgorithmParameterSpec(String keyEncryptionJwaName)', che restituisce
+  l'OAEPParameterSpec corrispondente all'algoritmo JWA indicato: SHA-1 con MGF1 su SHA-1 per 'RSA-OAEP',
+  SHA-256 con MGF1 su SHA-256 per 'RSA-OAEP-256', null per gli algoritmi che non utilizzano OAEP, fra cui 'RSA1_5'.
+- 'RSAKeyEncryptionAlgorithm': ridefinito 'getAlgorithmParameterSpec(JweHeaders)'.
+- 'RSAKeyDecryptionAlgorithm': ridefinito 'getAlgorithmParameterSpec(JweDecryptionInput)'.
+
+Il punto di estensione era gia' previsto dalla libreria: i valori restituiti vengono impostati nelle 'KeyProperties'
+rispettivamente in 'AbstractWrapKeyEncryptionAlgorithm.getEncryptedContentEncryptionKey' e in
+'WrappedKeyDecryptionAlgorithm.getDecryptedContentEncryptionKey', ed erano finora sempre null per gli algoritmi RSA,
+mentre 'AesGcmWrapKeyEncryptionAlgorithm' li utilizzava gia'.
+
+NOTA SULLA COMPATIBILITA'
+Il formato prodotto non cambia rispetto ad una jvm in cui BouncyCastle precede SunJCE, poiche' i parametri indicati
+sono esattamente quelli che BouncyCastle applica di default. I contenuti JWE gia' prodotti restano quindi leggibili.
+
+- Per localizzare le classi: find rt/rs/security/jose-parent/jose/ -name "RSAKey*cryptionAlgorithm.java"
