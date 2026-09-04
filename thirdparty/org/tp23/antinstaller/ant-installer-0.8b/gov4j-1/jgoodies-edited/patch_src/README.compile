@@ -1,0 +1,64 @@
+Si ricompila la classe java per risolvere la seguente problematica:
+
+WARNING: An illegal reflective access operation has occurred
+WARNING: Illegal reflective access by org.tp23.jgoodies.plaf.plastic.common.ShadowPopupMenuUtils (file:/opt/local/GIT_GOV/govway_3.3_jdk11/lib/antinstaller/jgoodies-edited-1.2.2.jar) to method javax.swing.Popup.getComponent()
+WARNING: Please consider reporting this to the maintainers of org.tp23.jgoodies.plaf.plastic.common.ShadowPopupMenuUtils
+WARNING: Use --illegal-access=warn to enable warnings of further illegal reflective access operations
+WARNING: All illegal access operations will be denied in a future release
+
+
+1) unzip ../../jgoodies-edited/jgoodies-edited-1.2.2.jar -d JAR;
+2) jd-cli -od JAVA  JAR;
+3) Editare la classe JAVA/org/tp23/jgoodies/plaf/plastic/common/ShadowPopupMenuUtils.java
+
+commentando il blocco static come segue, lasciando solamente l'istruzione normalmente presente nell'exception:
+
+static
+  {
+    /*try
+    {
+      getComponentMethod = Popup.class.getDeclaredMethod("getComponent", null);
+      getComponentMethod.setAccessible(true);
+    }
+    catch (Exception e)
+    {*/
+      ShadowPopupBorder.setActive(false);
+    //}
+  }
+
+commentando tutto il corpo del metodo setTransparent:
+
+  public static void setTransparent(JPopupMenu popupMenu, Popup popup)
+  {
+/*
+    if (getComponentMethod != null) {
+      try
+      {
+        Object component = getComponentMethod.invoke(popup, null);
+        if ((component instanceof JPanel))
+        {
+          ((JPanel)component).setOpaque(false);
+          popupMenu.setOpaque(false);
+          ShadowPopupBorder.clearSnapshot();
+        }
+        else if ((component instanceof JWindow))
+        {
+          ShadowPopupBorder.makeSnapshot((JWindow)component);
+        }
+      }
+      catch (Exception e)
+      {
+        getComponentMethod = null;
+        ShadowPopupBorder.setActive(false);
+      }
+    }
+*/
+  }
+
+4) cp JAVA/org/tp23/jgoodies/plaf/plastic/common/ShadowPopupMenuUtils.java JAR/org/tp23/jgoodies/plaf/plastic/common/
+5) javac -classpath JAR JAR/org/tp23/jgoodies/plaf/plastic/common/ShadowPopupMenuUtils.java 
+6) cp patch.README JAR
+7) cd JAR;
+8) rm -f ../jgoodies-edited-1.2.2-gov4j-1.jar; jar -cfM ../jgoodies-edited-1.2.2-gov4j-1.jar *; cd ..;
+9) rm -rf JAR JAVA/
+
