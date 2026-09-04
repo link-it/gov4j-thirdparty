@@ -1,0 +1,765 @@
+diff --git a/spring-context/src/main/java/org/springframework/validation/DataBinder.java b/spring-context/src/main/java/org/springframework/validation/DataBinder.java
+index c7af62b50117..981577568f9c 100644
+--- spring-context/src/main/java/org/springframework/validation/DataBinder.java
++++ spring-context/src/main/java/org/springframework/validation/DataBinder.java
+@@ -27,6 +27,7 @@
+ import java.util.HashMap;
+ import java.util.HashSet;
+ import java.util.List;
++import java.util.Locale;
+ import java.util.Map;
+ import java.util.Optional;
+ import java.util.Set;
+@@ -568,7 +569,8 @@ public void setDisallowedFields(@Nullable String... disallowedFields) {
+ 		else {
+ 			String[] fieldPatterns = new String[disallowedFields.length];
+ 			for (int i = 0; i < fieldPatterns.length; i++) {
+-				fieldPatterns[i] = PropertyAccessorUtils.canonicalPropertyName(disallowedFields[i]).toLowerCase();
++				String field = PropertyAccessorUtils.canonicalPropertyName(disallowedFields[i]);
++				fieldPatterns[i] = field.toLowerCase(Locale.ROOT);
+ 			}
+ 			this.disallowedFields = fieldPatterns;
+ 		}
+@@ -1157,7 +1159,7 @@ protected boolean isAllowed(String field) {
+ 		String[] allowed = getAllowedFields();
+ 		String[] disallowed = getDisallowedFields();
+ 		return ((ObjectUtils.isEmpty(allowed) || PatternMatchUtils.simpleMatch(allowed, field)) &&
+-				(ObjectUtils.isEmpty(disallowed) || !PatternMatchUtils.simpleMatch(disallowed, field.toLowerCase())));
++				(ObjectUtils.isEmpty(disallowed) || !PatternMatchUtils.simpleMatch(disallowed, field.toLowerCase(Locale.ROOT))));
+ 	}
+ 
+ 	/**
+diff --git a/spring-core/src/main/java/org/springframework/util/MimeType.java b/spring-core/src/main/java/org/springframework/util/MimeType.java
+index a178489598aa..8cfe69914f06 100644
+--- spring-core/src/main/java/org/springframework/util/MimeType.java
++++ spring-core/src/main/java/org/springframework/util/MimeType.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2022 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -181,10 +181,10 @@ public MimeType(String type, String subtype, @Nullable Map<String, String> param
+ 		Assert.hasLength(subtype, "'subtype' must not be empty");
+ 		checkToken(type);
+ 		checkToken(subtype);
+-		this.type = type.toLowerCase(Locale.ENGLISH);
+-		this.subtype = subtype.toLowerCase(Locale.ENGLISH);
++		this.type = type.toLowerCase(Locale.ROOT);
++		this.subtype = subtype.toLowerCase(Locale.ROOT);
+ 		if (!CollectionUtils.isEmpty(parameters)) {
+-			Map<String, String> map = new LinkedCaseInsensitiveMap<>(parameters.size(), Locale.ENGLISH);
++			Map<String, String> map = new LinkedCaseInsensitiveMap<>(parameters.size(), Locale.ROOT);
+ 			parameters.forEach((parameter, value) -> {
+ 				checkParameters(parameter, value);
+ 				map.put(parameter, value);
+diff --git a/spring-test/src/main/java/org/springframework/mock/web/MockHttpServletRequest.java b/spring-test/src/main/java/org/springframework/mock/web/MockHttpServletRequest.java
+index 37256c15ef90..dc7fa427135d 100644
+--- spring-test/src/main/java/org/springframework/mock/web/MockHttpServletRequest.java
++++ spring-test/src/main/java/org/springframework/mock/web/MockHttpServletRequest.java
+@@ -406,7 +406,8 @@ public class MockHttpServletRequest implements HttpServletRequest {
+ 	private void updateContentTypeHeader() {
+ 		if (StringUtils.hasLength(this.contentType)) {
+ 			String value = this.contentType;
+-			if (StringUtils.hasLength(this.characterEncoding) && !this.contentType.toLowerCase().contains(CHARSET_PREFIX)) {
++			if (StringUtils.hasLength(this.characterEncoding) &&
++					!this.contentType.toLowerCase(Locale.ROOT).contains(CHARSET_PREFIX)) {
+ 				value += ';' + CHARSET_PREFIX + this.characterEncoding;
+ 			}
+ 			doAddHeaderValue(HttpHeaders.CONTENT_TYPE, value, true);
+@@ -484,7 +485,8 @@ public class MockHttpServletRequest implements HttpServletRequest {
+ 			}
+ 			catch (IllegalArgumentException ex) {
+ 				// Try to get charset value anyway
+-				int charsetIndex = contentType.toLowerCase().indexOf(CHARSET_PREFIX);
++				contentType = contentType.toLowerCase(Locale.ROOT);
++				int charsetIndex = contentType.indexOf(CHARSET_PREFIX);
+ 				if (charsetIndex != -1) {
+ 					this.characterEncoding = contentType.substring(charsetIndex + CHARSET_PREFIX.length());
+ 				}
+diff --git a/spring-test/src/main/java/org/springframework/mock/web/MockHttpServletResponse.java b/spring-test/src/main/java/org/springframework/mock/web/MockHttpServletResponse.java
+index b5764f498025..19e8753e4fe8 100644
+--- spring-test/src/main/java/org/springframework/mock/web/MockHttpServletResponse.java
++++ spring-test/src/main/java/org/springframework/mock/web/MockHttpServletResponse.java
+@@ -243,7 +243,7 @@ private void setExplicitCharacterEncoding(@Nullable String characterEncoding) {
+ 	private void updateContentTypePropertyAndHeader() {
+ 		if (this.contentType != null) {
+ 			String value = this.contentType;
+-			if (this.characterEncodingSet && !value.toLowerCase().contains(CHARSET_PREFIX)) {
++			if (this.characterEncodingSet && !value.toLowerCase(Locale.ROOT).contains(CHARSET_PREFIX)) {
+ 				value += ';' + CHARSET_PREFIX + getCharacterEncoding();
+ 				this.contentType = value;
+ 			}
+@@ -351,7 +351,7 @@ public void setContentType(@Nullable String contentType) {
+ 			}
+ 			catch (Exception ex) {
+ 				// Try to get charset value anyway
+-				int charsetIndex = contentType.toLowerCase().indexOf(CHARSET_PREFIX);
++				int charsetIndex = contentType.toLowerCase(Locale.ROOT).indexOf(CHARSET_PREFIX);
+ 				if (charsetIndex != -1) {
+ 					setExplicitCharacterEncoding(contentType.substring(charsetIndex + CHARSET_PREFIX.length()));
+ 				}
+diff --git a/spring-web/src/main/java/org/springframework/http/HttpHeaders.java b/spring-web/src/main/java/org/springframework/http/HttpHeaders.java
+index 521382cbdf24..5e742ee9f994 100644
+--- spring-web/src/main/java/org/springframework/http/HttpHeaders.java
++++ spring-web/src/main/java/org/springframework/http/HttpHeaders.java
+@@ -392,7 +392,7 @@ public class HttpHeaders implements MultiValueMap<String, String>, Serializable
+ 	 */
+ 	public static final HttpHeaders EMPTY = new ReadOnlyHttpHeaders(new LinkedMultiValueMap<>());
+ 
+-	private static final DecimalFormatSymbols DECIMAL_FORMAT_SYMBOLS = new DecimalFormatSymbols(Locale.ENGLISH);
++	private static final DecimalFormatSymbols DECIMAL_FORMAT_SYMBOLS = new DecimalFormatSymbols(Locale.ROOT);
+ 
+ 	private static final ZoneId GMT = ZoneId.of("GMT");
+ 
+@@ -422,7 +422,7 @@ public class HttpHeaders implements MultiValueMap<String, String>, Serializable
+ 	 * <p>This is the common constructor, using a case-insensitive map structure.
+ 	 */
+ 	public HttpHeaders() {
+-		this(CollectionUtils.toMultiValueMap(new LinkedCaseInsensitiveMap<>(8, Locale.ENGLISH)));
++		this(CollectionUtils.toMultiValueMap(new LinkedCaseInsensitiveMap<>(8, Locale.ROOT)));
+ 	}
+ 
+ 	/**
+@@ -697,7 +697,7 @@ public HttpMethod getAccessControlRequestMethod() {
+ 	public void setAcceptCharset(List<Charset> acceptableCharsets) {
+ 		StringJoiner joiner = new StringJoiner(", ");
+ 		for (Charset charset : acceptableCharsets) {
+-			joiner.add(charset.name().toLowerCase(Locale.ENGLISH));
++			joiner.add(charset.name().toLowerCase(Locale.ROOT));
+ 		}
+ 		set(ACCEPT_CHARSET, joiner.toString());
+ 	}
+diff --git a/spring-web/src/main/java/org/springframework/http/MediaTypeFactory.java b/spring-web/src/main/java/org/springframework/http/MediaTypeFactory.java
+index b61cfea07350..7491e3c8767c 100644
+--- spring-web/src/main/java/org/springframework/http/MediaTypeFactory.java
++++ spring-web/src/main/java/org/springframework/http/MediaTypeFactory.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2021 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -77,7 +77,7 @@ private static MultiValueMap<String, MediaType> parseMimeTypes() {
+ 				String[] tokens = StringUtils.tokenizeToStringArray(line, " \t\n\r\f");
+ 				MediaType mediaType = MediaType.parseMediaType(tokens[0]);
+ 				for (int i = 1; i < tokens.length; i++) {
+-					String fileExtension = tokens[i].toLowerCase(Locale.ENGLISH);
++					String fileExtension = tokens[i].toLowerCase(Locale.ROOT);
+ 					result.add(fileExtension, mediaType);
+ 				}
+ 			}
+@@ -117,7 +117,7 @@ public static List<MediaType> getMediaTypes(@Nullable String filename) {
+ 		List<MediaType> mediaTypes = null;
+ 		String ext = StringUtils.getFilenameExtension(filename);
+ 		if (ext != null) {
+-			mediaTypes = fileExtensionToMediaTypes.get(ext.toLowerCase(Locale.ENGLISH));
++			mediaTypes = fileExtensionToMediaTypes.get(ext.toLowerCase(Locale.ROOT));
+ 		}
+ 		return (mediaTypes != null ? mediaTypes : Collections.emptyList());
+ 	}
+diff --git a/spring-web/src/main/java/org/springframework/http/server/reactive/ServletServerHttpRequest.java b/spring-web/src/main/java/org/springframework/http/server/reactive/ServletServerHttpRequest.java
+index 531718eb5c07..9d2602415f5a 100644
+--- spring-web/src/main/java/org/springframework/http/server/reactive/ServletServerHttpRequest.java
++++ spring-web/src/main/java/org/springframework/http/server/reactive/ServletServerHttpRequest.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2022 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -111,7 +111,7 @@ public ServletServerHttpRequest(MultiValueMap<String, String> headers, HttpServl
+ 
+ 	private static MultiValueMap<String, String> createDefaultHttpHeaders(HttpServletRequest request) {
+ 		MultiValueMap<String, String> headers =
+-				CollectionUtils.toMultiValueMap(new LinkedCaseInsensitiveMap<>(8, Locale.ENGLISH));
++				CollectionUtils.toMultiValueMap(new LinkedCaseInsensitiveMap<>(8, Locale.ROOT));
+ 		for (Enumeration<?> names = request.getHeaderNames(); names.hasMoreElements(); ) {
+ 			String name = (String) names.nextElement();
+ 			for (Enumeration<?> values = request.getHeaders(name); values.hasMoreElements(); ) {
+diff --git a/spring-web/src/main/java/org/springframework/web/accept/ContentNegotiationManagerFactoryBean.java b/spring-web/src/main/java/org/springframework/web/accept/ContentNegotiationManagerFactoryBean.java
+index a9fcb4d8dc90..e0c75e28e026 100644
+--- spring-web/src/main/java/org/springframework/web/accept/ContentNegotiationManagerFactoryBean.java
++++ spring-web/src/main/java/org/springframework/web/accept/ContentNegotiationManagerFactoryBean.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2020 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -214,7 +214,7 @@ public void setMediaTypes(Properties mediaTypes) {
+ 	 * An alternative to {@link #setMediaTypes} for programmatic registrations.
+ 	 */
+ 	public void addMediaType(String key, MediaType mediaType) {
+-		this.mediaTypes.put(key.toLowerCase(Locale.ENGLISH), mediaType);
++		this.mediaTypes.put(key.toLowerCase(Locale.ROOT), mediaType);
+ 	}
+ 
+ 	/**
+diff --git a/spring-web/src/main/java/org/springframework/web/accept/MappingMediaTypeFileExtensionResolver.java b/spring-web/src/main/java/org/springframework/web/accept/MappingMediaTypeFileExtensionResolver.java
+index 6e2f05e99aa9..3ad1f7a4bbb1 100644
+--- spring-web/src/main/java/org/springframework/web/accept/MappingMediaTypeFileExtensionResolver.java
++++ spring-web/src/main/java/org/springframework/web/accept/MappingMediaTypeFileExtensionResolver.java
+@@ -57,7 +57,7 @@ public MappingMediaTypeFileExtensionResolver(@Nullable Map<String, MediaType> me
+ 		if (mediaTypes != null) {
+ 			Set<String> allFileExtensions = new HashSet<>(mediaTypes.size());
+ 			mediaTypes.forEach((extension, mediaType) -> {
+-				String lowerCaseExtension = extension.toLowerCase(Locale.ENGLISH);
++				String lowerCaseExtension = extension.toLowerCase(Locale.ROOT);
+ 				this.mediaTypes.put(lowerCaseExtension, mediaType);
+ 				addFileExtension(mediaType, lowerCaseExtension);
+ 				allFileExtensions.add(lowerCaseExtension);
+@@ -109,7 +109,7 @@ public List<String> getAllFileExtensions() {
+ 	 */
+ 	@Nullable
+ 	protected MediaType lookupMediaType(String extension) {
+-		return this.mediaTypes.get(extension.toLowerCase(Locale.ENGLISH));
++		return this.mediaTypes.get(extension.toLowerCase(Locale.ROOT));
+ 	}
+ 
+ }
+diff --git a/spring-web/src/main/java/org/springframework/web/accept/PathExtensionContentNegotiationStrategy.java b/spring-web/src/main/java/org/springframework/web/accept/PathExtensionContentNegotiationStrategy.java
+index 66a0354c1e50..8740f5c34aa0 100644
+--- spring-web/src/main/java/org/springframework/web/accept/PathExtensionContentNegotiationStrategy.java
++++ spring-web/src/main/java/org/springframework/web/accept/PathExtensionContentNegotiationStrategy.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2020 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -99,7 +99,7 @@ protected String getMediaTypeKey(NativeWebRequest webRequest) {
+ 		// Ignore LOOKUP_PATH attribute, use our own "fixed" UrlPathHelper with decoding off
+ 		String path = this.urlPathHelper.getLookupPathForRequest(request);
+ 		String extension = UriUtils.extractFileExtension(path);
+-		return (StringUtils.hasText(extension) ? extension.toLowerCase(Locale.ENGLISH) : null);
++		return (StringUtils.hasText(extension) ? extension.toLowerCase(Locale.ROOT) : null);
+ 	}
+ 
+ 	/**
+diff --git a/spring-web/src/main/java/org/springframework/web/filter/ForwardedHeaderFilter.java b/spring-web/src/main/java/org/springframework/web/filter/ForwardedHeaderFilter.java
+index dceabf07146f..4e898b1a5323 100644
+--- spring-web/src/main/java/org/springframework/web/filter/ForwardedHeaderFilter.java
++++ spring-web/src/main/java/org/springframework/web/filter/ForwardedHeaderFilter.java
+@@ -82,7 +82,7 @@ public class ForwardedHeaderFilter extends OncePerRequestFilter {
+ 	private static final Log logger = LogFactory.getLog(ForwardedHeaderFilter.class);
+ 
+ 	private static final Set<String> FORWARDED_HEADER_NAMES =
+-			Collections.newSetFromMap(new LinkedCaseInsensitiveMap<>(10, Locale.ENGLISH));
++			Collections.newSetFromMap(new LinkedCaseInsensitiveMap<>(10, Locale.ROOT));
+ 
+ 	static {
+ 		FORWARDED_HEADER_NAMES.add("Forwarded");
+@@ -177,7 +177,7 @@ public class ForwardedHeaderFilter extends OncePerRequestFilter {
+ 		}
+ 
+ 		private static Map<String, List<String>> initHeaders(HttpServletRequest request) {
+-			Map<String, List<String>> headers = new LinkedCaseInsensitiveMap<>(Locale.ENGLISH);
++			Map<String, List<String>> headers = new LinkedCaseInsensitiveMap<>(Locale.ROOT);
+ 			Enumeration<String> names = request.getHeaderNames();
+ 			while (names.hasMoreElements()) {
+ 				String name = names.nextElement();
+diff --git a/spring-web/src/main/java/org/springframework/web/filter/HiddenHttpMethodFilter.java b/spring-web/src/main/java/org/springframework/web/filter/HiddenHttpMethodFilter.java
+index 51487b395608..795f8afb7084 100644
+--- spring-web/src/main/java/org/springframework/web/filter/HiddenHttpMethodFilter.java
++++ spring-web/src/main/java/org/springframework/web/filter/HiddenHttpMethodFilter.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2018 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -81,7 +81,7 @@ protected void doFilterInternal(HttpServletRequest request, HttpServletResponse
+ 		if ("POST".equals(request.getMethod()) && request.getAttribute(WebUtils.ERROR_EXCEPTION_ATTRIBUTE) == null) {
+ 			String paramValue = request.getParameter(this.methodParam);
+ 			if (StringUtils.hasLength(paramValue)) {
+-				String method = paramValue.toUpperCase(Locale.ENGLISH);
++				String method = paramValue.toUpperCase(Locale.ROOT);
+ 				if (ALLOWED_METHODS.contains(method)) {
+ 					requestToUse = new HttpMethodRequestWrapper(request, method);
+ 				}
+diff --git a/spring-web/src/main/java/org/springframework/web/filter/reactive/HiddenHttpMethodFilter.java b/spring-web/src/main/java/org/springframework/web/filter/reactive/HiddenHttpMethodFilter.java
+index 96dd44dbf975..0fe4007a0eb7 100644
+--- spring-web/src/main/java/org/springframework/web/filter/reactive/HiddenHttpMethodFilter.java
++++ spring-web/src/main/java/org/springframework/web/filter/reactive/HiddenHttpMethodFilter.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2018 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -91,7 +91,7 @@ public class HiddenHttpMethodFilter implements WebFilter {
+ 	}
+ 
+ 	private ServerWebExchange mapExchange(ServerWebExchange exchange, String methodParamValue) {
+-		HttpMethod httpMethod = HttpMethod.resolve(methodParamValue.toUpperCase(Locale.ENGLISH));
++		HttpMethod httpMethod = HttpMethod.resolve(methodParamValue.toUpperCase(Locale.ROOT));
+ 		Assert.notNull(httpMethod, () -> "HttpMethod '" + methodParamValue + "' not supported");
+ 		if (ALLOWED_METHODS.contains(httpMethod)) {
+ 			return exchange.mutate().request(builder -> builder.method(httpMethod)).build();
+diff --git a/spring-web/src/main/java/org/springframework/web/multipart/support/MultipartResolutionDelegate.java b/spring-web/src/main/java/org/springframework/web/multipart/support/MultipartResolutionDelegate.java
+index ac1418cc1ac4..a519cd25b269 100644
+--- spring-web/src/main/java/org/springframework/web/multipart/support/MultipartResolutionDelegate.java
++++ spring-web/src/main/java/org/springframework/web/multipart/support/MultipartResolutionDelegate.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2020 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -19,6 +19,7 @@
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.List;
++import java.util.Locale;
+ 
+ import jakarta.servlet.http.HttpServletRequest;
+ import jakarta.servlet.http.Part;
+@@ -71,7 +72,7 @@ public static boolean isMultipartRequest(HttpServletRequest request) {
+ 
+ 	private static boolean isMultipartContent(HttpServletRequest request) {
+ 		String contentType = request.getContentType();
+-		return (contentType != null && contentType.toLowerCase().startsWith("multipart/"));
++		return (contentType != null && contentType.toLowerCase(Locale.ROOT).startsWith("multipart/"));
+ 	}
+ 
+ 	static MultipartHttpServletRequest asMultipartHttpServletRequest(HttpServletRequest request) {
+diff --git a/spring-web/src/main/java/org/springframework/web/server/adapter/ForwardedHeaderTransformer.java b/spring-web/src/main/java/org/springframework/web/server/adapter/ForwardedHeaderTransformer.java
+index 1614671fb9f7..a920f17b8161 100644
+--- spring-web/src/main/java/org/springframework/web/server/adapter/ForwardedHeaderTransformer.java
++++ spring-web/src/main/java/org/springframework/web/server/adapter/ForwardedHeaderTransformer.java
+@@ -61,7 +61,7 @@
+ public class ForwardedHeaderTransformer implements Function<ServerHttpRequest, ServerHttpRequest> {
+ 
+ 	static final Set<String> FORWARDED_HEADER_NAMES =
+-			Collections.newSetFromMap(new LinkedCaseInsensitiveMap<>(10, Locale.ENGLISH));
++			Collections.newSetFromMap(new LinkedCaseInsensitiveMap<>(10, Locale.ROOT));
+ 
+ 	static {
+ 		FORWARDED_HEADER_NAMES.add("Forwarded");
+diff --git a/spring-web/src/main/java/org/springframework/web/util/UriComponentsBuilder.java b/spring-web/src/main/java/org/springframework/web/util/UriComponentsBuilder.java
+index 5b56b82f4078..d709130ca245 100644
+--- spring-web/src/main/java/org/springframework/web/util/UriComponentsBuilder.java
++++ spring-web/src/main/java/org/springframework/web/util/UriComponentsBuilder.java
+@@ -26,6 +26,7 @@
+ import java.util.Deque;
+ import java.util.HashMap;
+ import java.util.List;
++import java.util.Locale;
+ import java.util.Map;
+ import java.util.Optional;
+ import java.util.regex.Matcher;
+@@ -282,7 +283,7 @@ public static UriComponentsBuilder fromHttpUrl(String httpUrl) {
+ 		if (matcher.matches()) {
+ 			UriComponentsBuilder builder = new UriComponentsBuilder();
+ 			String scheme = matcher.group(1);
+-			builder.scheme(scheme != null ? scheme.toLowerCase() : null);
++			builder.scheme(scheme != null ? scheme.toLowerCase(Locale.ROOT) : null);
+ 			builder.userInfo(matcher.group(4));
+ 			String host = matcher.group(5);
+ 			checkSchemeAndHost(httpUrl, scheme, host);
+diff --git a/spring-web/src/main/java/org/springframework/web/util/UrlPathHelper.java b/spring-web/src/main/java/org/springframework/web/util/UrlPathHelper.java
+index 5bda3adeacaa..1efa02fdc6e4 100644
+--- spring-web/src/main/java/org/springframework/web/util/UrlPathHelper.java
++++ spring-web/src/main/java/org/springframework/web/util/UrlPathHelper.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2022 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -18,6 +18,7 @@
+ 
+ import java.net.URLDecoder;
+ import java.nio.charset.UnsupportedCharsetException;
++import java.util.Locale;
+ import java.util.Map;
+ import java.util.Properties;
+ 
+@@ -629,7 +630,7 @@ private static String removeSemicolonContentInternal(String requestUri) {
+ 
+ 	private String removeJsessionid(String requestUri) {
+ 		String key = ";jsessionid=";
+-		int index = requestUri.toLowerCase().indexOf(key);
++		int index = requestUri.toLowerCase(Locale.ROOT).indexOf(key);
+ 		if (index == -1) {
+ 			return requestUri;
+ 		}
+diff --git a/spring-web/src/test/java/org/springframework/http/client/AbstractHttpRequestFactoryTests.java b/spring-web/src/test/java/org/springframework/http/client/AbstractHttpRequestFactoryTests.java
+index 8f13043d7d43..22653ebca243 100644
+--- spring-web/src/test/java/org/springframework/http/client/AbstractHttpRequestFactoryTests.java
++++ spring-web/src/test/java/org/springframework/http/client/AbstractHttpRequestFactoryTests.java
+@@ -169,7 +169,7 @@ protected void assertHttpMethod(String path, HttpMethod method) throws Exception
+ 
+ 		try (ClientHttpResponse response = request.execute()) {
+ 			assertThat(response.getStatusCode()).as("Invalid response status").isEqualTo(HttpStatus.OK);
+-			assertThat(request.getMethod().name()).as("Invalid method").isEqualTo(path.toUpperCase(Locale.ENGLISH));
++			assertThat(request.getMethod().name()).as("Invalid method").isEqualTo(path.toUpperCase(Locale.ROOT));
+ 		}
+ 	}
+ 
+diff --git a/spring-webflux/src/main/java/org/springframework/web/reactive/accept/ParameterContentTypeResolver.java b/spring-webflux/src/main/java/org/springframework/web/reactive/accept/ParameterContentTypeResolver.java
+index e8a6f6bad0ab..b003c0352e87 100644
+--- spring-webflux/src/main/java/org/springframework/web/reactive/accept/ParameterContentTypeResolver.java
++++ spring-webflux/src/main/java/org/springframework/web/reactive/accept/ParameterContentTypeResolver.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2017 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -51,7 +51,7 @@ public ParameterContentTypeResolver(Map<String, MediaType> mediaTypes) {
+ 	}
+ 
+ 	private static String formatKey(String key) {
+-		return key.toLowerCase(Locale.ENGLISH);
++		return key.toLowerCase(Locale.ROOT);
+ 	}
+ 
+ 
+diff --git a/spring-webflux/src/main/java/org/springframework/web/reactive/resource/CachingResourceResolver.java b/spring-webflux/src/main/java/org/springframework/web/reactive/resource/CachingResourceResolver.java
+index 015b3889172d..6903e989cde6 100644
+--- spring-webflux/src/main/java/org/springframework/web/reactive/resource/CachingResourceResolver.java
++++ spring-webflux/src/main/java/org/springframework/web/reactive/resource/CachingResourceResolver.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2019 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -20,6 +20,7 @@
+ import java.util.Arrays;
+ import java.util.Collections;
+ import java.util.List;
++import java.util.Locale;
+ import java.util.stream.Collectors;
+ 
+ import reactor.core.publisher.Mono;
+@@ -140,7 +141,7 @@ private String getContentCodingKey(ServerWebExchange exchange) {
+ 		return Arrays.stream(StringUtils.tokenizeToStringArray(header, ","))
+ 				.map(token -> {
+ 					int index = token.indexOf(';');
+-					return (index >= 0 ? token.substring(0, index) : token).trim().toLowerCase();
++					return (index >= 0 ? token.substring(0, index) : token).trim().toLowerCase(Locale.ROOT);
+ 				})
+ 				.filter(this.contentCodings::contains)
+ 				.sorted()
+diff --git a/spring-webflux/src/main/java/org/springframework/web/reactive/resource/EncodedResourceResolver.java b/spring-webflux/src/main/java/org/springframework/web/reactive/resource/EncodedResourceResolver.java
+index d062b0e21810..c4f5abae0847 100644
+--- spring-webflux/src/main/java/org/springframework/web/reactive/resource/EncodedResourceResolver.java
++++ spring-webflux/src/main/java/org/springframework/web/reactive/resource/EncodedResourceResolver.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2023 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -28,6 +28,7 @@
+ import java.util.Collections;
+ import java.util.LinkedHashMap;
+ import java.util.List;
++import java.util.Locale;
+ import java.util.Map;
+ 
+ import reactor.core.publisher.Mono;
+@@ -169,7 +170,7 @@ protected Mono<Resource> resolveResourceInternal(@Nullable ServerWebExchange exc
+ 	private String getAcceptEncoding(ServerWebExchange exchange) {
+ 		ServerHttpRequest request = exchange.getRequest();
+ 		String header = request.getHeaders().getFirst(HttpHeaders.ACCEPT_ENCODING);
+-		return (header != null ? header.toLowerCase() : null);
++		return (header != null ? header.toLowerCase(Locale.ROOT) : null);
+ 	}
+ 
+ 	private String getExtension(String coding) {
+diff --git a/spring-webflux/src/main/java/org/springframework/web/reactive/resource/ResourceWebHandler.java b/spring-webflux/src/main/java/org/springframework/web/reactive/resource/ResourceWebHandler.java
+index 8493c208803e..8b0533b22c19 100644
+--- spring-webflux/src/main/java/org/springframework/web/reactive/resource/ResourceWebHandler.java
++++ spring-webflux/src/main/java/org/springframework/web/reactive/resource/ResourceWebHandler.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2021 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -339,7 +339,7 @@ public void setMediaTypes(Map<String, MediaType> mediaTypes) {
+ 			this.mediaTypes = new HashMap<>(mediaTypes.size());
+ 		}
+ 		mediaTypes.forEach((ext, type) ->
+-				this.mediaTypes.put(ext.toLowerCase(Locale.ENGLISH), type));
++				this.mediaTypes.put(ext.toLowerCase(Locale.ROOT), type));
+ 	}
+ 
+ 	/**
+@@ -664,7 +664,7 @@ private MediaType getMediaType(Resource resource) {
+ 		if (!CollectionUtils.isEmpty(this.mediaTypes)) {
+ 			String ext = StringUtils.getFilenameExtension(filename);
+ 			if (ext != null) {
+-				mediaType = this.mediaTypes.get(ext.toLowerCase(Locale.ENGLISH));
++				mediaType = this.mediaTypes.get(ext.toLowerCase(Locale.ROOT));
+ 			}
+ 		}
+ 		if (mediaType == null) {
+diff --git a/spring-webflux/src/main/java/org/springframework/web/reactive/result/condition/AbstractNameValueExpression.java b/spring-webflux/src/main/java/org/springframework/web/reactive/result/condition/AbstractNameValueExpression.java
+index 37b4ee985842..69739fea40a9 100644
+--- spring-webflux/src/main/java/org/springframework/web/reactive/result/condition/AbstractNameValueExpression.java
++++ spring-webflux/src/main/java/org/springframework/web/reactive/result/condition/AbstractNameValueExpression.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2018 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -16,6 +16,8 @@
+ 
+ package org.springframework.web.reactive.result.condition;
+ 
++import java.util.Locale;
++
+ import org.springframework.lang.Nullable;
+ import org.springframework.util.ObjectUtils;
+ import org.springframework.web.server.ServerWebExchange;
+@@ -106,7 +108,7 @@ public boolean equals(@Nullable Object other) {
+ 
+ 	@Override
+ 	public int hashCode() {
+-		int result = (isCaseSensitiveName() ? this.name : this.name.toLowerCase()).hashCode();
++		int result = (isCaseSensitiveName() ? this.name : this.name.toLowerCase(Locale.ROOT)).hashCode();
+ 		result = 31 * result + ObjectUtils.nullSafeHashCode(this.value);
+ 		result = 31 * result + (this.isNegated ? 1 : 0);
+ 		return result;
+diff --git a/spring-webmvc/src/main/java/org/springframework/web/servlet/mvc/condition/AbstractNameValueExpression.java b/spring-webmvc/src/main/java/org/springframework/web/servlet/mvc/condition/AbstractNameValueExpression.java
+index 91e5c16cb32d..9beb44238bc0 100644
+--- spring-webmvc/src/main/java/org/springframework/web/servlet/mvc/condition/AbstractNameValueExpression.java
++++ spring-webmvc/src/main/java/org/springframework/web/servlet/mvc/condition/AbstractNameValueExpression.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2018 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -16,6 +16,8 @@
+ 
+ package org.springframework.web.servlet.mvc.condition;
+ 
++import java.util.Locale;
++
+ import javax.servlet.http.HttpServletRequest;
+ 
+ import org.springframework.lang.Nullable;
+@@ -108,7 +110,7 @@ abstract class AbstractNameValueExpression<T> implements NameValueExpression<T>
+ 
+ 	@Override
+ 	public int hashCode() {
+-		int result = (isCaseSensitiveName() ? this.name.hashCode() : this.name.toLowerCase().hashCode());
++		int result = (isCaseSensitiveName() ? this.name.hashCode() : this.name.toLowerCase(Locale.ROOT).hashCode());
+ 		result = 31 * result + (this.value != null ? this.value.hashCode() : 0);
+ 		result = 31 * result + (this.isNegated ? 1 : 0);
+ 		return result;
+diff --git a/spring-webmvc/src/main/java/org/springframework/web/servlet/mvc/method/annotation/AbstractMessageConverterMethodProcessor.java b/spring-webmvc/src/main/java/org/springframework/web/servlet/mvc/method/annotation/AbstractMessageConverterMethodProcessor.java
+index e801951bb55f..4ce38c502c0e 100644
+--- spring-webmvc/src/main/java/org/springframework/web/servlet/mvc/method/annotation/AbstractMessageConverterMethodProcessor.java
++++ spring-webmvc/src/main/java/org/springframework/web/servlet/mvc/method/annotation/AbstractMessageConverterMethodProcessor.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2021 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -480,7 +480,7 @@ private boolean safeExtension(HttpServletRequest request, @Nullable String exten
+ 		if (!StringUtils.hasText(extension)) {
+ 			return true;
+ 		}
+-		extension = extension.toLowerCase(Locale.ENGLISH);
++		extension = extension.toLowerCase(Locale.ROOT);
+ 		if (this.safeExtensions.contains(extension)) {
+ 			return true;
+ 		}
+diff --git a/spring-webmvc/src/main/java/org/springframework/web/servlet/resource/CachingResourceResolver.java b/spring-webmvc/src/main/java/org/springframework/web/servlet/resource/CachingResourceResolver.java
+index 187dde05c842..2bb01786993b 100644
+--- spring-webmvc/src/main/java/org/springframework/web/servlet/resource/CachingResourceResolver.java
++++ spring-webmvc/src/main/java/org/springframework/web/servlet/resource/CachingResourceResolver.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2019 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -20,6 +20,7 @@
+ import java.util.Arrays;
+ import java.util.Collections;
+ import java.util.List;
++import java.util.Locale;
+ import java.util.stream.Collectors;
+ 
+ import jakarta.servlet.http.HttpServletRequest;
+@@ -147,7 +148,7 @@ private String getContentCodingKey(HttpServletRequest request) {
+ 		return Arrays.stream(StringUtils.tokenizeToStringArray(header, ","))
+ 				.map(token -> {
+ 					int index = token.indexOf(';');
+-					return (index >= 0 ? token.substring(0, index) : token).trim().toLowerCase();
++					return (index >= 0 ? token.substring(0, index) : token).trim().toLowerCase(Locale.ROOT);
+ 				})
+ 				.filter(this.contentCodings::contains)
+ 				.sorted()
+diff --git a/spring-webmvc/src/main/java/org/springframework/web/servlet/resource/EncodedResourceResolver.java b/spring-webmvc/src/main/java/org/springframework/web/servlet/resource/EncodedResourceResolver.java
+index fcb3292bb6d8..cee7d2c5abcd 100644
+--- spring-webmvc/src/main/java/org/springframework/web/servlet/resource/EncodedResourceResolver.java
++++ spring-webmvc/src/main/java/org/springframework/web/servlet/resource/EncodedResourceResolver.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2023 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -28,6 +28,7 @@
+ import java.util.Collections;
+ import java.util.LinkedHashMap;
+ import java.util.List;
++import java.util.Locale;
+ import java.util.Map;
+ 
+ import jakarta.servlet.http.HttpServletRequest;
+@@ -166,7 +167,7 @@ protected Resource resolveResourceInternal(@Nullable HttpServletRequest request,
+ 	@Nullable
+ 	private String getAcceptEncoding(HttpServletRequest request) {
+ 		String header = request.getHeader(HttpHeaders.ACCEPT_ENCODING);
+-		return (header != null ? header.toLowerCase() : null);
++		return (header != null ? header.toLowerCase(Locale.ROOT) : null);
+ 	}
+ 
+ 	private String getExtension(String coding) {
+diff --git a/spring-webmvc/src/main/java/org/springframework/web/servlet/resource/ResourceHttpRequestHandler.java b/spring-webmvc/src/main/java/org/springframework/web/servlet/resource/ResourceHttpRequestHandler.java
+index ceb500135155..369738a56576 100644
+--- spring-webmvc/src/main/java/org/springframework/web/servlet/resource/ResourceHttpRequestHandler.java
++++ spring-webmvc/src/main/java/org/springframework/web/servlet/resource/ResourceHttpRequestHandler.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2021 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -319,7 +319,7 @@ public ContentNegotiationManager getContentNegotiationManager() {
+ 	 */
+ 	public void setMediaTypes(Map<String, MediaType> mediaTypes) {
+ 		mediaTypes.forEach((ext, mediaType) ->
+-				this.mediaTypes.put(ext.toLowerCase(Locale.ENGLISH), mediaType));
++				this.mediaTypes.put(ext.toLowerCase(Locale.ROOT), mediaType));
+ 	}
+ 
+ 	/**
+@@ -843,7 +843,7 @@ protected MediaType getMediaType(HttpServletRequest request, Resource resource)
+ 			String filename = resource.getFilename();
+ 			String ext = StringUtils.getFilenameExtension(filename);
+ 			if (ext != null) {
+-				mediaType = this.mediaTypes.get(ext.toLowerCase(Locale.ENGLISH));
++				mediaType = this.mediaTypes.get(ext.toLowerCase(Locale.ROOT));
+ 			}
+ 			if (mediaType == null) {
+ 				List<MediaType> mediaTypes = MediaTypeFactory.getMediaTypes(filename);
+diff --git a/spring-webmvc/src/main/java/org/springframework/web/servlet/view/xslt/XsltView.java b/spring-webmvc/src/main/java/org/springframework/web/servlet/view/xslt/XsltView.java
+index d889ad7873cb..da50ec5594da 100644
+--- spring-webmvc/src/main/java/org/springframework/web/servlet/view/xslt/XsltView.java
++++ spring-webmvc/src/main/java/org/springframework/web/servlet/view/xslt/XsltView.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2017 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -20,6 +20,7 @@
+ import java.io.InputStream;
+ import java.io.Reader;
+ import java.util.Enumeration;
++import java.util.Locale;
+ import java.util.Map;
+ import java.util.Properties;
+ 
+@@ -414,7 +415,7 @@ protected void configureResponse(Map<String, Object> model, HttpServletResponse
+ 		}
+ 		if (StringUtils.hasText(encoding)) {
+ 			// Only apply encoding if content type is specified but does not contain charset clause already.
+-			if (contentType != null && !contentType.toLowerCase().contains(WebUtils.CONTENT_TYPE_CHARSET_PREFIX)) {
++			if (contentType != null && !contentType.toLowerCase(Locale.ROOT).contains(WebUtils.CONTENT_TYPE_CHARSET_PREFIX)) {
+ 				contentType = contentType + WebUtils.CONTENT_TYPE_CHARSET_PREFIX + encoding;
+ 			}
+ 		}
+diff --git a/spring-websocket/src/main/java/org/springframework/web/socket/WebSocketExtension.java b/spring-websocket/src/main/java/org/springframework/web/socket/WebSocketExtension.java
+index da31a3b8c4e4..bf0992bb01de 100644
+--- spring-websocket/src/main/java/org/springframework/web/socket/WebSocketExtension.java
++++ spring-websocket/src/main/java/org/springframework/web/socket/WebSocketExtension.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2022 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -72,7 +72,7 @@ public WebSocketExtension(String name, @Nullable Map<String, String> parameters)
+ 		Assert.hasLength(name, "Extension name must not be empty");
+ 		this.name = name;
+ 		if (!CollectionUtils.isEmpty(parameters)) {
+-			Map<String, String> map = new LinkedCaseInsensitiveMap<>(parameters.size(), Locale.ENGLISH);
++			Map<String, String> map = new LinkedCaseInsensitiveMap<>(parameters.size(), Locale.ROOT);
+ 			map.putAll(parameters);
+ 			this.parameters = Collections.unmodifiableMap(map);
+ 		}
+diff --git a/spring-websocket/src/main/java/org/springframework/web/socket/adapter/standard/StandardToWebSocketExtensionAdapter.java b/spring-websocket/src/main/java/org/springframework/web/socket/adapter/standard/StandardToWebSocketExtensionAdapter.java
+index f51caa730bcf..af221926d62c 100644
+--- spring-websocket/src/main/java/org/springframework/web/socket/adapter/standard/StandardToWebSocketExtensionAdapter.java
++++ spring-websocket/src/main/java/org/springframework/web/socket/adapter/standard/StandardToWebSocketExtensionAdapter.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2022 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -42,7 +42,7 @@ public StandardToWebSocketExtensionAdapter(Extension extension) {
+ 
+ 	private static Map<String, String> initParameters(Extension extension) {
+ 		List<Extension.Parameter> parameters = extension.getParameters();
+-		Map<String, String> result = new LinkedCaseInsensitiveMap<>(parameters.size(), Locale.ENGLISH);
++		Map<String, String> result = new LinkedCaseInsensitiveMap<>(parameters.size(), Locale.ROOT);
+ 		for (Extension.Parameter parameter : parameters) {
+ 			result.put(parameter.getName(), parameter.getValue());
+ 		}
+diff --git a/spring-websocket/src/main/java/org/springframework/web/socket/client/standard/StandardWebSocketClient.java b/spring-websocket/src/main/java/org/springframework/web/socket/client/standard/StandardWebSocketClient.java
+index 6106a7631fe3..3bf1ceb1f180 100644
+--- spring-websocket/src/main/java/org/springframework/web/socket/client/standard/StandardWebSocketClient.java
++++ spring-websocket/src/main/java/org/springframework/web/socket/client/standard/StandardWebSocketClient.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2018 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -203,7 +203,7 @@ private static InetAddress getLocalHost() {
+ 
+ 	private static int getPort(URI uri) {
+ 		if (uri.getPort() == -1) {
+-			String scheme = uri.getScheme().toLowerCase(Locale.ENGLISH);
++			String scheme = uri.getScheme().toLowerCase(Locale.ROOT);
+ 			return ("wss".equals(scheme) ? 443 : 80);
+ 		}
+ 		return uri.getPort();

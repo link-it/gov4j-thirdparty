@@ -1,0 +1,12 @@
+git clone https://github.com/spring-projects/spring-security.git
+cd spring-security
+git checkout 5.8.16
+cd ..
+patch -p0 < patch_src/compile.patch
+patch -p0 < crypto.patch
+cd spring-security
+find . -name *.orig | xargs rm
+
+note: compile with java 11
+
+./gradlew clean :spring-security-crypto:build :spring-security-crypto:javadoc

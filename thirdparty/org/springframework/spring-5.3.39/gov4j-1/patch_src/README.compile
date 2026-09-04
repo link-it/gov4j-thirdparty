@@ -1,0 +1,12 @@
+git clone https://github.com/spring-projects/spring-framework.git
+cd spring-framework
+git checkout v5.3.39
+patch -p0 < 1_core.patch
+patch -p0 < 2_toLowerCase.patch
+patch -p0 < 3_toUpperCase.patch
+patch -p0 < 4_compileJava11.patch
+find . -name *.orig | xargs rm
+
+note: compile with java 11
+
+./gradlew clean build javadoc -x test

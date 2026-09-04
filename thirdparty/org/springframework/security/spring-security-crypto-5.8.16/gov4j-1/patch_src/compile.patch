@@ -1,0 +1,18 @@
+--- spring-security/build.gradle	2025-04-03 11:32:29.411360231 +0200
++++ spring-security/build.gradle	2025-04-03 09:36:06.560277096 +0200
+@@ -16,7 +16,6 @@
+ 
+ apply plugin: 'io.spring.nohttp'
+ apply plugin: 'locks'
+-apply plugin: 's101'
+ apply plugin: 'io.spring.convention.root'
+ apply plugin: 'org.jetbrains.kotlin.jvm'
+ apply plugin: 'org.springframework.security.update-version'
+@@ -148,7 +147,3 @@
+ 	outputDirectory = project.hasProperty("cloneOutputDirectory") ? project.file("$cloneOutputDirectory") : project.file("build/samples")
+ }
+ 
+-s101 {
+-	repository = 'https://structure101.com/binaries/latest'
+-	configurationDirectory = project.file("etc/s101")
+-}

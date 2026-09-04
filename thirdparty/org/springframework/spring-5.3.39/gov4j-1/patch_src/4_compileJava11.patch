@@ -1,0 +1,14 @@
+diff --git spring-core/src/main/java/org/springframework/core/CoroutinesUtils.java spring-core/src/main/java/org/springframework/core/CoroutinesUtils.java
+index 6770f01c0a..7d3e4eb8ae 100644
+--- spring-core/src/main/java/org/springframework/core/CoroutinesUtils.java
++++ spring-core/src/main/java/org/springframework/core/CoroutinesUtils.java
+@@ -71,7 +71,8 @@ public abstract class CoroutinesUtils {
+ 	 */
+ 	public static Publisher<?> invokeSuspendingFunction(Method method, Object target, Object... args) {
+ 		KFunction<?> function = Objects.requireNonNull(ReflectJvmMapping.getKotlinFunction(method));
+-		if (method.isAccessible() && !KCallablesJvm.isAccessible(function)) {
++		//if (method.isAccessible() && !KCallablesJvm.isAccessible(function)) {
++		if (method.canAccess(null) && !KCallablesJvm.isAccessible(function)) {
+ 			KCallablesJvm.setAccessible(function, true);
+ 		}
+ 		KClassifier classifier = function.getReturnType().getClassifier();

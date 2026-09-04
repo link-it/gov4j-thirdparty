@@ -1,0 +1,13 @@
+diff -urN spring-security/crypto/src/main/java/org/springframework/security/crypto/bcrypt/BCrypt.java spring-security.v6.4.4/crypto/src/main/java/org/springframework/security/crypto/bcrypt/BCrypt.java
+--- spring-security/crypto/src/main/java/org/springframework/security/crypto/bcrypt/BCrypt.java	2025-04-03 11:32:29.461360816 +0200
++++ spring-security.v6.4.4/crypto/src/main/java/org/springframework/security/crypto/bcrypt/BCrypt.java	2025-04-03 09:22:36.647268547 +0200
+@@ -611,6 +611,9 @@
+ 		int rounds, off;
+ 		StringBuilder rs = new StringBuilder();
+ 
++		if (passwordb.length > 72) {
++			throw new IllegalArgumentException("password cannot be more than 72 bytes");
++		}
+ 		if (salt == null) {
+ 			throw new IllegalArgumentException("salt cannot be null");
+ 		}

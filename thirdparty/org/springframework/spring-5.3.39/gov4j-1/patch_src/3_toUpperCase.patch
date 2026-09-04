@@ -1,0 +1,304 @@
+diff --git spring-jms/src/main/java/org/springframework/jms/config/JmsListenerContainerParser.java spring-jms/src/main/java/org/springframework/jms/config/JmsListenerContainerParser.java
+index 0738ecfae1..0b2e09c7cf 100644
+--- spring-jms/src/main/java/org/springframework/jms/config/JmsListenerContainerParser.java
++++ spring-jms/src/main/java/org/springframework/jms/config/JmsListenerContainerParser.java
+@@ -16,6 +16,8 @@
+ 
+ package org.springframework.jms.config;
+ 
++import java.util.Locale;
++
+ import javax.jms.Session;
+ 
+ import org.w3c.dom.Element;
+@@ -154,7 +156,7 @@ class JmsListenerContainerParser extends AbstractListenerContainerParser {
+ 				}
+ 			}
+ 			else {
+-				properties.add("cacheLevelName", "CACHE_" + cache.toUpperCase());
++				properties.add("cacheLevelName", "CACHE_" + cache.toUpperCase(Locale.ROOT));
+ 			}
+ 		}
+ 
+diff --git spring-core/src/main/java/org/springframework/core/env/SystemEnvironmentPropertySource.java spring-core/src/main/java/org/springframework/core/env/SystemEnvironmentPropertySource.java
+index 06dd2b7a63..7ef927c660 100644
+--- spring-core/src/main/java/org/springframework/core/env/SystemEnvironmentPropertySource.java
++++ spring-core/src/main/java/org/springframework/core/env/SystemEnvironmentPropertySource.java
+@@ -16,6 +16,7 @@
+ 
+ package org.springframework.core.env;
+ 
++import java.util.Locale;
+ import java.util.Map;
+ 
+ import org.springframework.lang.Nullable;
+@@ -109,7 +110,7 @@ public class SystemEnvironmentPropertySource extends MapPropertySource {
+ 		if (resolvedName != null) {
+ 			return resolvedName;
+ 		}
+-		String uppercasedName = name.toUpperCase();
++		String uppercasedName = name.toUpperCase(Locale.ROOT);
+ 		if (!name.equals(uppercasedName)) {
+ 			resolvedName = checkPropertyName(uppercasedName);
+ 			if (resolvedName != null) {
+diff --git spring-jdbc/src/main/java/org/springframework/jdbc/core/simple/AbstractJdbcInsert.java spring-jdbc/src/main/java/org/springframework/jdbc/core/simple/AbstractJdbcInsert.java
+index 504ee7013b..0b16c1c413 100644
+--- spring-jdbc/src/main/java/org/springframework/jdbc/core/simple/AbstractJdbcInsert.java
++++ spring-jdbc/src/main/java/org/springframework/jdbc/core/simple/AbstractJdbcInsert.java
+@@ -26,6 +26,7 @@ import java.util.Arrays;
+ import java.util.Collections;
+ import java.util.HashMap;
+ import java.util.List;
++import java.util.Locale;
+ import java.util.Map;
+ 
+ import javax.sql.DataSource;
+@@ -463,7 +464,7 @@ public abstract class AbstractJdbcInsert {
+ 			// get generated keys feature. HSQL is one, PostgreSQL is another. Postgres uses a RETURNING
+ 			// clause while HSQL uses a second query that has to be executed with the same connection.
+ 
+-			if (keyQuery.toUpperCase().startsWith("RETURNING")) {
++			if (keyQuery.toUpperCase(Locale.ROOT).startsWith("RETURNING")) {
+ 				Long key = getJdbcTemplate().queryForObject(
+ 						getInsertString() + " " + keyQuery, Long.class, values.toArray());
+ 				Map<String, Object> keys = new HashMap<>(2);
+diff --git a/spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/GenericTableMetaDataProvider.java b/spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/GenericTableMetaDataProvider.java
+index 5228cb9b05..e10784e9c5 100644
+--- spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/GenericTableMetaDataProvider.java
++++ spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/GenericTableMetaDataProvider.java
+@@ -322,10 +323,10 @@ public class GenericTableMetaDataProvider implements TableMetaDataProvider {
+ 				tmd.setSchemaName(tables.getString("TABLE_SCHEM"));
+ 				tmd.setTableName(tables.getString("TABLE_NAME"));
+ 				if (tmd.getSchemaName() == null) {
+-					tableMeta.put(this.userName != null ? this.userName.toUpperCase() : "", tmd);
++					tableMeta.put(this.userName != null ? this.userName.toUpperCase(Locale.ROOT) : "", tmd);
+ 				}
+ 				else {
+-					tableMeta.put(tmd.getSchemaName().toUpperCase(), tmd);
++					tableMeta.put(tmd.getSchemaName().toUpperCase(Locale.ROOT), tmd);
+ 				}
+ 			}
+ 		}
+@@ -352,7 +353,7 @@ public class GenericTableMetaDataProvider implements TableMetaDataProvider {
+ 			Map<String, TableMetaData> tableMeta) {
+ 
+ 		if (schemaName != null) {
+-			TableMetaData tmd = tableMeta.get(schemaName.toUpperCase());
++			TableMetaData tmd = tableMeta.get(schemaName.toUpperCase(Locale.ROOT));
+ 			if (tmd == null) {
+ 				throw new DataAccessResourceFailureException("Unable to locate table meta-data for '" +
+ 						tableName + "' in the '" + schemaName + "' schema");
+@@ -365,7 +366,7 @@ public class GenericTableMetaDataProvider implements TableMetaDataProvider {
+ 		else {
+ 			TableMetaData tmd = tableMeta.get(getDefaultSchema());
+ 			if (tmd == null) {
+-				tmd = tableMeta.get(this.userName != null ? this.userName.toUpperCase() : "");
++				tmd = tableMeta.get(this.userName != null ? this.userName.toUpperCase(Locale.ROOT) : "");
+ 			}
+ 			if (tmd == null) {
+ 				tmd = tableMeta.get("PUBLIC");
+diff --git spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/Db2CallMetaDataProvider.java spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/Db2CallMetaDataProvider.java
+index 13904c9f34..6743ce6c1f 100644
+--- spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/Db2CallMetaDataProvider.java
++++ spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/Db2CallMetaDataProvider.java
+@@ -18,6 +18,7 @@ package org.springframework.jdbc.core.metadata;
+ 
+ import java.sql.DatabaseMetaData;
+ import java.sql.SQLException;
++import java.util.Locale;
+ 
+ import org.springframework.lang.Nullable;
+ 
+@@ -73,7 +74,7 @@ public class Db2CallMetaDataProvider extends GenericCallMetaDataProvider {
+ 
+ 		// Use current user schema if no schema specified...
+ 		String userName = getUserName();
+-		return (userName != null ? userName.toUpperCase() : null);
++		return (userName != null ? userName.toUpperCase(Locale.ROOT) : null);
+ 	}
+ 
+ }
+diff --git spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/DerbyCallMetaDataProvider.java spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/DerbyCallMetaDataProvider.java
+index 02bbaa629f..7430b379e2 100644
+--- spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/DerbyCallMetaDataProvider.java
++++ spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/DerbyCallMetaDataProvider.java
+@@ -18,6 +18,7 @@ package org.springframework.jdbc.core.metadata;
+ 
+ import java.sql.DatabaseMetaData;
+ import java.sql.SQLException;
++import java.util.Locale;
+ 
+ import org.springframework.lang.Nullable;
+ 
+@@ -45,7 +46,7 @@ public class DerbyCallMetaDataProvider extends GenericCallMetaDataProvider {
+ 
+ 		// Use current user schema if no schema specified...
+ 		String userName = getUserName();
+-		return (userName != null ? userName.toUpperCase() : null);
++		return (userName != null ? userName.toUpperCase(Locale.ROOT) : null);
+ 	}
+ 
+ }
+diff --git spring-test/src/main/java/org/springframework/test/context/NestedTestConfiguration.java spring-test/src/main/java/org/springframework/test/context/NestedTestConfiguration.java
+index 74e7ec91a1..cf30e3c2cc 100644
+--- spring-test/src/main/java/org/springframework/test/context/NestedTestConfiguration.java
++++ spring-test/src/main/java/org/springframework/test/context/NestedTestConfiguration.java
+@@ -22,6 +22,7 @@ import java.lang.annotation.Inherited;
+ import java.lang.annotation.Retention;
+ import java.lang.annotation.RetentionPolicy;
+ import java.lang.annotation.Target;
++import java.util.Locale;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+@@ -159,7 +160,7 @@ public @interface NestedTestConfiguration {
+ 				return null;
+ 			}
+ 			try {
+-				return EnclosingConfiguration.valueOf(name.trim().toUpperCase());
++				return EnclosingConfiguration.valueOf(name.trim().toUpperCase(Locale.ROOT));
+ 			}
+ 			catch (IllegalArgumentException ex) {
+ 				Log logger = LogFactory.getLog(EnclosingConfiguration.class);
+diff --git spring-test/src/main/java/org/springframework/test/context/TestConstructor.java spring-test/src/main/java/org/springframework/test/context/TestConstructor.java
+index a274745628..70b85f4c98 100644
+--- spring-test/src/main/java/org/springframework/test/context/TestConstructor.java
++++ spring-test/src/main/java/org/springframework/test/context/TestConstructor.java
+@@ -22,6 +22,7 @@ import java.lang.annotation.Inherited;
+ import java.lang.annotation.Retention;
+ import java.lang.annotation.RetentionPolicy;
+ import java.lang.annotation.Target;
++import java.util.Locale;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+@@ -151,7 +152,7 @@ public @interface TestConstructor {
+ 				return null;
+ 			}
+ 			try {
+-				return AutowireMode.valueOf(name.trim().toUpperCase());
++				return AutowireMode.valueOf(name.trim().toUpperCase(Locale.ROOT));
+ 			}
+ 			catch (IllegalArgumentException ex) {
+ 				Log logger = LogFactory.getLog(AutowireMode.class);
+diff --git spring-expression/src/main/java/org/springframework/expression/spel/standard/Tokenizer.java spring-expression/src/main/java/org/springframework/expression/spel/standard/Tokenizer.java
+index 5034c960ec..f85dacf6a6 100644
+--- spring-expression/src/main/java/org/springframework/expression/spel/standard/Tokenizer.java
++++ spring-expression/src/main/java/org/springframework/expression/spel/standard/Tokenizer.java
+@@ -19,6 +19,7 @@ package org.springframework.expression.spel.standard;
+ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.List;
++import java.util.Locale;
+ 
+ import org.springframework.expression.spel.InternalParseException;
+ import org.springframework.expression.spel.SpelMessage;
+@@ -455,7 +456,7 @@ class Tokenizer {
+ 		// Check if this is the alternative (textual) representation of an operator (see
+ 		// alternativeOperatorNames)
+ 		if ((this.pos - start) == 2 || (this.pos - start) == 3) {
+-			String asString = new String(subarray).toUpperCase();
++			String asString = new String(subarray).toUpperCase(Locale.ROOT);
+ 			int idx = Arrays.binarySearch(ALTERNATIVE_OPERATOR_NAMES, asString);
+ 			if (idx >= 0) {
+ 				pushOneCharOrTwoCharToken(TokenKind.valueOf(asString), start, subarray);
+diff --git spring-expression/src/main/java/org/springframework/expression/spel/SpelParserConfiguration.java spring-expression/src/main/java/org/springframework/expression/spel/SpelParserConfiguration.java
+index ae94b4c3b4..eec9e472f1 100644
+--- spring-expression/src/main/java/org/springframework/expression/spel/SpelParserConfiguration.java
++++ spring-expression/src/main/java/org/springframework/expression/spel/SpelParserConfiguration.java
+@@ -16,6 +16,8 @@
+ 
+ package org.springframework.expression.spel;
+ 
++import java.util.Locale;
++
+ import org.springframework.core.SpringProperties;
+ import org.springframework.lang.Nullable;
+ 
+@@ -45,7 +47,7 @@ public class SpelParserConfiguration {
+ 	static {
+ 		String compilerMode = SpringProperties.getProperty(SPRING_EXPRESSION_COMPILER_MODE_PROPERTY_NAME);
+ 		defaultCompilerMode = (compilerMode != null ?
+-				SpelCompilerMode.valueOf(compilerMode.toUpperCase()) : SpelCompilerMode.OFF);
++				SpelCompilerMode.valueOf(compilerMode.toUpperCase(Locale.ROOT)) : SpelCompilerMode.OFF);
+ 	}
+ 
+ 
+diff --git spring-expression/src/main/java/org/springframework/expression/spel/ast/TypeReference.java spring-expression/src/main/java/org/springframework/expression/spel/ast/TypeReference.java
+index 02e8a28c30..8d07765888 100644
+--- spring-expression/src/main/java/org/springframework/expression/spel/ast/TypeReference.java
++++ spring-expression/src/main/java/org/springframework/expression/spel/ast/TypeReference.java
+@@ -17,6 +17,7 @@
+ package org.springframework.expression.spel.ast;
+ 
+ import java.lang.reflect.Array;
++import java.util.Locale;
+ 
+ import org.springframework.asm.MethodVisitor;
+ import org.springframework.asm.Type;
+@@ -57,7 +58,7 @@ public class TypeReference extends SpelNodeImpl {
+ 		String typeName = (String) this.children[0].getValueInternal(state).getValue();
+ 		Assert.state(typeName != null, "No type name");
+ 		if (!typeName.contains(".") && Character.isLowerCase(typeName.charAt(0))) {
+-			TypeCode tc = TypeCode.valueOf(typeName.toUpperCase());
++			TypeCode tc = TypeCode.valueOf(typeName.toUpperCase(Locale.ROOT));
+ 			if (tc != TypeCode.OBJECT) {
+ 				// It is a primitive type
+ 				Class<?> clazz = makeArrayIfNecessary(tc.getType());
+diff --git spring-context/src/main/java/org/springframework/format/datetime/standard/MonthFormatter.java spring-context/src/main/java/org/springframework/format/datetime/standard/MonthFormatter.java
+index abae18df61..a6c56fbe93 100644
+--- spring-context/src/main/java/org/springframework/format/datetime/standard/MonthFormatter.java
++++ spring-context/src/main/java/org/springframework/format/datetime/standard/MonthFormatter.java
+@@ -34,7 +34,7 @@ class MonthFormatter implements Formatter<Month> {
+ 
+ 	@Override
+ 	public Month parse(String text, Locale locale) throws ParseException {
+-		return Month.valueOf(text.toUpperCase());
++		return Month.valueOf(text.toUpperCase(Locale.ROOT));
+ 	}
+ 
+ 	@Override
+diff --git spring-context/src/main/java/org/springframework/scheduling/support/CronSequenceGenerator.java spring-context/src/main/java/org/springframework/scheduling/support/CronSequenceGenerator.java
+index 65bfef53b7..8bbc1d2b3e 100644
+--- spring-context/src/main/java/org/springframework/scheduling/support/CronSequenceGenerator.java
++++ spring-context/src/main/java/org/springframework/scheduling/support/CronSequenceGenerator.java
+@@ -23,6 +23,7 @@ import java.util.Collections;
+ import java.util.Date;
+ import java.util.GregorianCalendar;
+ import java.util.List;
++import java.util.Locale;
+ import java.util.TimeZone;
+ 
+ import org.springframework.lang.Nullable;
+@@ -305,8 +306,8 @@ public class CronSequenceGenerator {
+ 	private String replaceOrdinals(String value, String commaSeparatedList) {
+ 		String[] list = StringUtils.commaDelimitedListToStringArray(commaSeparatedList);
+ 		for (int i = 0; i < list.length; i++) {
+-			String item = list[i].toUpperCase();
+-			value = StringUtils.replace(value.toUpperCase(), item, "" + i);
++			String item = list[i].toUpperCase(Locale.ROOT);
++			value = StringUtils.replace(value.toUpperCase(Locale.ROOT), item, "" + i);
+ 		}
+ 		return value;
+ 	}
+diff --git spring-context/src/main/java/org/springframework/scheduling/support/CronField.java spring-context/src/main/java/org/springframework/scheduling/support/CronField.java
+index 3124cc25b5..e1702c9a54 100644
+--- spring-context/src/main/java/org/springframework/scheduling/support/CronField.java
++++ spring-context/src/main/java/org/springframework/scheduling/support/CronField.java
+@@ -21,6 +21,7 @@ import java.time.temporal.ChronoField;
+ import java.time.temporal.ChronoUnit;
+ import java.time.temporal.Temporal;
+ import java.time.temporal.ValueRange;
++import java.util.Locale;
+ import java.util.function.BiFunction;
+ 
+ import org.springframework.lang.Nullable;
+@@ -143,7 +144,7 @@ abstract class CronField {
+ 	}
+ 
+ 	private static String replaceOrdinals(String value, String[] list) {
+-		value = value.toUpperCase();
++		value = value.toUpperCase(Locale.ROOT);
+ 		for (int i = 0; i < list.length; i++) {
+ 			String replacement = Integer.toString(i + 1);
+ 			value = StringUtils.replace(value, list[i], replacement);

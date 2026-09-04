@@ -1,0 +1,8 @@
+Il file crypto.diff è stato ricostruito in questa maniera:
+
+- git clone https://github.com/spring-projects/spring-security.git spring-security ; cd spring-security ; git checkout 5.8.16 ; cd .. ;
+- git clone https://github.com/spring-projects/spring-security.git spring-security.v6.4.4 ; cd spring-security.v6.4.4 ; git checkout 6.4.4 ; cd .. ;
+- diff -urN spring-security/crypto/src/main/java/org/springframework/security/crypto/bcrypt/ spring-security.v6.4.4/crypto/src/main/java/org/springframework/security/crypto/bcrypt/ > patch_src/crypto.patch
+
+L'unica differenza riguarda la risoluzione della vulnerabilità CVE-2025-22228: "BCryptPasswordEncoder.matches(CharSequence,String) will incorrectly return true for passwords larger than 72 characters as long as the first 72 characters are the same."
+La classe è stata modificata nel commit 'https://github.com/spring-projects/spring-security/commit/46f0dc6dfc8402cd556c598fdf2d31f9d46cdbf3'.

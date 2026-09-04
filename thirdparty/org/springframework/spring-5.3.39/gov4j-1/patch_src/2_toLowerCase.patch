@@ -1,0 +1,580 @@
+diff --git spring-beans/src/main/java/org/springframework/beans/support/PropertyComparator.java spring-beans/src/main/java/org/springframework/beans/support/PropertyComparator.java
+index 519ead5798..db63f28a10 100644
+--- spring-beans/src/main/java/org/springframework/beans/support/PropertyComparator.java
++++ spring-beans/src/main/java/org/springframework/beans/support/PropertyComparator.java
+@@ -19,6 +19,7 @@ package org.springframework.beans.support;
+ import java.util.Arrays;
+ import java.util.Comparator;
+ import java.util.List;
++import java.util.Locale;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+@@ -77,8 +78,8 @@ public class PropertyComparator<T> implements Comparator<T> {
+ 		Object v1 = getPropertyValue(o1);
+ 		Object v2 = getPropertyValue(o2);
+ 		if (this.sortDefinition.isIgnoreCase() && (v1 instanceof String) && (v2 instanceof String)) {
+-			v1 = ((String) v1).toLowerCase();
+-			v2 = ((String) v2).toLowerCase();
++			v1 = ((String) v1).toLowerCase(Locale.ROOT);
++			v2 = ((String) v2).toLowerCase(Locale.ROOT);
+ 		}
+ 
+ 		int result;
+diff --git spring-websocket/src/main/java/org/springframework/web/socket/client/AbstractWebSocketClient.java spring-websocket/src/main/java/org/springframework/web/socket/client/AbstractWebSocketClient.java
+index 03cdeac6cf..192d23106d 100644
+--- spring-websocket/src/main/java/org/springframework/web/socket/client/AbstractWebSocketClient.java
++++ spring-websocket/src/main/java/org/springframework/web/socket/client/AbstractWebSocketClient.java
+@@ -20,6 +20,7 @@ import java.net.URI;
+ import java.util.Collections;
+ import java.util.HashSet;
+ import java.util.List;
++import java.util.Locale;
+ import java.util.Map;
+ import java.util.Set;
+ 
+@@ -85,7 +86,7 @@ public abstract class AbstractWebSocketClient implements WebSocketClient {
+ 		HttpHeaders headersToUse = new HttpHeaders();
+ 		if (headers != null) {
+ 			headers.forEach((header, values) -> {
+-				if (values != null && !specialHeaders.contains(header.toLowerCase())) {
++				if (values != null && !specialHeaders.contains(header.toLowerCase(Locale.ROOT))) {
+ 					headersToUse.put(header, values);
+ 				}
+ 			});
+diff --git spring-websocket/src/main/java/org/springframework/web/socket/server/support/AbstractHandshakeHandler.java spring-websocket/src/main/java/org/springframework/web/socket/server/support/AbstractHandshakeHandler.java
+index 918c84298d..60d15caab5 100644
+--- spring-websocket/src/main/java/org/springframework/web/socket/server/support/AbstractHandshakeHandler.java
++++ spring-websocket/src/main/java/org/springframework/web/socket/server/support/AbstractHandshakeHandler.java
+@@ -23,6 +23,7 @@ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.Collections;
+ import java.util.List;
++import java.util.Locale;
+ import java.util.Map;
+ 
+ import org.apache.commons.logging.Log;
+@@ -192,7 +193,7 @@ public abstract class AbstractHandshakeHandler implements HandshakeHandler, Life
+ 	public void setSupportedProtocols(String... protocols) {
+ 		this.supportedProtocols.clear();
+ 		for (String protocol : protocols) {
+-			this.supportedProtocols.add(protocol.toLowerCase());
++			this.supportedProtocols.add(protocol.toLowerCase(Locale.ROOT));
+ 		}
+ 	}
+ 
+@@ -367,10 +368,10 @@ public abstract class AbstractHandshakeHandler implements HandshakeHandler, Life
+ 	protected String selectProtocol(List<String> requestedProtocols, WebSocketHandler webSocketHandler) {
+ 		List<String> handlerProtocols = determineHandlerSupportedProtocols(webSocketHandler);
+ 		for (String protocol : requestedProtocols) {
+-			if (handlerProtocols.contains(protocol.toLowerCase())) {
++			if (handlerProtocols.contains(protocol.toLowerCase(Locale.ROOT))) {
+ 				return protocol;
+ 			}
+-			if (this.supportedProtocols.contains(protocol.toLowerCase())) {
++			if (this.supportedProtocols.contains(protocol.toLowerCase(Locale.ROOT))) {
+ 				return protocol;
+ 			}
+ 		}
+diff --git spring-websocket/src/main/java/org/springframework/web/socket/sockjs/frame/AbstractSockJsMessageCodec.java spring-websocket/src/main/java/org/springframework/web/socket/sockjs/frame/AbstractSockJsMessageCodec.java
+index dbf3461f8b..d89101d82b 100644
+--- spring-websocket/src/main/java/org/springframework/web/socket/sockjs/frame/AbstractSockJsMessageCodec.java
++++ spring-websocket/src/main/java/org/springframework/web/socket/sockjs/frame/AbstractSockJsMessageCodec.java
+@@ -16,6 +16,8 @@
+ 
+ package org.springframework.web.socket.sockjs.frame;
+ 
++import java.util.Locale;
++
+ import org.springframework.util.Assert;
+ 
+ /**
+@@ -58,7 +60,7 @@ public abstract class AbstractSockJsMessageCodec implements SockJsMessageCodec {
+ 		for (char c : characters) {
+ 			if (isSockJsSpecialChar(c)) {
+ 				result.append('\\').append('u');
+-				String hex = Integer.toHexString(c).toLowerCase();
++				String hex = Integer.toHexString(c).toLowerCase(Locale.ROOT);
+ 				for (int i = 0; i < (4 - hex.length()); i++) {
+ 					result.append('0');
+ 				}
+diff --git spring-websocket/src/main/java/org/springframework/web/socket/sockjs/transport/session/AbstractSockJsSession.java spring-websocket/src/main/java/org/springframework/web/socket/sockjs/transport/session/AbstractSockJsSession.java
+index df2b745d53..e3432e1f2c 100644
+--- spring-websocket/src/main/java/org/springframework/web/socket/sockjs/transport/session/AbstractSockJsSession.java
++++ spring-websocket/src/main/java/org/springframework/web/socket/sockjs/transport/session/AbstractSockJsSession.java
+@@ -22,6 +22,7 @@ import java.util.Collections;
+ import java.util.Date;
+ import java.util.HashSet;
+ import java.util.List;
++import java.util.Locale;
+ import java.util.Map;
+ import java.util.Set;
+ import java.util.concurrent.ConcurrentHashMap;
+@@ -364,7 +365,7 @@ public abstract class AbstractSockJsSession implements SockJsSession {
+ 
+ 	private boolean indicatesDisconnectedClient(Throwable ex)  {
+ 		String message = NestedExceptionUtils.getMostSpecificCause(ex).getMessage();
+-		message = (message != null ? message.toLowerCase() : "");
++		message = (message != null ? message.toLowerCase(Locale.ROOT) : "");
+ 		String className = ex.getClass().getSimpleName();
+ 		return (message.contains("broken pipe") || DISCONNECTED_CLIENT_EXCEPTIONS.contains(className));
+ 	}
+diff --git spring-web/src/main/java/org/springframework/remoting/httpinvoker/SimpleHttpInvokerRequestExecutor.java spring-web/src/main/java/org/springframework/remoting/httpinvoker/SimpleHttpInvokerRequestExecutor.java
+index b4c8f31c36..0cfdd3eff2 100644
+--- spring-web/src/main/java/org/springframework/remoting/httpinvoker/SimpleHttpInvokerRequestExecutor.java
++++ spring-web/src/main/java/org/springframework/remoting/httpinvoker/SimpleHttpInvokerRequestExecutor.java
+@@ -227,7 +227,7 @@ public class SimpleHttpInvokerRequestExecutor extends AbstractHttpInvokerRequest
+ 	 */
+ 	protected boolean isGzipResponse(HttpURLConnection con) {
+ 		String encodingHeader = con.getHeaderField(HTTP_HEADER_CONTENT_ENCODING);
+-		return (encodingHeader != null && encodingHeader.toLowerCase().contains(ENCODING_GZIP));
++		return (encodingHeader != null && encodingHeader.toLowerCase(Locale.ROOT).contains(ENCODING_GZIP));
+ 	}
+ 
+ }
+diff --git spring-web/src/main/java/org/springframework/remoting/httpinvoker/HttpComponentsHttpInvokerRequestExecutor.java spring-web/src/main/java/org/springframework/remoting/httpinvoker/HttpComponentsHttpInvokerRequestExecutor.java
+index c8a278fec4..5949cd4a30 100644
+--- spring-web/src/main/java/org/springframework/remoting/httpinvoker/HttpComponentsHttpInvokerRequestExecutor.java
++++ spring-web/src/main/java/org/springframework/remoting/httpinvoker/HttpComponentsHttpInvokerRequestExecutor.java
+@@ -364,7 +364,7 @@ public class HttpComponentsHttpInvokerRequestExecutor extends AbstractHttpInvoke
+ 	protected boolean isGzipResponse(HttpResponse httpResponse) {
+ 		Header encodingHeader = httpResponse.getFirstHeader(HTTP_HEADER_CONTENT_ENCODING);
+ 		return (encodingHeader != null && encodingHeader.getValue() != null &&
+-				encodingHeader.getValue().toLowerCase().contains(ENCODING_GZIP));
++				encodingHeader.getValue().toLowerCase(Locale.ROOT).contains(ENCODING_GZIP));
+ 	}
+ 
+ }
+diff --git spring-web/src/main/java/org/springframework/web/server/adapter/HttpWebHandlerAdapter.java spring-web/src/main/java/org/springframework/web/server/adapter/HttpWebHandlerAdapter.java
+index 76cae29178..5ad2a2e334 100644
+--- spring-web/src/main/java/org/springframework/web/server/adapter/HttpWebHandlerAdapter.java
++++ spring-web/src/main/java/org/springframework/web/server/adapter/HttpWebHandlerAdapter.java
+@@ -18,6 +18,7 @@ package org.springframework.web.server.adapter;
+ 
+ import java.util.Arrays;
+ import java.util.HashSet;
++import java.util.Locale;
+ import java.util.Set;
+ 
+ import org.apache.commons.logging.Log;
+@@ -314,7 +315,7 @@ public class HttpWebHandlerAdapter extends WebHandlerDecorator implements HttpHa
+ 	private boolean isDisconnectedClientError(Throwable ex) {
+ 		String message = NestedExceptionUtils.getMostSpecificCause(ex).getMessage();
+ 		if (message != null) {
+-			String text = message.toLowerCase();
++			String text = message.toLowerCase(Locale.ROOT);
+ 			if (text.contains("broken pipe") || text.contains("connection reset by peer")) {
+ 				return true;
+ 			}
+diff --git spring-web/src/main/java/org/springframework/web/multipart/support/StandardMultipartHttpServletRequest.java spring-web/src/main/java/org/springframework/web/multipart/support/StandardMultipartHttpServletRequest.java
+index 88bfdd4f2a..321fba49d5 100644
+--- spring-web/src/main/java/org/springframework/web/multipart/support/StandardMultipartHttpServletRequest.java
++++ spring-web/src/main/java/org/springframework/web/multipart/support/StandardMultipartHttpServletRequest.java
+@@ -29,6 +29,7 @@ import java.util.Collections;
+ import java.util.Enumeration;
+ import java.util.LinkedHashMap;
+ import java.util.LinkedHashSet;
++import java.util.Locale;
+ import java.util.Map;
+ import java.util.Set;
+ 
+@@ -119,7 +120,7 @@ public class StandardMultipartHttpServletRequest extends AbstractMultipartHttpSe
+ 	protected void handleParseFailure(Throwable ex) {
+ 		String msg = ex.getMessage();
+ 		if (msg != null) {
+-			msg = msg.toLowerCase();
++			msg = msg.toLowerCase(Locale.ROOT);
+ 			if (msg.contains("size") && msg.contains("exceed")) {
+ 				throw new MaxUploadSizeExceededException(-1, ex);
+ 			}
+diff --git spring-context-support/src/main/java/org/springframework/scheduling/quartz/LocalDataSourceJobStore.java spring-context-support/src/main/java/org/springframework/scheduling/quartz/LocalDataSourceJobStore.java
+index f6042bee93..dfa41f633c 100644
+--- spring-context-support/src/main/java/org/springframework/scheduling/quartz/LocalDataSourceJobStore.java
++++ spring-context-support/src/main/java/org/springframework/scheduling/quartz/LocalDataSourceJobStore.java
+@@ -19,6 +19,7 @@ package org.springframework.scheduling.quartz;
+ import java.sql.Connection;
+ import java.sql.DatabaseMetaData;
+ import java.sql.SQLException;
++import java.util.Locale;
+ 
+ import javax.sql.DataSource;
+ 
+@@ -155,7 +156,7 @@ public class LocalDataSourceJobStore extends JobStoreCMT {
+ 			String productName = JdbcUtils.extractDatabaseMetaData(this.dataSource,
+ 					DatabaseMetaData::getDatabaseProductName);
+ 			productName = JdbcUtils.commonDatabaseName(productName);
+-			if (productName != null && productName.toLowerCase().contains("hsql")) {
++			if (productName != null && productName.toLowerCase(Locale.ROOT).contains("hsql")) {
+ 				setUseDBLocks(false);
+ 				setLockHandler(new SimpleSemaphore());
+ 			}
+diff --git spring-core/src/main/java/org/springframework/core/convert/support/StringToBooleanConverter.java spring-core/src/main/java/org/springframework/core/convert/support/StringToBooleanConverter.java
+index 4b1c0fd7b2..83b59280d5 100644
+--- spring-core/src/main/java/org/springframework/core/convert/support/StringToBooleanConverter.java
++++ spring-core/src/main/java/org/springframework/core/convert/support/StringToBooleanConverter.java
+@@ -17,6 +17,7 @@
+ package org.springframework.core.convert.support;
+ 
+ import java.util.HashSet;
++import java.util.Locale;
+ import java.util.Set;
+ 
+ import org.springframework.core.convert.converter.Converter;
+@@ -55,7 +56,7 @@ final class StringToBooleanConverter implements Converter<String, Boolean> {
+ 		if (value.isEmpty()) {
+ 			return null;
+ 		}
+-		value = value.toLowerCase();
++		value = value.toLowerCase(Locale.ROOT);
+ 		if (trueValues.contains(value)) {
+ 			return Boolean.TRUE;
+ 		}
+diff --git spring-core/src/main/java/org/springframework/util/ResourceUtils.java spring-core/src/main/java/org/springframework/util/ResourceUtils.java
+index 2caaf33597..1538c1ced5 100644
+--- spring-core/src/main/java/org/springframework/util/ResourceUtils.java
++++ spring-core/src/main/java/org/springframework/util/ResourceUtils.java
+@@ -23,6 +23,7 @@ import java.net.URI;
+ import java.net.URISyntaxException;
+ import java.net.URL;
+ import java.net.URLConnection;
++import java.util.Locale;
+ 
+ import org.springframework.lang.Nullable;
+ 
+@@ -295,7 +296,7 @@ public abstract class ResourceUtils {
+ 	 */
+ 	public static boolean isJarFileURL(URL url) {
+ 		return (URL_PROTOCOL_FILE.equals(url.getProtocol()) &&
+-				url.getPath().toLowerCase().endsWith(JAR_FILE_EXTENSION));
++				url.getPath().toLowerCase(Locale.ROOT).endsWith(JAR_FILE_EXTENSION));
+ 	}
+ 
+ 	/**
+diff --git spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/TableMetaDataContext.java spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/TableMetaDataContext.java
+index be0ef871bc..f9315d1078 100644
+--- spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/TableMetaDataContext.java
++++ spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/TableMetaDataContext.java
+@@ -20,6 +20,7 @@ import java.util.ArrayList;
+ import java.util.Collections;
+ import java.util.LinkedHashSet;
+ import java.util.List;
++import java.util.Locale;
+ import java.util.Map;
+ import java.util.Set;
+ 
+@@ -192,11 +193,11 @@ public class TableMetaDataContext {
+ 		}
+ 		Set<String> keys = new LinkedHashSet<>(generatedKeyNames.length);
+ 		for (String key : generatedKeyNames) {
+-			keys.add(key.toUpperCase());
++			keys.add(key.toUpperCase(Locale.ROOT));
+ 		}
+ 		List<String> columns = new ArrayList<>();
+ 		for (TableParameterMetaData meta : obtainMetaDataProvider().getTableParameterMetaData()) {
+-			if (!keys.contains(meta.getParameterName().toUpperCase())) {
++			if (!keys.contains(meta.getParameterName().toUpperCase(Locale.ROOT))) {
+ 				columns.add(meta.getParameterName());
+ 			}
+ 		}
+@@ -218,7 +219,7 @@ public class TableMetaDataContext {
+ 				values.add(SqlParameterSourceUtils.getTypedValue(parameterSource, column));
+ 			}
+ 			else {
+-				String lowerCaseName = column.toLowerCase();
++				String lowerCaseName = column.toLowerCase(Locale.ROOT);
+ 				if (parameterSource.hasValue(lowerCaseName)) {
+ 					values.add(SqlParameterSourceUtils.getTypedValue(parameterSource, lowerCaseName));
+ 				}
+@@ -251,7 +252,7 @@ public class TableMetaDataContext {
+ 		for (String column : this.tableColumns) {
+ 			Object value = inParameters.get(column);
+ 			if (value == null) {
+-				value = inParameters.get(column.toLowerCase());
++				value = inParameters.get(column.toLowerCase(Locale.ROOT));
+ 				if (value == null) {
+ 					for (Map.Entry<String, ?> entry : inParameters.entrySet()) {
+ 						if (column.equalsIgnoreCase(entry.getKey())) {
+@@ -274,7 +275,7 @@ public class TableMetaDataContext {
+ 	public String createInsertString(String... generatedKeyNames) {
+ 		Set<String> keys = new LinkedHashSet<>(generatedKeyNames.length);
+ 		for (String key : generatedKeyNames) {
+-			keys.add(key.toUpperCase());
++			keys.add(key.toUpperCase(Locale.ROOT));
+ 		}
+ 		StringBuilder insertStatement = new StringBuilder();
+ 		insertStatement.append("INSERT INTO ");
+@@ -286,7 +287,7 @@ public class TableMetaDataContext {
+ 		insertStatement.append(" (");
+ 		int columnCount = 0;
+ 		for (String columnName : getTableColumns()) {
+-			if (!keys.contains(columnName.toUpperCase())) {
++			if (!keys.contains(columnName.toUpperCase(Locale.ROOT))) {
+ 				columnCount++;
+ 				if (columnCount > 1) {
+ 					insertStatement.append(", ");
+@@ -326,7 +327,7 @@ public class TableMetaDataContext {
+ 		List<TableParameterMetaData> parameters = obtainMetaDataProvider().getTableParameterMetaData();
+ 		Map<String, TableParameterMetaData> parameterMap = CollectionUtils.newLinkedHashMap(parameters.size());
+ 		for (TableParameterMetaData tpmd : parameters) {
+-			parameterMap.put(tpmd.getParameterName().toUpperCase(), tpmd);
++			parameterMap.put(tpmd.getParameterName().toUpperCase(Locale.ROOT), tpmd);
+ 		}
+ 		int typeIndx = 0;
+ 		for (String column : getTableColumns()) {
+@@ -334,7 +335,7 @@ public class TableMetaDataContext {
+ 				types[typeIndx] = SqlTypeValue.TYPE_UNKNOWN;
+ 			}
+ 			else {
+-				TableParameterMetaData tpmd = parameterMap.get(column.toUpperCase());
++				TableParameterMetaData tpmd = parameterMap.get(column.toUpperCase(Locale.ROOT));
+ 				if (tpmd != null) {
+ 					types[typeIndx] = tpmd.getSqlType();
+ 				}
+diff --git spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/GenericTableMetaDataProvider.java spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/GenericTableMetaDataProvider.java
+index 5228cb9b05..d8dc066310 100644
+--- spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/GenericTableMetaDataProvider.java
++++ spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/GenericTableMetaDataProvider.java
+@@ -24,6 +24,7 @@ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.HashMap;
+ import java.util.List;
++import java.util.Locale;
+ import java.util.Map;
+ 
+ import org.apache.commons.logging.Log;
+@@ -230,10 +231,10 @@ public class GenericTableMetaDataProvider implements TableMetaDataProvider {
+ 			return null;
+ 		}
+ 		else if (isStoresUpperCaseIdentifiers()) {
+-			return tableName.toUpperCase();
++			return tableName.toUpperCase(Locale.ROOT);
+ 		}
+ 		else if (isStoresLowerCaseIdentifiers()) {
+-			return tableName.toLowerCase();
++			return tableName.toLowerCase(Locale.ROOT);
+ 		}
+ 		else {
+ 			return tableName;
+@@ -247,10 +248,10 @@ public class GenericTableMetaDataProvider implements TableMetaDataProvider {
+ 			return null;
+ 		}
+ 		else if (isStoresUpperCaseIdentifiers()) {
+-			return catalogName.toUpperCase();
++			return catalogName.toUpperCase(Locale.ROOT);
+ 		}
+ 		else if (isStoresLowerCaseIdentifiers()) {
+-			return catalogName.toLowerCase();
++			return catalogName.toLowerCase(Locale.ROOT);
+ 		}
+ 		else {
+ 			return catalogName;
+@@ -264,10 +265,10 @@ public class GenericTableMetaDataProvider implements TableMetaDataProvider {
+ 			return null;
+ 		}
+ 		else if (isStoresUpperCaseIdentifiers()) {
+-			return schemaName.toUpperCase();
++			return schemaName.toUpperCase(Locale.ROOT);
+ 		}
+ 		else if (isStoresLowerCaseIdentifiers()) {
+-			return schemaName.toLowerCase();
++			return schemaName.toLowerCase(Locale.ROOT);
+ 		}
+ 		else {
+ 			return schemaName;
+diff --git spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/CallMetaDataContext.java spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/CallMetaDataContext.java
+index 2ea0c544ae..a6d3e7cd43 100755
+--- spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/CallMetaDataContext.java
++++ spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/CallMetaDataContext.java
+@@ -385,7 +385,7 @@ public class CallMetaDataContext {
+ 				if (meta.isReturnParameter()) {
+ 					param = declaredParams.get(getFunctionReturnName());
+ 					if (param == null && !getOutParameterNames().isEmpty()) {
+-						param = declaredParams.get(getOutParameterNames().get(0).toLowerCase());
++						param = declaredParams.get(getOutParameterNames().get(0).toLowerCase(Locale.ROOT));
+ 					}
+ 					if (param == null) {
+ 						throw new InvalidDataAccessApiUsageException(
+@@ -488,7 +488,7 @@ public class CallMetaDataContext {
+ 				String parameterName = parameter.getName();
+ 				String parameterNameToMatch = obtainMetaDataProvider().parameterNameToUse(parameterName);
+ 				if (parameterNameToMatch != null) {
+-					callParameterNames.put(parameterNameToMatch.toLowerCase(), parameterName);
++					callParameterNames.put(parameterNameToMatch.toLowerCase(Locale.ROOT), parameterName);
+ 				}
+ 				if (parameterName != null) {
+ 					if (parameterSource.hasValue(parameterName)) {
+@@ -496,7 +496,7 @@ public class CallMetaDataContext {
+ 								SqlParameterSourceUtils.getTypedValue(parameterSource, parameterName));
+ 					}
+ 					else {
+-						String lowerCaseName = parameterName.toLowerCase();
++						String lowerCaseName = parameterName.toLowerCase(Locale.ROOT);
+ 						if (parameterSource.hasValue(lowerCaseName)) {
+ 							matchedParameters.put(parameterName,
+ 									SqlParameterSourceUtils.getTypedValue(parameterSource, lowerCaseName));
+@@ -556,7 +556,7 @@ public class CallMetaDataContext {
+ 				String parameterName = parameter.getName();
+ 				String parameterNameToMatch = provider.parameterNameToUse(parameterName);
+ 				if (parameterNameToMatch != null) {
+-					callParameterNames.put(parameterNameToMatch.toLowerCase(), parameterName);
++					callParameterNames.put(parameterNameToMatch.toLowerCase(Locale.ROOT), parameterName);
+ 				}
+ 			}
+ 		}
+@@ -680,7 +680,7 @@ public class CallMetaDataContext {
+ 	}
+ 
+ 	private static String lowerCase(@Nullable String paramName) {
+-		return (paramName != null ? paramName.toLowerCase() : "");
++		return (paramName != null ? paramName.toLowerCase(Locale.ROOT) : "");
+ 	}
+ 
+ }
+diff --git spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/GenericCallMetaDataProvider.java spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/GenericCallMetaDataProvider.java
+index 789351ff5e..10286861cb 100644
+--- spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/GenericCallMetaDataProvider.java
++++ spring-jdbc/src/main/java/org/springframework/jdbc/core/metadata/GenericCallMetaDataProvider.java
+@@ -22,6 +22,7 @@ import java.sql.SQLException;
+ import java.sql.Types;
+ import java.util.ArrayList;
+ import java.util.List;
++import java.util.Locale;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+@@ -279,10 +280,10 @@ public class GenericCallMetaDataProvider implements CallMetaDataProvider {
+ 			return null;
+ 		}
+ 		else if (isStoresUpperCaseIdentifiers()) {
+-			return identifierName.toUpperCase();
++			return identifierName.toUpperCase(Locale.ROOT);
+ 		}
+ 		else if (isStoresLowerCaseIdentifiers()) {
+-			return identifierName.toLowerCase();
++			return identifierName.toLowerCase(Locale.ROOT);
+ 		}
+ 		else {
+ 			return identifierName;
+diff --git spring-jdbc/src/main/java/org/springframework/jdbc/core/namedparam/SqlParameterSourceUtils.java spring-jdbc/src/main/java/org/springframework/jdbc/core/namedparam/SqlParameterSourceUtils.java
+index ced04936cf..a99fa9d563 100644
+--- spring-jdbc/src/main/java/org/springframework/jdbc/core/namedparam/SqlParameterSourceUtils.java
++++ spring-jdbc/src/main/java/org/springframework/jdbc/core/namedparam/SqlParameterSourceUtils.java
+@@ -19,6 +19,7 @@ package org.springframework.jdbc.core.namedparam;
+ import java.util.Arrays;
+ import java.util.Collection;
+ import java.util.HashMap;
++import java.util.Locale;
+ import java.util.Map;
+ 
+ import org.springframework.jdbc.core.SqlParameterValue;
+@@ -115,7 +116,7 @@ public abstract class SqlParameterSourceUtils {
+ 		String[] paramNames = parameterSource.getParameterNames();
+ 		if (paramNames != null) {
+ 			for (String name : paramNames) {
+-				caseInsensitiveParameterNames.put(name.toLowerCase(), name);
++				caseInsensitiveParameterNames.put(name.toLowerCase(Locale.ROOT), name);
+ 			}
+ 		}
+ 		return caseInsensitiveParameterNames;
+diff --git spring-test/src/main/java/org/springframework/test/context/junit/jupiter/AbstractExpressionEvaluatingCondition.java spring-test/src/main/java/org/springframework/test/context/junit/jupiter/AbstractExpressionEvaluatingCondition.java
+index 22a9cfa8e3..686844b8ce 100644
+--- spring-test/src/main/java/org/springframework/test/context/junit/jupiter/AbstractExpressionEvaluatingCondition.java
++++ spring-test/src/main/java/org/springframework/test/context/junit/jupiter/AbstractExpressionEvaluatingCondition.java
+@@ -18,6 +18,7 @@ package org.springframework.test.context.junit.jupiter;
+ 
+ import java.lang.annotation.Annotation;
+ import java.lang.reflect.AnnotatedElement;
++import java.util.Locale;
+ import java.util.Optional;
+ import java.util.function.Function;
+ 
+@@ -193,7 +194,7 @@ abstract class AbstractExpressionEvaluatingCondition implements ExecutionConditi
+ 			return (Boolean) result;
+ 		}
+ 		else if (result instanceof String) {
+-			String str = ((String) result).trim().toLowerCase();
++			String str = ((String) result).trim().toLowerCase(Locale.ROOT);
+ 			if ("true".equals(str)) {
+ 				return true;
+ 			}
+diff --git spring-webflux/src/main/java/org/springframework/web/reactive/resource/GzipResourceResolver.java spring-webflux/src/main/java/org/springframework/web/reactive/resource/GzipResourceResolver.java
+index 74a7a628bb..0b2958ee19 100644
+--- spring-webflux/src/main/java/org/springframework/web/reactive/resource/GzipResourceResolver.java
++++ spring-webflux/src/main/java/org/springframework/web/reactive/resource/GzipResourceResolver.java
+@@ -22,6 +22,7 @@ import java.io.InputStream;
+ import java.net.URI;
+ import java.net.URL;
+ import java.util.List;
++import java.util.Locale;
+ 
+ import reactor.core.publisher.Mono;
+ 
+@@ -69,7 +70,7 @@ public class GzipResourceResolver extends AbstractResourceResolver {
+ 
+ 	private boolean isGzipAccepted(ServerWebExchange exchange) {
+ 		String value = exchange.getRequest().getHeaders().getFirst("Accept-Encoding");
+-		return (value != null && value.toLowerCase().contains("gzip"));
++		return (value != null && value.toLowerCase(Locale.ROOT).contains("gzip"));
+ 	}
+ 
+ 	@Override
+diff --git spring-webmvc/src/main/java/org/springframework/web/servlet/resource/GzipResourceResolver.java spring-webmvc/src/main/java/org/springframework/web/servlet/resource/GzipResourceResolver.java
+index f7b8542bef..d3b47f98eb 100644
+--- spring-webmvc/src/main/java/org/springframework/web/servlet/resource/GzipResourceResolver.java
++++ spring-webmvc/src/main/java/org/springframework/web/servlet/resource/GzipResourceResolver.java
+@@ -22,6 +22,7 @@ import java.io.InputStream;
+ import java.net.URI;
+ import java.net.URL;
+ import java.util.List;
++import java.util.Locale;
+ 
+ import javax.servlet.http.HttpServletRequest;
+ 
+@@ -70,7 +71,7 @@ public class GzipResourceResolver extends AbstractResourceResolver {
+ 
+ 	private boolean isGzipAccepted(HttpServletRequest request) {
+ 		String value = request.getHeader("Accept-Encoding");
+-		return (value != null && value.toLowerCase().contains("gzip"));
++		return (value != null && value.toLowerCase(Locale.ROOT).contains("gzip"));
+ 	}
+ 
+ 	@Override
+diff --git spring-expression/src/main/java/org/springframework/expression/spel/standard/InternalSpelExpressionParser.java spring-expression/src/main/java/org/springframework/expression/spel/standard/InternalSpelExpressionParser.java
+index cf135d08ed..3b4f2b8dec 100644
+--- spring-expression/src/main/java/org/springframework/expression/spel/standard/InternalSpelExpressionParser.java
++++ spring-expression/src/main/java/org/springframework/expression/spel/standard/InternalSpelExpressionParser.java
+@@ -21,6 +21,7 @@ import java.util.ArrayList;
+ import java.util.Collections;
+ import java.util.Deque;
+ import java.util.List;
++import java.util.Locale;
+ import java.util.concurrent.ConcurrentHashMap;
+ import java.util.concurrent.ConcurrentMap;
+ import java.util.regex.Pattern;
+@@ -750,7 +751,7 @@ class InternalSpelExpressionParser extends TemplateAwareExpressionParser {
+ 				throw internalException( this.expressionString.length(), SpelMessage.OOD);
+ 			}
+ 			throw internalException(node.startPos, SpelMessage.NOT_EXPECTED_TOKEN,
+-					"qualified ID", node.getKind().toString().toLowerCase());
++					"qualified ID", node.getKind().toString().toLowerCase(Locale.ROOT));
+ 		}
+ 		return new QualifiedIdentifier(qualifiedIdPieces.getFirst().getStartPosition(),
+ 				qualifiedIdPieces.getLast().getEndPosition(), qualifiedIdPieces.toArray(new SpelNodeImpl[0]));
+@@ -942,7 +943,7 @@ class InternalSpelExpressionParser extends TemplateAwareExpressionParser {
+ 		}
+ 		if (t.kind != expectedKind) {
+ 			throw internalException(t.startPos, SpelMessage.NOT_EXPECTED_TOKEN,
+-					expectedKind.toString().toLowerCase(), t.getKind().toString().toLowerCase());
++					expectedKind.toString().toLowerCase(Locale.ROOT), t.getKind().toString().toLowerCase(Locale.ROOT));
+ 		}
+ 		return t;
+ 	}
+@@ -1038,7 +1039,7 @@ class InternalSpelExpressionParser extends TemplateAwareExpressionParser {
+ 		if (t.getKind().hasPayload()) {
+ 			return t.stringValue();
+ 		}
+-		return t.kind.toString().toLowerCase();
++		return t.kind.toString().toLowerCase(Locale.ROOT);
+ 	}
+ 
+ 	private void checkOperands(Token token, @Nullable SpelNodeImpl left, @Nullable SpelNodeImpl right) {

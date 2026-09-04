@@ -1,0 +1,13 @@
+Il file core.diff è stato ricostruito a partire dal diff: https://github.com/spring-projects/spring-framework/commit/23656aebc6c7d0f9faff1080981eb4d55eff296c.diff
+
+Il diff https://github.com/spring-projects/spring-framework/commit/23656aebc6c7d0f9faff1080981eb4d55eff296c contiene il fix: "Use Locale.ROOT consistently for toLower/toUpperCase"
+
+Il commit viene riferito nel advisory-database di github in https://github.com/github/advisory-database/pull/4946 come risoluzione per il CVE-2024-38820 (https://github.com/advisories/GHSA-4gc7-5j7h-4qph)
+
+Ulteriori classi sono state modificate riportando il solito concetto di 'Locale.root'.
+
+Le classi sono state identificate grazie ai comandi:
+- toLowerCase: grep -r "toLowerCase" . | grep -v "\/src\/test\/" | grep -v "Locale\.ROOT" | grep -v "web\/testfixture\/servlet\/MockHttpServlet" | grep -v "Character\.toLowerCase" | grep -v "Character\#toLowerCase" | grep -v "org/springframework/util/LinkedCaseInsensitiveMap\.java" | grep -v "org/springframework/jdbc/core/BeanPropertyRowMapper\.java" | grep -v "englishLowerCaseName" | grep -v "'mac'" | grep -v "String\#toLowerCase" | grep -v "BeanDefinitionDsl.kt"
+- toUpperCase: grep -r "toUpperCase" . | grep -v "\/src\/test\/" | grep -v "Locale\.ROOT" | grep -v "Character\.toUpperCase" | grep -v "org/springframework/core/testfixture/TestGroup.java" | grep -v "spring-core/src/main/java/org/springframework/core/Constants.java" | grep -v "Character\#toUpperCase" | grep -v "./src/docs/asciidoc/"
+
+Infine è stata apportata la modifica descritta nel commit https://github.com/spring-projects/spring-framework/commit/edfcc6ffb188e4614ec9b212e3208b666981851c per la classe spring-context/src/main/java/org/springframework/validation/DataBinder.java
