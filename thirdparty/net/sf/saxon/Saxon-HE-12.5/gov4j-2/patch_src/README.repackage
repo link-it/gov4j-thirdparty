@@ -1,0 +1,8 @@
+wget https://repo1.maven.org/maven2/net/sf/saxon/Saxon-HE/12.5/Saxon-HE-12.5.jar
+unzip -q Saxon-HE-12.5.jar -d JAR
+cd JAR
+rm META-INF/services/javax.xml.transform.TransformerFactory
+rm -f META-INF/TE*
+jar -cfM ../Saxon-HE-12.5-gov4j-2.jar *
+cd ..
+rm -rf JAR
