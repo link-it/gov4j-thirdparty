@@ -1,0 +1,4 @@
+Risolta risorsa non più disponibile: 
+
+-        String location = "https://raw.githubusercontent.com/OAI/OpenAPI-Specification/master/examples/v3.0/petstore.yaml";
++        String location = "https://raw.githubusercontent.com/swagger-api/swagger-petstore/refs/heads/master/src/main/resources/openapi.yaml";

@@ -1,0 +1,12 @@
+NOTA: Usare java 11 e maven 3.6.1 o superiore
+
+git clone https://github.com/link-it/swagger-codegen.git
+cd swagger-codegen
+git checkout 3.0.46-gov4j-1
+patch -p0 < repo.patch
+mvn clean install
+mvn javadoc:javadoc
+cd ..
+
+
+

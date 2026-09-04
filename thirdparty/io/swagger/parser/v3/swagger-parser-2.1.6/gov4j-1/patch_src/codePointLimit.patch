@@ -1,0 +1,31 @@
+--- swagger-parser-2.1.6/modules/swagger-parser-v3/src/main/java/io/swagger/v3/parser/util/DeserializationUtils.java	2022-08-15 13:22:25.000000000 +0200
++++ swagger-parser-2.1.6/modules/swagger-parser-v3/src/main/java/io/swagger/v3/parser/util/DeserializationUtils.java	2022-09-22 09:21:20.513864332 +0200
+@@ -46,6 +46,16 @@
+         private boolean yamlAllowRecursiveKeys = System.getProperty("yamlAllowRecursiveKeys") == null ? true : Boolean.valueOf(System.getProperty("yamlAllowRecursiveKeys"));
+ 
+ 
++        private Integer yamlCodePointLimit = System.getProperty("yamlCodePointLimit") == null ? null : Integer.valueOf(System.getProperty("yamlCodePointLimit"));
++
++        public Integer getYamlCodePointLimit() {
++            return yamlCodePointLimit;
++        }
++
++        public void setYamlCodePointLimit(Integer yamlCodePointLimit) {
++            this.yamlCodePointLimit = yamlCodePointLimit;
++        }
++
+         public Integer getMaxYamlDepth() {
+             return maxYamlDepth;
+         }
+@@ -261,6 +271,11 @@
+             method.invoke(loaderOptions, options.isYamlAllowRecursiveKeys());
+             method = LoaderOptions.class.getMethod("setAllowDuplicateKeys", boolean.class);
+             method.invoke(loaderOptions, false);
++            if(options.getYamlCodePointLimit()!=null){
++                 method = LoaderOptions.class.getMethod("setCodePointLimit", int.class);
++                 method.invoke(loaderOptions, options.getYamlCodePointLimit().intValue());
++                 //System.out.println("SET CODE POINT LIMIT ["+options.getYamlCodePointLimit().intValue()+"]");
++            }
+             org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml(constructor, new Representer(), new DumperOptions(), loaderOptions, new CustomResolver());
+             return yaml;
+         } catch (ReflectiveOperationException e) {

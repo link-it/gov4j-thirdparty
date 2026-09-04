@@ -1,0 +1,2 @@
+Aggiunto un costruttore all'OpenAPIResolver.java in modo che accetti una Map di stringhe, contenente i riferimenti agli schemi esterni.
+Il fix impatta anche sulla classe 'ResolverCache'

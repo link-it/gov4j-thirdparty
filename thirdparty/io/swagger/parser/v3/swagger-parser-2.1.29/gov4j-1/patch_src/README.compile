@@ -1,0 +1,13 @@
+ NOTA: Usare java 11 e maven 3.6.1 o superiore
+
+wget https://github.com/swagger-api/swagger-parser/archive/refs/tags/v2.1.29.tar.gz
+tar xzf v2.1.29.tar.gz
+patch -p0 < OpenAPIResolver.patch
+patch -p0 < problemiCompilazione202412.patch
+cd swagger-parser-2.1.29
+mvn clean install
+mvn javadoc:javadoc
+cd ..
+
+
+

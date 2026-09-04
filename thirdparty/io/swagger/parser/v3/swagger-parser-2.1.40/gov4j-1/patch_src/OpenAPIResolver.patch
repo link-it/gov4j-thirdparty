@@ -1,0 +1,55 @@
+--- swagger-parser-2.1.40/modules/swagger-parser-v3/src/main/java/io/swagger/v3/parser/OpenAPIResolver.java	2021-09-29 21:47:03.000000000 +0200
++++ swagger-parser-2.1.40/modules/swagger-parser-v3/src/main/java/io/swagger/v3/parser/OpenAPIResolver.java	2021-12-07 10:44:29.473205327 +0100
+@@ -13,6 +13,7 @@
+ 
+ import java.util.HashSet;
+ import java.util.List;
++import java.util.Map;
+ import java.util.Set;
+ 
+ public class OpenAPIResolver {
+@@ -41,6 +42,23 @@
+         this(openApi, auths, parentFileLocation, null);
+     }
+ 
++    
++    /**
++     * New constructor for govway integration, segue quello di sotto ma personalizza la cache 
++     * @param openApi
++     * @param externalRefs
++     * @param settings
++     * @param foo	Serve per superare i test, altrimenti il costruttore (null,null,null) diventa ambiguo 
++     */
++    public OpenAPIResolver(OpenAPI openApi, Map<String,String> externalRefs, Settings settings, int foo) {
++    	this.openApi = openApi;
++        this.settings = settings != null ? settings : new Settings();
++        this.cache = new ResolverCache(openApi, externalRefs);
++        componentsProcessor = new ComponentsProcessor(openApi,this.cache);
++        pathProcessor = new PathsProcessor(cache, openApi,this.settings);
++        operationsProcessor = new OperationProcessor(cache, openApi);
++    }
++
+     public OpenAPIResolver(OpenAPI openApi, List<AuthorizationValue> auths, String parentFileLocation, Settings settings) {
+         this(openApi, auths, parentFileLocation, settings, new ParseOptions());
+     }
+--- swagger-parser-2.1.40/modules/swagger-parser-v3/src/main/java/io/swagger/v3/parser/ResolverCache.java	2022-08-15 13:22:25.000000000 +0200
++++ swagger-parser-2.1.40/modules/swagger-parser-v3/src/main/java/io/swagger/v3/parser/ResolverCache.java	2022-09-21 16:12:07.338241810 +0200
+@@ -106,6 +106,18 @@
+ 
+     }
+ 
++    /**
++     * Costruttore custom per integrazione in govway
++     * 
++     * @param openApi
++     * @param externalRefs Map ri refs e stringhe rappresentanti i files esterni
++     */
++    public ResolverCache(OpenAPI openApi, Map<String, String> externalRefs) {
++    	this(openApi, null, null);
++    	this.externalFileCache = externalRefs;
++    }
++
++
+     public <T> T loadRef(String ref, RefFormat refFormat, Class<T> expectedType) {
+         if (refFormat == RefFormat.INTERNAL) {
+             //we don't need to go get anything for internal refs

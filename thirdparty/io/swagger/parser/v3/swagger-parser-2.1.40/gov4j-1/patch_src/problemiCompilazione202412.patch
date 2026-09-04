@@ -1,0 +1,11 @@
+--- ./swagger-parser-2.1.40/modules/swagger-parserOLD/src/test/java/io/swagger/parser/OpenAPIParserTest.java	2022-10-21 11:19:16.000000000 +0200
++++ ./swagger-parser-2.1.40/modules/swagger-parser/src/test/java/io/swagger/parser/OpenAPIParserTest.java	2024-12-30 09:31:01.899663292 +0100
+@@ -182,7 +182,7 @@
+ 
+     @Test
+     public void test30Url() {
+-        String location = "https://raw.githubusercontent.com/OAI/OpenAPI-Specification/master/examples/v3.0/petstore.yaml";
++        String location = "https://raw.githubusercontent.com/swagger-api/swagger-petstore/refs/heads/master/src/main/resources/openapi.yaml";
+ 
+         SwaggerParseResult result = new OpenAPIParser().readLocation(location, null, null);
+ 
