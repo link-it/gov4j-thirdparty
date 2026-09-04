@@ -1,0 +1,16 @@
+Il fix si occupa di risolvere l'errore seguente che avveniva eseguendo la testsuite: org.openspcoop2.message.soap.mtom.Client
+
+Exception in thread "main" org.openspcoop2.message.exception.MessageException
+        at org.openspcoop2.message.soap.mtom.MTOMUtilities.packaging(MTOMUtilities.java:440)
+        at org.openspcoop2.message.soap.AbstractBaseOpenSPCoop2SoapMessage.mtomPackaging(AbstractBaseOpenSPCoop2SoapMessage.java:134)
+        at org.openspcoop2.message.soap.mtom.Client.<init>(Client.java:139)
+        at org.openspcoop2.message.soap.mtom.Client.main(Client.java:52)
+Caused by: java.lang.NullPointerException
+        at java.base/java.util.Objects.requireNonNull(Objects.java:221)
+        at com.sun.xml.messaging.saaj.soap.impl.NamedNodeMapImpl.<init>(NamedNodeMapImpl.java:38)
+        at com.sun.xml.messaging.saaj.soap.impl.TextImpl.getAttributes(TextImpl.java:154)
+        at org.openspcoop2.utils.xml.DynamicNamespaceContext.findPrefixNamespace(DynamicNamespaceContext.java:374)
+        at org.openspcoop2.utils.xml.DynamicNamespaceContext.findPrefixNamespace(DynamicNamespaceContext.java:368)
+        at org.openspcoop2.utils.xml.DynamicNamespaceContextFactory.getNamespaceContext(DynamicNamespaceContextFactory.java:50)
+        at org.openspcoop2.message.soap.mtom.MTOMUtilities.packaging(MTOMUtilities.java:276)
+        ... 3 more

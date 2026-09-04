@@ -1,0 +1,13 @@
+ NOTA: Usare java 11  e maven 3.6.1 o superiore
+
+tar xzf metro-saaj-1.5.3.tar.gz
+patch -p0 < cannotFindSOAPWrapper.patch
+patch -p0 < localPartCannotBeNullQName.patch
+patch -p0 < setDocumentBuilderFactory.patch
+patch -p0 < textNullPointer.patch
+patch -p0 < alternativeContentTypeSoap12.patch
+cd metro-saaj-1.5.3
+mvn clean install 
+cd ..
+
+

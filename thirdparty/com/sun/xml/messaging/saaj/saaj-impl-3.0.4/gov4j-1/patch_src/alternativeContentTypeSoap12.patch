@@ -1,0 +1,46 @@
+--- metro-saaj-3.0.4/saaj-ri/src/main/java/com/sun/xml/messaging/saaj/soap/MessageImpl.java	2021-06-29 14:19:14.241205646 +0200
++++ metro-saaj-3.0.4/saaj-ri/src/main/java/com/sun/xml/messaging/saaj/soap/MessageImpl.java	2021-06-29 14:31:20.578460502 +0200
+@@ -166,9 +167,17 @@
+      *      must be all lower case
+      */
+     private static boolean isSoap1_2Type(String primary, String sub) {
+-        return primary.equals("application")
++        boolean v = primary.equals("application")
+                && (sub.equals("soap+xml")
+                    || sub.equals("soap+fastinfoset"));
++	if(v){
++		return true;
++	}
++	if(alternativeAcceptedContentType1_2!=null && !alternativeAcceptedContentType1_2.isEmpty()){
++		String alternative = primary+"/"+sub;
++		return alternativeAcceptedContentType1_2.contains(alternative);		
++	}
++	return false;
+     }
+ 
+     /**
+@@ -176,10 +185,23 @@
+      *      must be all lower case
+      */
+     private static boolean isEqualToSoap1_2Type(String type) {
+-        return type.startsWith("application/soap+xml") ||
++        boolean v = type.startsWith("application/soap+xml") ||
+                type.startsWith("application/soap+fastinfoset");
++	if(v){
++		return true;
++	}
++	if(alternativeAcceptedContentType1_2!=null && !alternativeAcceptedContentType1_2.isEmpty()){
++		for(String ctAlternative: alternativeAcceptedContentType1_2){
++			if(type.startsWith(ctAlternative)){
++				return true;
++			}
++		}
++	}
++	return false;
+     }
+ 
++    public static List<String> alternativeAcceptedContentType1_2 = null;
++
+     /**
+       * Construct a new message. This will be invoked before message
+       * sends.

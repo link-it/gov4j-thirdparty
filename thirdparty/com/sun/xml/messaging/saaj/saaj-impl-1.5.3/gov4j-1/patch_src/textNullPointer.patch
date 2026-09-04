@@ -1,0 +1,12 @@
+--- metro-saaj-1.5.3/saaj-ri/src/main/java/com/sun/xml/messaging/saaj/soap/impl/TextImpl.java	2021-06-29 14:19:14.241205646 +0200
++++ metro-saaj-1.5.3/saaj-ri/src/main/java/com/sun/xml/messaging/saaj/soap/impl/TextImpl.java	2021-06-29 14:30:37.665271766 +0200
+@@ -153,6 +153,9 @@
+ 
+     @Override
+     public NamedNodeMap getAttributes() {
++        if( (domNode==null) || (domNode.getAttributes()==null) || (soapDocument==null)){
++            return null;        
++        }
+         return new NamedNodeMapImpl(domNode.getAttributes(), soapDocument);
+     }
+ 

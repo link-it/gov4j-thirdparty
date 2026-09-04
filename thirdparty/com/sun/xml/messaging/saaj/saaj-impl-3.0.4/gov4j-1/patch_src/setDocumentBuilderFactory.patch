@@ -1,0 +1,86 @@
+--- metro-saaj-3.0.4/saaj-ri/src/main/java/com/sun/xml/messaging/saaj/soap/impl/BodyImpl.java	2021-06-29 14:19:14.241205646 +0200
++++ metro-saaj-3.0.4/saaj-ri/src/main/java/com/sun/xml/messaging/saaj/soap/impl/BodyImpl.java	2021-06-29 14:21:53.943926549 +0200
+@@ -335,7 +330,8 @@
+ 
+         Document document = null;
+         try {
+-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance("com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl", SAAJUtil.getSystemClassLoader());
++            //DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance("com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl", SAAJUtil.getSystemClassLoader());
++	    DocumentBuilderFactory factory = com.sun.xml.messaging.saaj.soap.SOAPDocumentImpl.newInstanceDocumentBuilderFactory();        
+             factory.setNamespaceAware(true);
+             DocumentBuilder builder = factory.newDocumentBuilder();
+             document = builder.newDocument();
+--- metro-saaj-3.0.4/saaj-ri/src/main/java/com/sun/xml/messaging/saaj/soap/SOAPDocumentImpl.java	2021-06-29 14:19:14.241205646 +0200
++++ metro-saaj-3.0.4/saaj-ri/src/main/java/com/sun/xml/messaging/saaj/soap/SOAPDocumentImpl.java	2021-06-29 14:27:27.365431675 +0200
+@@ -65,6 +65,49 @@
+ 
+     private Document document;
+ 
++    private static String customSAXParserFactory = null;
++    public static void setCustomSAXParserFactory(String factory){
++	customSAXParserFactory = factory;
++    }
++    public static String getCustomSAXParserFactory(){
++	return customSAXParserFactory;
++    }
++    public static javax.xml.parsers.SAXParserFactory newInstanceSAXParserFactory(){
++    	if(customSAXParserFactory!=null){
++		try{
++			return (javax.xml.parsers.SAXParserFactory) Class.
++				forName(customSAXParserFactory).
++					getConstructor().newInstance();
++		} catch(Exception e) {
++			System.err.println("[com.sun.xml.messaging.saaj.soap.SOAPDocumentImpl] init SAXParserFactoryImpl failed: "+e.getMessage());
++			e.printStackTrace(System.err);
++       	 	}
++	}
++	return javax.xml.parsers.SAXParserFactory.newInstance("com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl", SAAJUtil.getSystemClassLoader());
++    }
++
++    private static String customDocumentBuilderFactory = null;
++    public static void setCustomDocumentBuilderFactory(String factory){
++	customDocumentBuilderFactory = factory;
++    }
++    public static String getCustomDocumentBuilderFactory(){
++	return customDocumentBuilderFactory;
++    }
++    public static DocumentBuilderFactory newInstanceDocumentBuilderFactory(){
++    	if(customDocumentBuilderFactory!=null){
++		try{
++			return (DocumentBuilderFactory) Class.
++				forName(customDocumentBuilderFactory).
++					getConstructor().newInstance();
++		} catch(Exception e) {
++			System.err.println("[com.sun.xml.messaging.saaj.soap.SOAPDocumentImpl] init DocumentBuilderFactoryImpl failed: "+e.getMessage());
++			e.printStackTrace(System.err);
++       	 	}
++	}
++	return DocumentBuilderFactory.newInstance("com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl", SAAJUtil.getSystemClassLoader());
++    }
++    
++
+     public SOAPDocumentImpl(SOAPPartImpl enclosingDocument) {
+         this(enclosingDocument, createDocument());
+     }
+@@ -76,7 +119,8 @@
+     }
+ 
+     private static Document createDocument() {
+-        DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance("com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl", SAAJUtil.getSystemClassLoader());
++        //DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance("com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl", SAAJUtil.getSystemClassLoader());
++	DocumentBuilderFactory docFactory = com.sun.xml.messaging.saaj.soap.SOAPDocumentImpl.newInstanceDocumentBuilderFactory();
+         try {
+             final DocumentBuilder documentBuilder = docFactory.newDocumentBuilder();
+             return documentBuilder.newDocument();
+--- metro-saaj-3.0.4/saaj-ri/src/main/java/com/sun/xml/messaging/saaj/util/ParserPool.java	2021-06-29 14:19:14.242205651 +0200
++++ metro-saaj-3.0.4/saaj-ri/src/main/java/com/sun/xml/messaging/saaj/util/ParserPool.java	2021-06-29 14:28:16.325650219 +0200
+@@ -28,7 +28,8 @@
+ 
+     public ParserPool(int capacity) {
+         queue = new ArrayBlockingQueue<>(capacity);
+-        factory = SAXParserFactory.newInstance("com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl", SAAJUtil.getSystemClassLoader());
++        //factory = SAXParserFactory.newInstance("com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl", SAAJUtil.getSystemClassLoader());
++	factory = com.sun.xml.messaging.saaj.soap.SOAPDocumentImpl.newInstanceSAXParserFactory();
+         try {
+             factory.setFeature("jdk.xml.resetSymbolTable", true);
+         } catch(SAXException | ParserConfigurationException e) {

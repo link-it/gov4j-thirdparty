@@ -1,0 +1,7 @@
+In WildFly, la presenza delle definizioni all'interno della directory META-INF/services, contenenti riferimenti a classi restituite da factory che operano su XML, può causare errori di configurazione come il seguente:
+
+com.sun.faces.config.ConfigurationException: CONFIGURATION FAILED! DTD factory class 
+        com.sun.org.apache.xerces.internal.impl.dv.dtd.DTDDVFactoryImpl does not extend from DTDDVFactory.
+        
+Per evitare tali problematiche, il file JAR viene ristrutturato (re-packaged) rimuovendo la directory META-INF/services. Questo consente di prevenire conflitti durante la configurazione e garantire la corretta esecuzione dell'applicazione su WildFly.
+

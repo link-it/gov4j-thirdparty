@@ -1,0 +1,25 @@
+--- metro-saaj-1.5.3/saaj-ri/src/main/java/com/sun/xml/messaging/saaj/soap/impl/ElementImpl.java	2021-06-29 10:22:21.541666957 +0200
++++ metro-saaj-1.5.3/saaj-ri/src/main/java/com/sun/xml/messaging/saaj/soap/impl/ElementImpl.java	2021-06-29 14:15:44.774260101 +0200
+@@ -160,7 +160,21 @@
+     public ElementImpl(SOAPDocumentImpl ownerDoc, Element domElement) {
+         this.element = domElement;
+         this.soapDocument = ownerDoc;
+-        this.elementQName = new QName(domElement.getNamespaceURI(), domElement.getLocalName());
++	if(domElement.getLocalName()==null && domElement.getNamespaceURI()==null){
++		if(domElement.getNodeName()!=null){
++			this.elementQName = new QName(domElement.getNodeName());
++		}
++		else{
++			throw new RuntimeException("Caso non previsto in com.sun.xml.messaging.saaj.soap.impl.ElementImpl");
++		}
++	}
++	else{
++		if(domElement.getPrefix()!=null && !"".equals(domElement.getPrefix())){
++        		this.elementQName = new QName(domElement.getNamespaceURI(), domElement.getLocalName(), domElement.getPrefix());
++		}else{
++        		this.elementQName = new QName(domElement.getNamespaceURI(), domElement.getLocalName());
++		}
++	}
+         soapDocument.register(this);
+         NamedNodeMap attributes = domElement.getAttributes();
+         for (int i = attributes.getLength() - 1; i >= 0; i--) {

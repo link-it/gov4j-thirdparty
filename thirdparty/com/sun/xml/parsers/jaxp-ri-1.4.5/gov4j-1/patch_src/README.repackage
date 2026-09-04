@@ -1,0 +1,7 @@
+wget https://repo1.maven.org/maven2/com/sun/xml/parsers/jaxp-ri/1.4.5/jaxp-ri-1.4.5.jar
+unzip -q jaxp-ri-1.4.5.jar -d JAR
+cd JAR
+rm -rf META-INF/services/
+jar -cfM ../jaxp-ri-1.4.5-gov4j-1.jar *
+cd ..
+rm -rf JAR

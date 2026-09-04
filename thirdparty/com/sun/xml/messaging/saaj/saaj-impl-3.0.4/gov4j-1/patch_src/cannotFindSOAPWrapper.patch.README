@@ -1,0 +1,14 @@
+Risolve un problema che si verificava, ad esempio, durante la registrazione di una traccia di una SOAP envelope con il body cifrato, nel momento in cui veniva controllata l'eventuale presenza di un fault.
+
+ERROR <26-02-2020 14:02:45.864> org.openspcoop2.pdd.logger.Tracciamento.logError(1039): errore durante la registrazione del SOAPFault nelle tracce 
+ 
+java.lang.IllegalArgumentException: Cannot find SOAP wrapper for element [xenc:EncryptedData: null]
+        at com.sun.xml.messaging.saaj.soap.SOAPDocumentImpl.find(SOAPDocumentImpl.java:630) ~[saaj-impl-3.0.4-gov4j-2.jar:3.0.4]
+        at com.sun.xml.messaging.saaj.soap.SOAPDocumentImpl.find(SOAPDocumentImpl.java:618) ~[saaj-impl-3.0.4-gov4j-2.jar:3.0.4]
+        at com.sun.xml.messaging.saaj.soap.impl.ElementImpl.getFirstChildElement(ElementImpl.java:652) ~[saaj-impl-3.0.4-gov4j-2.jar:3.0.4]
+        at com.sun.xml.messaging.saaj.soap.impl.BodyImpl.getPayloadQName(BodyImpl.java:440) ~[saaj-impl-3.0.4-gov4j-2.jar:3.0.4]
+        at com.sun.xml.messaging.saaj.soap.impl.BodyImpl.hasFault(BodyImpl.java:151) ~[saaj-impl-3.0.4-gov4j-2.jar:3.0.4]
+        at org.openspcoop2.pdd.logger.Tracciamento.getTraccia(Tracciamento.java:871) ~[openspcoop2_pdd-3.3.0.b1.jar:?]
+        at org.openspcoop2.pdd.logger.Tracciamento.registraRisposta(Tracciamento.java:752) ~[openspcoop2_pdd-3.3.0.b1.jar:?]
+        at org.openspcoop2.pdd.services.core.RicezioneBuste.process_engine(RicezioneBuste.java:7273) ~[openspcoop2_pdd-3.3.0.b1.jar:?]
+        at

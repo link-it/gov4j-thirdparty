@@ -1,0 +1,32 @@
+Problema a1.
+
+Quando viene creato un detail contenente l'xml problem detail che contiene elementi senza namespace, avviene il seguente errore:
+
+java.lang.IllegalArgumentException: local part cannot be "null" when creating a QName
+        at javax.xml.namespace.QName.<init>(QName.java:185) ~[?:?]
+        at javax.xml.namespace.QName.<init>(QName.java:129) ~[?:?]
+        at com.sun.xml.messaging.saaj.soap.impl.ElementImpl.<init>(ElementImpl.java:156) ~[saaj-impl-1.5.3-gov4j-1.jar:1.5.3]
+        at com.sun.xml.messaging.saaj.soap.impl.ElementFactory.createElement(ElementFactory.java:119) ~[saaj-impl-1.5.3-gov4j-1.jar:1.5.3]
+        at com.sun.xml.messaging.saaj.soap.SOAPDocumentImpl.registerChildNodes(SOAPDocumentImpl.java:246) ~[saaj-impl-1.5.3-gov4j-1.jar:1.5.3]
+        at com.sun.xml.messaging.saaj.soap.SOAPDocumentImpl.registerChildNodes(SOAPDocumentImpl.java:267) ~[saaj-impl-1.5.3-gov4j-1.jar:1.5.3]
+        at com.sun.xml.messaging.saaj.soap.SOAPDocumentImpl.importNode(SOAPDocumentImpl.java:233) ~[saaj-impl-1.5.3-gov4j-1.jar:1.5.3]
+        at org.openspcoop2.protocol.engine.builder.ImbustamentoErrore.buildFaultProtocollo(ImbustamentoErrore.java:640) ~[openspcoop2_protocol-3.3.0.b1.jar:?]
+
+Problema a2.
+
+Quando viene eseguito il seguente codice (es. durante l'invio di una fattura in fatturazione attiva):
+
+SOAPElement element = SoapUtils.getSoapFactory(messageFactory, msg.getMessageType()).createElement(xmlUtils.newElement(xmlRichiesta.getBytes()));
+soapBody.addChildElement(element);
+
+Il metodo addChildElement fa si che venga aggiunto un namespace errato senza prefisso valorizzato con lo stesso namespace che possiede il prefisso. Questo provoca il fallimento della validazione xsd.
+
+Es. 
+
+Body corretto:
+
+	<ns2:fileSdIAccoglienza xmlns:ns2="http://www.fatturapa.gov.it/sdi/ws/trasmissione/v1.0/types"><NomeFile>IT01234567890_0000m.zip</NomeFile><File>....
+
+Body prodotto non corretto:
+
+	<ns2:fileSdIAccoglienza xmlns:ns2="http://www.fatturapa.gov.it/sdi/ws/trasmissione/v1.0/types" xmlns="http://www.fatturapa.gov.it/sdi/ws/trasmissione/v1.0/types"><NomeFile>IT01234567890_0000m.zip</NomeFile><File>....
