@@ -1,0 +1,15 @@
+Aggiunta la gestione delle seguenti variabili:
+
+explicitAttachmentInclusiveNamespace   [value: boolean, default false]: Inserisce gli elementi "InclusiveNamespace" anche se la lista dei prefissi nella trasformazione degli attachment è vuota
+omitCanonicalizationInclusiveNamespace [value: boolean, default false]: Non inserisce l'elemento "InclusiveNamespace" all'interno dell'elemento "CanonicalizationMethod"
+omitAttachmentKeyInfo                  [value: boolean, default false]: Non inserisce all'interno della EncryptedData dell'attachment l'elemento "KeyInfo"
+
+È inoltre stato inoltre aggiunto il supporto a cifrare la chiave simmetrica usata per la cifratura tramite una ulteriore chiave simmetrica prelevata da un keystore di tipo JCEKS. 
+
+Infine è stata aggiunta la possibilità di settare l'opzione 'setValidateOnlyEndEntity' nella classe org.apache.wss4j.common.crypto.Merlin per la motivazione seguente:
+Nel truststore ci vogliono tutti i certificati fino alla CA di root altrimenti si ottiene l'errore: "A security error was encountered when verifying the message ; Trust anchor for certification path not found."
+Nell'implementazione di default vengono però validati rispetto al file crl indicato tutti i certificati, anche quelli intermedi.
+Questo comporta che validando un certificato intermedio, se si fornisce solo una CRL, si ottiene l'errore: 
+      "No CRLs found for issuer &quot;cn=RootCA,ou=TEST,o=Example,c=IT&quot;"" poichè non si trova una CRL rilasciata dal certificato intermedio che stiamo validando.
+ Per risolvere andrebbe fornito un file CRL per ogni certificato, compreso quelli intermedi.
+ Se invece si vuole far validare, con la CRL, solo il certificato finale si può impostare setValidateOnlyEndEntity(true)

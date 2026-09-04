@@ -1,0 +1,612 @@
+diff -Naur '--exclude=.*' '--exclude=target' ../../Downloads/wss4j-3.0.3-source-release/wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/action/EncryptionAction.java ./ws-security-dom/src/main/java/org/apache/wss4j/dom/action/EncryptionAction.java
+--- wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/action/EncryptionAction.java	2024-02-22 13:52:52.000000000 +0100
++++ wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/action/EncryptionAction.java	2024-05-17 14:11:37.375148375 +0200
+@@ -134,7 +134,7 @@
+         wsEncrypt.setStoreBytesInAttachment(reqData.isStoreBytesInAttachment());
+ 
+         try {
+-            wsEncrypt.build(encryptionToken.getCrypto(), symmetricKey);
++            wsEncrypt.build(encryptionToken.getCrypto(), symmetricKey, reqData);
+         } catch (WSSecurityException e) {
+             throw new WSSecurityException(WSSecurityException.ErrorCode.FAILURE, e, "empty",
+                                           new Object[] {"Error during encryption: "});
+diff -Naur '--exclude=.*' '--exclude=target' ../../Downloads/wss4j-3.0.3-source-release/wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/action/SignatureAction.java ./ws-security-dom/src/main/java/org/apache/wss4j/dom/action/SignatureAction.java
+--- wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/action/SignatureAction.java	2024-02-22 13:52:52.000000000 +0100
++++ wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/action/SignatureAction.java	2024-05-17 14:11:48.690361508 +0200
+@@ -60,6 +60,9 @@
+         WSSecSignature wsSign = new WSSecSignature(reqData.getSecHeader());
+         wsSign.setIdAllocator(reqData.getWssConfig().getIdAllocator());
+         wsSign.setAddInclusivePrefixes(reqData.isAddInclusivePrefixes());
++        wsSign.setOmitAttachmentKeyInfo(reqData.isOmitAttachmentKeyInfo());
++        wsSign.setOmitCanonicalizationInclusiveNamespace(reqData.isOmitCanonicalizationInclusiveNamespace());
++        wsSign.setExplicitAttachmentInclusiveNamespace(reqData.isExplicitAttachmentInclusiveNamespace());
+         wsSign.setWsDocInfo(reqData.getWsDocInfo());
+         wsSign.setExpandXopInclude(reqData.isExpandXopInclude());
+         wsSign.setSignatureProvider(reqData.getSignatureProvider());
+diff -Naur '--exclude=.*' '--exclude=target' ../../Downloads/wss4j-3.0.3-source-release/wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/handler/RequestData.java ./ws-security-dom/src/main/java/org/apache/wss4j/dom/handler/RequestData.java
+--- wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/handler/RequestData.java	2024-02-22 13:52:52.000000000 +0100
++++ wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/handler/RequestData.java	2024-05-17 14:14:12.021084959 +0200
+@@ -196,6 +196,10 @@
+     private boolean validateSamlSubjectConfirmation = true;
+ 
+     private boolean expandXopInclude;
++    
++    private boolean omitAttachmentKeyInfo = false;
++    private boolean omitCanonicalizationInclusiveNamespace = false;
++    private boolean explicitAttachmentInclusiveNamespace = false;
+ 
+     public Object getMsgContext() {
+         return msgContext;
+@@ -779,4 +783,28 @@
+     public void setSignatureProvider(Provider signatureProvider) {
+         this.signatureProvider = signatureProvider;
+     }
++
++    public boolean isOmitAttachmentKeyInfo() {
++        return omitAttachmentKeyInfo;
++    }
++
++    public void setOmitAttachmentKeyInfo(boolean omitAttachmentKeyInfo) {
++        this.omitAttachmentKeyInfo = omitAttachmentKeyInfo;
++    }
++
++    public boolean isOmitCanonicalizationInclusiveNamespace() {
++        return omitCanonicalizationInclusiveNamespace;
++    }
++
++    public void setOmitCanonicalizationInclusiveNamespace(boolean omitCanonicalizationInclusiveNamespace) {
++        this.omitCanonicalizationInclusiveNamespace = omitCanonicalizationInclusiveNamespace;
++    }
++
++    public boolean isExplicitAttachmentInclusiveNamespace() {
++        return explicitAttachmentInclusiveNamespace;
++    }
++
++    public void setExplicitAttachmentInclusiveNamespace(boolean explicitAttachmentInclusiveNamespace) {
++        this.explicitAttachmentInclusiveNamespace = explicitAttachmentInclusiveNamespace;
++    }
+ }
+diff -Naur '--exclude=.*' '--exclude=target' ../../Downloads/wss4j-3.0.3-source-release/wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/handler/WSHandler.java ./ws-security-dom/src/main/java/org/apache/wss4j/dom/handler/WSHandler.java
+--- wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/handler/WSHandler.java	2024-02-22 13:52:52.000000000 +0100
++++ wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/handler/WSHandler.java	2024-05-17 14:16:41.991993799 +0200
+@@ -32,6 +32,7 @@
+ import org.apache.wss4j.dom.WSDocInfo;
+ import org.apache.wss4j.dom.engine.WSSConfig;
+ import org.apache.wss4j.dom.engine.WSSecurityEngineResult;
++import org.apache.wss4j.common.ConfigurationConstants;
+ import org.apache.wss4j.common.EncryptionActionToken;
+ import org.apache.wss4j.common.SignatureActionToken;
+ import org.apache.wss4j.common.SignatureEncryptionActionToken;
+@@ -100,6 +101,15 @@
+             decodeBooleanConfigValue(mc, WSHandlerConstants.ENABLE_SIGNATURE_CONFIRMATION, false)
+         );
+         reqData.setTimeStampTTL(decodeTimeToLive(reqData, true));
++        reqData.setOmitAttachmentKeyInfo(
++            decodeBooleanConfigValue(mc, ConfigurationConstants.OMIT_ATTACH_KEY_INFO, false)
++        );
++        reqData.setOmitCanonicalizationInclusiveNamespace(
++            decodeBooleanConfigValue(mc, ConfigurationConstants.OMIT_CANON_INCLUSIVE_NS, false)
++        );
++        reqData.setExplicitAttachmentInclusiveNamespace(
++            decodeBooleanConfigValue(mc, ConfigurationConstants.EXPLICIT_ATTACH_INCLUSIVE_NS, false)
++        );
+ 
+         String actor = getString(WSHandlerConstants.ACTOR, mc);
+         reqData.setActor(actor);
+diff -Naur '--exclude=.*' '--exclude=target' ../../Downloads/wss4j-3.0.3-source-release/wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/message/Encryptor.java ./ws-security-dom/src/main/java/org/apache/wss4j/dom/message/Encryptor.java
+--- wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/message/Encryptor.java	2024-02-22 13:52:52.000000000 +0100
++++ wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/message/Encryptor.java	2024-05-17 14:19:11.440895313 +0200
+@@ -78,6 +78,7 @@
+     private boolean storeBytesInAttachment;
+     private Serializer encryptionSerializer;
+     private boolean expandXopInclude;
++    private boolean omitAttachmentKeyInfo = false;
+     private WSDocInfo wsDocInfo;
+ 
+     public List<String> doEncryption(
+@@ -371,7 +372,9 @@
+             encryptionMethod.setAttributeNS(null, "Algorithm", encryptionAlgorithm);
+ 
+             encryptedData.appendChild(encryptionMethod);
+-            encryptedData.appendChild(WSSecurityUtil.cloneElement(doc, keyInfo.getElement()));
++            if (!omitAttachmentKeyInfo) {
++                encryptedData.appendChild(WSSecurityUtil.cloneElement(doc, keyInfo.getElement()));
++            }
+ 
+             Element cipherData =
+                 doc.createElementNS(WSConstants.ENC_NS, WSConstants.ENC_PREFIX + ":CipherData");
+@@ -591,4 +594,12 @@
+         this.wsDocInfo = wsDocInfo;
+     }
+ 
++    public boolean isOmitAttachmentKeyInfo() {
++        return omitAttachmentKeyInfo;
++    }
++
++    public void setOmitAttachmentKeyInfo(boolean omitAttachmentKeyInfo) {
++        this.omitAttachmentKeyInfo = omitAttachmentKeyInfo;
++    }
++
+ }
+diff -Naur '--exclude=.*' '--exclude=target' ../../Downloads/wss4j-3.0.3-source-release/wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/message/WSSecEncryptedKey.java ./ws-security-dom/src/main/java/org/apache/wss4j/dom/message/WSSecEncryptedKey.java
+--- wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/message/WSSecEncryptedKey.java	2024-02-22 13:52:52.000000000 +0100
++++ wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/message/WSSecEncryptedKey.java	2024-05-17 14:31:53.893522260 +0200
+@@ -25,6 +25,7 @@
+ import javax.crypto.IllegalBlockSizeException;
+ import javax.crypto.SecretKey;
+ import javax.crypto.spec.OAEPParameterSpec;
++import javax.security.auth.callback.Callback;
+ import javax.xml.crypto.MarshalException;
+ import javax.xml.crypto.dom.DOMStructure;
+ import javax.xml.crypto.dsig.XMLSignatureFactory;
+@@ -34,6 +35,7 @@
+ 
+ import org.apache.wss4j.common.crypto.Crypto;
+ import org.apache.wss4j.common.crypto.CryptoType;
++import org.apache.wss4j.common.ext.WSPasswordCallback;
+ import org.apache.wss4j.common.ext.WSSecurityException;
+ import org.apache.wss4j.common.token.BinarySecurity;
+ import org.apache.wss4j.common.token.DOMX509Data;
+@@ -44,6 +46,7 @@
+ import org.apache.wss4j.common.util.AttachmentUtils;
+ import org.apache.wss4j.common.util.KeyUtils;
+ import org.apache.wss4j.dom.WSConstants;
++import org.apache.wss4j.dom.handler.RequestData;
+ import org.apache.wss4j.dom.util.WSSecurityUtil;
+ import org.apache.xml.security.encryption.XMLCipherUtil;
+ import org.apache.xml.security.encryption.XMLEncryptionException;
+@@ -134,6 +137,8 @@
+ 
+     private String encryptedKeySHA1;
+ 
++    protected boolean omitAttachmentKeyInfo;
++
+     public WSSecEncryptedKey(WSSecHeader securityHeader) {
+         super(securityHeader);
+     }
+@@ -171,6 +176,9 @@
+         return encKeyId;
+     }
+ 
++    public void prepare(Crypto crypto, SecretKey symmetricKey) throws WSSecurityException  {
++        this.prepare(crypto, symmetricKey, null);
++    }
+     /**
+      * Create the EncryptedKey Element for inclusion in the security header, by encrypting the
+      * symmetricKey parameter using either a public key or certificate that is set on the class,
+@@ -182,7 +190,11 @@
+      * @param symmetricKey The symmetric key to encrypt and insert into the EncryptedKey
+      * @throws WSSecurityException
+      */
+-    public void prepare(Crypto crypto, SecretKey symmetricKey) throws WSSecurityException {
++    public void prepare(Crypto crypto, SecretKey symmetricKey, RequestData data) throws WSSecurityException {
++
++        if (data != null) {
++            this.setOmitAttachmentKeyInfo(data.isOmitAttachmentKeyInfo());
++        }
+ 
+         if (useThisPublicKey != null) {
+             createEncryptedKeyElement(useThisPublicKey);
+@@ -194,7 +206,14 @@
+             // algorithm that will encrypt the generated symmetric (session) key.
+             //
+             X509Certificate remoteCert = useThisCert;
+-            if (remoteCert == null) {
++
++            boolean useSymmetricKey = crypto != null 
++                && crypto.getKeyStore() != null 
++                && crypto.getKeyStore().getType() != null 
++                && crypto.getKeyStore().getType().equals("JCEKS")
++                && data != null;
++
++            if (remoteCert == null && !useSymmetricKey) {
+                 CryptoType cryptoType = new CryptoType(CryptoType.TYPE.ALIAS);
+                 cryptoType.setAlias(user);
+                 if (crypto == null) {
+@@ -220,7 +239,21 @@
+                 dhSpec = buildKeyAgreementParameter(remoteCert.getPublicKey());
+                 kek = generateEncryptionKey(dhSpec);
+             } else {
+-                kek = remoteCert.getPublicKey();
++                if (useSymmetricKey) {
++                    try {
++                        WSPasswordCallback pwCb = new WSPasswordCallback(user, WSPasswordCallback.SECRET_KEY);
++                        data.getCallbackHandler().handle(new Callback[]{pwCb});
++
++                        kek = crypto.getKeyStore().getKey(user, pwCb.getPassword().toCharArray());
++                    } catch (Exception e) {
++                        throw new WSSecurityException(
++                            WSSecurityException.ErrorCode.FAILURE,
++                            "noSymmetricKeyFound",
++                            new Object[] {user, "encryption"});
++                    }
++                } else { 
++                    kek = remoteCert.getPublicKey();
++                }
+             }
+ 
+             createEncryptedKeyElement(remoteCert, crypto, dhSpec);
+@@ -394,6 +427,9 @@
+ 
+     private void addIssuerSerial(X509Certificate remoteCert, SecurityTokenReference secToken, boolean isCommaDelimited)
+             throws WSSecurityException {
++        if (remoteCert == null) {
++            return;
++        }
+         String issuer = remoteCert.getIssuerX500Principal().getName();
+         java.math.BigInteger serialNumber = remoteCert.getSerialNumber();
+         DOMX509IssuerSerial domIssuerSerial =
+@@ -886,4 +922,12 @@
+     public String getEncryptedKeySHA1() {
+         return encryptedKeySHA1;
+     }
++
++    public boolean isOmitAttachmentKeyInfo() {
++        return omitAttachmentKeyInfo;
++    }
++
++    public void setOmitAttachmentKeyInfo(boolean omitAttachmentKeyInfo) {
++        this.omitAttachmentKeyInfo = omitAttachmentKeyInfo;
++    }
+ }
+diff -Naur '--exclude=.*' '--exclude=target' ../../Downloads/wss4j-3.0.3-source-release/wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/message/WSSecEncrypt.java ./ws-security-dom/src/main/java/org/apache/wss4j/dom/message/WSSecEncrypt.java
+--- wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/message/WSSecEncrypt.java	2024-02-22 13:52:52.000000000 +0100
++++ wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/message/WSSecEncrypt.java	2024-05-17 14:31:41.047279880 +0200
+@@ -34,6 +34,7 @@
+ import org.apache.wss4j.common.token.SecurityTokenReference;
+ import org.apache.wss4j.common.util.XMLUtils;
+ import org.apache.wss4j.dom.WSConstants;
++import org.apache.wss4j.dom.handler.RequestData;
+ import org.apache.wss4j.dom.message.token.KerberosSecurity;
+ import org.apache.wss4j.dom.util.WSSecurityUtil;
+ import org.apache.xml.security.algorithms.JCEMapper;
+@@ -108,17 +109,20 @@
+      * @param symmetricKey The symmetric key to use for encryption
+      * @throws WSSecurityException
+      */
+-    public void prepare(Crypto crypto, SecretKey symmetricKey) throws WSSecurityException {
++    public void prepare(Crypto crypto, SecretKey symmetricKey, RequestData data) throws WSSecurityException {
+         attachmentEncryptedDataElements = new ArrayList<>();
+ 
+         if (encryptSymmKey) {
+-            super.prepare(crypto, symmetricKey);
++            super.prepare(crypto, symmetricKey, data);
+         } else {
+             setEncryptedKeySHA1(symmetricKey.getEncoded());
+         }
+     }
+ 
+-
++    public Document build(Crypto crypto, SecretKey symmetricKey)
++            throws WSSecurityException {
++        return this.build(crypto, symmetricKey, null);
++    }
+     /**
+      * Builds the SOAP envelope with encrypted Body and adds encrypted key.
+      *
+@@ -131,10 +135,10 @@
+      * @return the SOAP envelope with encrypted Body as <code>Document</code>
+      * @throws WSSecurityException
+      */
+-    public Document build(Crypto crypto, SecretKey symmetricKey)
++    public Document build(Crypto crypto, SecretKey symmetricKey, RequestData reqData)
+         throws WSSecurityException {
+ 
+-        prepare(crypto, symmetricKey);
++        prepare(crypto, symmetricKey, reqData);
+ 
+         LOG.debug("Beginning Encryption...");
+ 
+@@ -209,6 +213,7 @@
+         encryptor.setCallbackLookup(callbackLookup);
+         encryptor.setAttachmentCallbackHandler(attachmentCallbackHandler);
+         encryptor.setStoreBytesInAttachment(storeBytesInAttachment);
++        encryptor.setOmitAttachmentKeyInfo(omitAttachmentKeyInfo);
+         encryptor.setEncryptionSerializer(getEncryptionSerializer());
+         encryptor.setExpandXopInclude(isExpandXopInclude());
+         encryptor.setWsDocInfo(getWsDocInfo());
+diff -Naur '--exclude=.*' '--exclude=target' ../../Downloads/wss4j-3.0.3-source-release/wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/message/WSSecSignatureBase.java ./ws-security-dom/src/main/java/org/apache/wss4j/dom/message/WSSecSignatureBase.java
+--- wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/message/WSSecSignatureBase.java	2024-02-22 13:52:52.000000000 +0100
++++ wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/message/WSSecSignatureBase.java	2024-05-17 14:36:23.458608326 +0200
+@@ -62,6 +62,8 @@
+ 
+     private List<Element> clonedElements = new ArrayList<>();
+ 
++    protected boolean explicitAttachmentInclusiveNamespace;
++
+     public WSSecSignatureBase(WSSecHeader securityHeader) {
+         super(securityHeader);
+     }
+@@ -144,6 +146,10 @@
+                                 transformSpec = new ExcC14NParameterSpec(prefixes);
+                             }
+                         }
++
++                        if (transformSpec == null && explicitAttachmentInclusiveNamespace) {
++                            transformSpec = new ExcC14NParameterSpec();
++                        }
+                         transform =
+                             signatureFactory.newTransform(
+                                 WSConstants.C14N_EXCL_OMIT_COMMENTS,
+@@ -192,11 +198,10 @@
+                         cloneElement(elementToSign);
+ 
+                         TransformParameterSpec transformSpec = null;
+-                        if (addInclusivePrefixes) {
+-                            List<String> prefixes = getInclusivePrefixes(elementToSign);
+-                            if (!prefixes.isEmpty()) {
+-                                transformSpec = new ExcC14NParameterSpec(prefixes);
+-                            }
++                        List<String> prefixes = getInclusivePrefixes(elementToSign);
++                        if (explicitAttachmentInclusiveNamespace
++                            || addInclusivePrefixes && !prefixes.isEmpty()) {
++                            transformSpec = new ExcC14NParameterSpec(prefixes);
+                         }
+                         Transform transform =
+                             signatureFactory.newTransform(
+@@ -280,7 +285,7 @@
+ 
+                     AttachmentTransformParameterSpec attachmentTransformParameterSpec =
+                         new AttachmentTransformParameterSpec(
+-                            attachmentCallbackHandler, attachment
++                            attachmentCallbackHandler, attachment, explicitAttachmentInclusiveNamespace
+                         );
+ 
+                     String attachmentSignatureTransform = WSConstants.SWA_ATTACHMENT_CONTENT_SIG_TRANS;
+@@ -353,4 +358,11 @@
+         }
+     }
+ 
++    public boolean isExplicitAttachmentInclusiveNamespace() {
++        return explicitAttachmentInclusiveNamespace;
++    }
++
++    public void setExplicitAttachmentInclusiveNamespace(boolean explicitAttachmentInclusiveNamespace) {
++        this.explicitAttachmentInclusiveNamespace = explicitAttachmentInclusiveNamespace;
++    }
+ }
+diff -Naur '--exclude=.*' '--exclude=target' ../../Downloads/wss4j-3.0.3-source-release/wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/message/WSSecSignature.java ./ws-security-dom/src/main/java/org/apache/wss4j/dom/message/WSSecSignature.java
+--- wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/message/WSSecSignature.java	2024-02-22 13:52:52.000000000 +0100
++++ wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/message/WSSecSignature.java	2024-05-17 14:39:07.400701575 +0200
+@@ -112,6 +112,9 @@
+     private Element customKeyInfoElement;
+     private Provider signatureProvider;
+ 
++    private boolean omitAttachmentKeyInfo = false;
++    private boolean omitCanonicalizationInclusiveNamespace = false;
++
+     public WSSecSignature(WSSecHeader securityHeader) {
+         this(securityHeader, null);
+     }
+@@ -178,7 +181,9 @@
+ 
+         try {
+             C14NMethodParameterSpec c14nSpec = null;
+-            if (addInclusivePrefixes && canonAlgo.equals(WSConstants.C14N_EXCL_OMIT_COMMENTS)) {
++            if (addInclusivePrefixes 
++                    && canonAlgo.equals(WSConstants.C14N_EXCL_OMIT_COMMENTS)
++                    && !omitCanonicalizationInclusiveNamespace) {
+                 Element securityHeaderElement = getSecurityHeader().getSecurityHeaderElement();
+                 List<String> prefixes =
+                     getInclusivePrefixes(securityHeaderElement, false);
+@@ -986,4 +991,20 @@
+     public String getKeyInfoUri() {
+         return keyInfoUri;
+     }
++
++    public boolean isOmitAttachmentKeyInfo() {
++        return omitAttachmentKeyInfo;
++    }
++
++    public void setOmitAttachmentKeyInfo(boolean omitAttachmentKeyInfo) {
++        this.omitAttachmentKeyInfo = omitAttachmentKeyInfo;
++    }
++
++    public boolean isOmitCanonicalizationInclusiveNamespace() {
++        return omitCanonicalizationInclusiveNamespace;
++    }
++
++    public void setOmitCanonicalizationInclusiveNamespace(boolean omitCanonicalizationInclusiveNamespace) {
++        this.omitCanonicalizationInclusiveNamespace = omitCanonicalizationInclusiveNamespace;
++    }
+ }
+diff -Naur '--exclude=.*' '--exclude=target' ../../Downloads/wss4j-3.0.3-source-release/wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/processor/EncryptedKeyProcessor.java ./ws-security-dom/src/main/java/org/apache/wss4j/dom/processor/EncryptedKeyProcessor.java
+--- wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/processor/EncryptedKeyProcessor.java	2024-02-22 13:52:52.000000000 +0100
++++ wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/processor/EncryptedKeyProcessor.java	2024-05-17 14:52:02.617197230 +0200
+@@ -22,6 +22,7 @@
+ import java.io.ByteArrayInputStream;
+ import java.io.IOException;
+ import java.io.InputStream;
++import java.lang.reflect.InvocationTargetException;
+ import java.security.*;
+ import java.security.cert.X509Certificate;
+ import java.util.ArrayList;
+@@ -32,6 +33,9 @@
+ import javax.crypto.KeyGenerator;
+ import javax.crypto.SecretKey;
+ import javax.crypto.spec.OAEPParameterSpec;
++import javax.security.auth.callback.Callback;
++import javax.security.auth.callback.CallbackHandler;
++import javax.security.auth.callback.UnsupportedCallbackException;
+ import javax.xml.crypto.dsig.XMLSignatureFactory;
+ 
+ import org.apache.xml.security.encryption.AgreementMethod;
+@@ -49,6 +53,7 @@
+ import org.apache.wss4j.common.crypto.AlgorithmSuite;
+ import org.apache.wss4j.common.crypto.AlgorithmSuiteValidator;
+ import org.apache.wss4j.common.crypto.CryptoType;
++import org.apache.wss4j.common.ext.WSPasswordCallback;
+ import org.apache.wss4j.common.ext.WSSecurityException;
+ import org.apache.wss4j.common.token.DOMX509IssuerSerial;
+ import org.apache.wss4j.common.token.SecurityTokenReference;
+@@ -204,7 +209,37 @@
+             decryptedBytes = getDiffieHellmanDecryptedBytes(data, agreementMethod,
+                     encryptedKeyTransportMethod, encryptedEphemeralKey, privateKey);
+         } else if (symmetricKeyWrap) {
+-            decryptedBytes = getSymmetricDecryptedBytes(data, data.getWsDocInfo(), keyInfoChildElement, refList);
++            boolean isNotStatic = data.getMsgContext().getClass().toString()
++                .equals("class org.apache.cxf.binding.soap.SoapMessage");
++            String user = null;
++            if (isNotStatic) {
++                try {
++                    user = (String) data.getMsgContext()
++                            .getClass()
++                            .getMethod("get", Object.class)
++                            .invoke(data.getMsgContext(), "decryptionUser");
++                    isNotStatic = data.getMsgContext()
++                            .getClass()
++                            .getMethod("get", Object.class)
++                            .invoke(data.getMsgContext(), "decryptionSymmetricKey")
++                            .equals("true");
++                } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
++                    throw new WSSecurityException(
++                             WSSecurityException.ErrorCode.FAILURE,
++                             "conflict with class org.apache.cxf.binding.soap.SoapMessage",
++                             new Object[] {"decryption (KeyId)"});
++                }
++            }
++            
++            if (isNotStatic) {
++                decryptedBytes = getSymmetricDynamicDecryptedBytes(data, 
++                    encryptedKeyTransportMethod,
++                    encryptedEphemeralKey,
++                    data.getCallbackHandler(),
++                    user);
++            } else {
++                decryptedBytes = getSymmetricDecryptedBytes(data, data.getWsDocInfo(), keyInfoChildElement, refList);
++            }
+         } else {
+             PrivateKey privateKey = getPrivateKey(data, certs, publicKey);
+             decryptedBytes = getAsymmetricDecryptedBytes(data, data.getWsDocInfo(), encryptedKeyTransportMethod,
+@@ -318,6 +353,44 @@
+         }
+         return X509Util.getSecretKey(keyInfoChildElement, algorithmURI, data.getCallbackHandler());
+     }
++    
++    private static byte[] getSymmetricDynamicDecryptedBytes(
++            RequestData data,
++            String encryptedKeyTransportMethod,
++            byte[] encryptedEphemeralKey,
++            CallbackHandler cb,
++            String user) throws WSSecurityException {
++        if (data.getDecCrypto() == null) {
++            throw new WSSecurityException(WSSecurityException.ErrorCode.FAILURE, "noDecCryptoFile");
++        }
++        String cryptoProvider = data.getDecCrypto().getCryptoProvider();
++        Cipher cipher = KeyUtils.getCipherInstance(encryptedKeyTransportMethod, cryptoProvider);
++
++        try {
++            String pwd;
++            WSPasswordCallback pwCb = new WSPasswordCallback(user, WSPasswordCallback.SECRET_KEY);
++            try {
++                cb.handle(new Callback[]{pwCb});
++            } catch (IOException | UnsupportedCallbackException e) {
++                throw new WSSecurityException(
++                        WSSecurityException.ErrorCode.FAILURE, e,
++                        "noPassword",
++                        new Object[] {user});
++            }
++
++            pwd = pwCb.getPassword();
++            Key symKey = data.getDecCrypto().getKeyStore().getKey(user, pwd.toCharArray());
++            cipher.init(Cipher.UNWRAP_MODE, symKey);
++
++            String keyAlgorithm = JCEMapper.translateURItoJCEID(encryptedKeyTransportMethod);
++            return cipher.unwrap(encryptedEphemeralKey, keyAlgorithm, Cipher.SECRET_KEY).getEncoded();
++        } catch (UnrecoverableKeyException 
++                | KeyStoreException
++                | InvalidKeyException
++                | NoSuchAlgorithmException ex) {
++            throw new WSSecurityException(WSSecurityException.ErrorCode.FAILED_CHECK, ex);
++        }
++    }
+ 
+     private static byte[] getAsymmetricDecryptedBytes(
+         RequestData data,
+@@ -749,7 +822,8 @@
+             // EncryptionAlgorithm must be RSA15, or RSAOEP.
+             if (!(WSConstants.KEYTRANSPORT_RSA15.equals(encAlgo)
+                     || WSConstants.KEYTRANSPORT_RSAOAEP.equals(encAlgo)
+-                    || WSConstants.KEYTRANSPORT_RSAOAEP_XENC11.equals(encAlgo))) {
++                    || WSConstants.KEYTRANSPORT_RSAOAEP_XENC11.equals(encAlgo)
++                    || XMLCipher.TRIPLEDES_KeyWrap.equals(encAlgo))) {
+                 bspEnforcer.handleBSPRule(BSPRule.R5621);
+             }
+         }
+diff -Naur '--exclude=.*' '--exclude=target' ../../Downloads/wss4j-3.0.3-source-release/wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/transform/AttachmentContentSignatureTransform.java ./ws-security-dom/src/main/java/org/apache/wss4j/dom/transform/AttachmentContentSignatureTransform.java
+--- wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/transform/AttachmentContentSignatureTransform.java	2024-02-22 13:52:52.000000000 +0100
++++ wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/transform/AttachmentContentSignatureTransform.java	2024-05-17 14:56:34.954221771 +0200
+@@ -31,6 +31,9 @@
+ import org.apache.xml.security.c14n.InvalidCanonicalizerException;
+ import org.apache.xml.security.parser.XMLParserException;
+ import org.apache.xml.security.signature.XMLSignatureInput;
++import org.apache.xml.security.utils.XMLUtils;
++import org.w3c.dom.Document;
++import org.w3c.dom.Element;
+ 
+ import javax.security.auth.callback.Callback;
+ import javax.security.auth.callback.CallbackHandler;
+@@ -39,6 +42,7 @@
+ import javax.xml.crypto.OctetStreamData;
+ import javax.xml.crypto.XMLCryptoContext;
+ import javax.xml.crypto.XMLStructure;
++import javax.xml.crypto.dom.DOMStructure;
+ import javax.xml.crypto.dsig.TransformException;
+ import javax.xml.crypto.dsig.TransformService;
+ import javax.xml.crypto.dsig.spec.TransformParameterSpec;
+@@ -79,6 +83,26 @@
+ 
+     @Override
+     public void marshalParams(XMLStructure parent, XMLCryptoContext context) throws MarshalException {
++        DOMStructure dom;
++
++        if (!this.attachmentTransformParameterSpec.isExplicitInclusiveNS()) {
++            return;
++        }
++
++        if (!(parent instanceof DOMStructure)) {
++            throw new ClassCastException("parent must be of type DOMStructure");
++        }
++        dom = (DOMStructure) parent;
++        Document doc = XMLUtils.getOwnerDocument(dom.getNode());
++        Element inclusiveNamespaces = doc.createElementNS(
++        WSConstants.C14N_EXCL_OMIT_COMMENTS,
++        WSConstants.C14N_EXCL_OMIT_COMMENTS_PREFIX + ":InclusiveNamespaces");
++        inclusiveNamespaces.setAttributeNS(
++        WSConstants.XMLNS_NS,
++        "xmlns:" + WSConstants.C14N_EXCL_OMIT_COMMENTS_PREFIX,
++        WSConstants.C14N_EXCL_OMIT_COMMENTS);
++        inclusiveNamespaces.setAttributeNS(null, "PrefixList", "");
++        dom.getNode().appendChild(inclusiveNamespaces);
+     }
+ 
+     @Override
+diff -Naur '--exclude=.*' '--exclude=target' ../../Downloads/wss4j-3.0.3-source-release/wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/transform/AttachmentTransformParameterSpec.java ./ws-security-dom/src/main/java/org/apache/wss4j/dom/transform/AttachmentTransformParameterSpec.java
+--- wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/transform/AttachmentTransformParameterSpec.java	2024-02-22 13:52:52.000000000 +0100
++++ wss4j-3.0.3/ws-security-dom/src/main/java/org/apache/wss4j/dom/transform/AttachmentTransformParameterSpec.java	2024-05-17 14:56:30.216134562 +0200
+@@ -27,12 +27,15 @@
+ 
+     private CallbackHandler attachmentCallbackHandler;
+     private Attachment attachment;
++    private boolean explicitInclusiveNS;
+ 
+     public AttachmentTransformParameterSpec(
+             CallbackHandler attachmentCallbackHandler,
+-            Attachment attachment) {
++            Attachment attachment,
++            boolean explicitInclusiveNS) {
+         this.attachmentCallbackHandler = attachmentCallbackHandler;
+         this.attachment = attachment;
++        this.explicitInclusiveNS = explicitInclusiveNS;
+     }
+ 
+     public CallbackHandler getAttachmentCallbackHandler() {
+@@ -42,4 +45,8 @@
+     public Attachment getAttachment() {
+         return attachment;
+     }
++    
++    public boolean isExplicitInclusiveNS() {
++        return explicitInclusiveNS;
++    }
+ }

@@ -1,0 +1,187 @@
+diff -Naur --strip '--exclude=.*' '--exclude=target' wss4j-4.0.0/ws-security-common/src/main/java/org/apache/wss4j/common/ConfigurationConstants.java wss4j-4.0.0/ws-security-common/src/main/java/org/apache/wss4j/common/ConfigurationConstants.java
+--- wss4j-4.0.0/ws-security-common/src/main/java/org/apache/wss4j/common/ConfigurationConstants.java	2024-05-17 10:44:00.782064640 +0200
++++ wss4j-4.0.0/ws-security-common/src/main/java/org/apache/wss4j/common/ConfigurationConstants.java	2024-05-16 15:00:59.077738563 +0200
+@@ -404,6 +404,24 @@
+      * The default is true.
+      */
+     public static final String ADD_INCLUSIVE_PREFIXES = "addInclusivePrefixes";
++    
++    /**
++     * Inserisce gli elementi "InclusiveNamespace" anche se la lista dei prefissi 
++     * nella trasformazione degli attachment e' vuota
++     */
++    public static final String EXPLICIT_ATTACH_INCLUSIVE_NS = "explicitAttachmentInclusiveNamespace";
++    
++    /**
++     * Non inserisce l'elemento "InclusiveNamespace" all'interno dell'elemento 
++     * "CanonicalizationMethod"
++     */
++    public static final String OMIT_CANON_INCLUSIVE_NS = "omitCanonicalizationInclusiveNamespace";
++    
++    /**
++     * Non inserisce all'interno della EncryptedData dell'attachment l'elemento 
++     * "KeyInfo"
++     */
++    public static final String OMIT_ATTACH_KEY_INFO = "omitAttachmentKeyInfo";
+ 
+     /**
+      * Whether to add a Nonce Element to a UsernameToken. This only applies when the
+diff -Naur --strip '--exclude=.*' '--exclude=target' wss4j-4.0.0/ws-security-common/src/main/java/org/apache/wss4j/common/crypto/Crypto.java wss4j-4.0.0/ws-security-common/src/main/java/org/apache/wss4j/common/crypto/Crypto.java
+--- wss4j-4.0.0/ws-security-common/src/main/java/org/apache/wss4j/common/crypto/Crypto.java	2024-05-17 10:44:00.780064600 +0200
++++ wss4j-4.0.0/ws-security-common/src/main/java/org/apache/wss4j/common/crypto/Crypto.java	2024-05-07 17:37:19.913184101 +0200
+@@ -19,6 +19,7 @@
+ package org.apache.wss4j.common.crypto;
+ 
+ import java.io.InputStream;
++import java.security.KeyStore;
+ import java.security.PrivateKey;
+ import java.security.PublicKey;
+ import java.security.cert.CertificateFactory;
+@@ -37,6 +38,14 @@
+     //
+ 
+     /**
++     * Get the KeyStore associated with the crypto interface
++     * @return the keystore associated
++     */
++    default KeyStore getKeyStore() {
++        return null;
++    }
++
++    /**
+      * Get the crypto provider associated with this implementation
+      * @return the crypto provider
+      */
+diff --exclude target -urNbB wss4j-4.0.0.orig/ws-security-common/src/main/java/org/apache/wss4j/common/crypto/Merlin.java wss4j-4.0.0/ws-security-common/src/main/java/org/apache/wss4j/common/crypto/Merlin.java
+--- wss4j-4.0.0/ws-security-common/src/main/java/org/apache/wss4j/common/crypto/Merlin.java	2024-02-22 13:52:52.000000000 +0100
++++ wss4j-4.0.0/ws-security-common/src/main/java/org/apache/wss4j/common/crypto/Merlin.java	2024-10-23 09:45:12.461213231 +0200
+@@ -744,6 +744,24 @@
+     }
+ 
+     /**
++     * Nel truststore ci vogliono tutti i certificati fino alla CA di root altrimenti si ottiene l'errore: "A security error was encountered when verifying the message ; Trust anchor for certification path not found."
++     * Nell'implementazione di default vengono però validati rispetto al file crl indicato tutti i certificati, anche quelli intermedi.
++     * Questo comporta che validando un certificato intermedio, se si fornisce solo una CRL, si ottiene l'errore: 
++     *     "No CRLs found for issuer &quot;cn=RootCA,ou=TEST,o=Example,c=IT&quot;"" poichè non si trova una CRL rilasciata dal certificato intermedio che stiamo validando.
++     * Per risolvere andrebbe fornito un file CRL per ogni certificato, compreso quelli intermedi.
++     * Se invece si vuole far validare, con la CRL, solo il certificato finale si può effettuare la sovrascrittura di questo metodo.
++     *
++     */
++    public void setValidateOnlyEndEntity(boolean v) {
++       this.validateOnlyEndEntity = true;
++    }
++    public boolean isValidateOnlyEndEntity() {
++       return this.validateOnlyEndEntity;
++    }
++    private boolean validateOnlyEndEntity = false;
++
++
++    /**
+      * Evaluate whether a given certificate chain should be trusted.
+      *
+      * @param certs Certificate chain to validate
+@@ -826,7 +844,14 @@
+         LOG.debug(
+             "Preparing to validate certificate path for issuer {}", issuerString
+         );
++        validateThirdStep(certs, enableRevocation, subjectCertConstraints, foundIssuingCertChains);
+ 
++    }
++    private void validateThirdStep(
++        X509Certificate[] certs,
++        boolean enableRevocation,
++        Collection<Pattern> subjectCertConstraints, 
++        List<Certificate[]> foundIssuingCertChains) throws WSSecurityException {
+         try {
+             Set<TrustAnchor> set = new HashSet<>();
+             if (truststore != null) {
+@@ -853,6 +878,81 @@
+ 
+             PKIXParameters param = createPKIXParameters(set, enableRevocation);
+ 
++            if (this.validateOnlyEndEntity) { 
++            
++                // Generate cert path
++                PKIXParameters paramNoCRL = null; 
++                if (foundIssuingCertChains != null && !foundIssuingCertChains.isEmpty()) {
++                   
++                   java.security.cert.CertPathValidatorException validatorException = null;
++                   // Try each potential issuing cert path for a match
++                   for (Certificate[] foundCertChain : foundIssuingCertChains) {
++                        X509Certificate[] x509certs = new X509Certificate[foundCertChain.length + 1];
++                        x509certs[0] = certs[0];
++                        System.arraycopy(foundCertChain, 0, x509certs, 1, foundCertChain.length);
++
++                        List<X509Certificate> certList = Arrays.asList(x509certs);
++                        int i = -1;
++                        for (X509Certificate c : certList) {
++                           i++;
++                           
++                           List<java.security.cert.Certificate> lCertificate = new ArrayList<>();
++                           lCertificate.add(c);
++                           CertPath path = getCertificateFactory().generateCertPath(lCertificate);
++                           
++                           try {
++                              if (i == 0) {
++                                 //System.out.println("VALIDATE CON CRL!");
++                                 validator.validate(path, param);
++                              } else {
++                                 //System.out.println("VALIDATE SENZA CRL!");
++                                 if (paramNoCRL == null) {
++                                    paramNoCRL = createPKIXParameters(set, false);
++                                 }
++                                 validator.validate(path, paramNoCRL);
++                              }
++                           } catch (java.security.cert.CertPathValidatorException e) {
++                              validatorException = e;
++                              break;
++                           }
++                        }
++                        
++                        if (validatorException != null) {
++                           throw validatorException;
++                        } else {
++                           // We have a valid cert path at this point so break
++                           break;
++                        }
++                   }
++                   
++                   if (validatorException != null) {
++                        throw validatorException;
++                   }
++                   
++                } else {
++                   List<X509Certificate> certList = Arrays.asList(certs);
++                   
++                   int i = -1;
++                   for (X509Certificate c : certList) {
++                      i++;
++                      List<java.security.cert.Certificate> lCertificate = new ArrayList<>();
++                      lCertificate.add(c);
++                      CertPath path = getCertificateFactory().generateCertPath(lCertificate);
++                      if (i == 0) {
++                         //System.out.println("VALIDATE CON CRL no foundIssuingCertChains!");
++                         validator.validate(path, param);
++                      } else {
++                         //System.out.println("VALIDATE SENZA CRL no foundIssuingCertChains!");
++                         if (paramNoCRL == null) {
++                            paramNoCRL = createPKIXParameters(set, false);
++                         }
++                         validator.validate(path, paramNoCRL);
++                      }
++                   }
++                }
++            
++            } else {
++
+             // Generate cert path
+             if (foundIssuingCertChains != null && !foundIssuingCertChains.isEmpty()) {
+                 java.security.cert.CertPathValidatorException validatorException = null;
+@@ -884,6 +984,7 @@
+ 
+                 validator.validate(path, param);
+             }
++            }
+         } catch (NoSuchProviderException | NoSuchAlgorithmException
+             | CertificateException | InvalidAlgorithmParameterException
+             | java.security.cert.CertPathValidatorException

@@ -1,0 +1,21 @@
+ NOTA: Usare java 11 e maven 3.6.1 o superiore
+
+wget https://archive.apache.org/dist/ws/wss4j/2.4.1/wss4j-2.4.1-source-release.zip
+unzip -q wss4j-2.4.1-source-release.zip
+patch -p0 < sorgenti_common.patch
+patch -p0 < sorgenti_common_saml.patch
+patch -p0 < sorgenti_dom.patch
+patch -p0 < wss86.keystore.patch
+cp wss86.keystore.updated wss4j-2.4.1/ws-security-common/src/test/resources/keys/wss86.keystore
+cd wss4j-2.4.1
+mvn clean install
+cd ws-security-common/
+mvn javadoc:javadoc
+cd ..
+cd ws-security-dom/
+mvn javadoc:javadoc
+cd ..
+cd ..
+
+
+

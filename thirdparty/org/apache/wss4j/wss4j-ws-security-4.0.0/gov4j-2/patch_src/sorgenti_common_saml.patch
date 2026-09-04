@@ -1,0 +1,95 @@
+diff -urN wss4j-4.0.0/ws-security-common/src/main/java/org/apache/wss4j/common/saml/bean/AuthenticationStatementBean.java wss4j-2.4.1/ws-security-common/src/main/java/org/apache/wss4j/common/saml/bean/AuthenticationStatementBean.java
+--- wss4j-4.0.0/ws-security-common/src/main/java/org/apache/wss4j/common/saml/bean/AuthenticationStatementBean.java	2022-02-11 11:56:02.000000000 +0100
++++ wss4j-4.0.0/ws-security-common/src/main/java/org/apache/wss4j/common/saml/bean/AuthenticationStatementBean.java	2025-10-10 10:31:49.808551865 +0200
+@@ -31,6 +31,7 @@
+     private DateTime sessionNotOnOrAfter;
+     private DateTime authenticationInstant;
+     private String authenticationMethod;
++    private String authnContextDeclRef;
+     private SubjectLocalityBean subjectLocality;
+     private String sessionIndex;
+ 
+@@ -93,6 +94,22 @@
+     }
+ 
+     /**
++     * Get the authentication context declaration reference
++     * @return the authentication context declaration reference
++     */
++    public String getAuthnContextDeclRef() {
++        return authnContextDeclRef;
++    }
++
++    /**
++     * Set the authentication context declaration reference
++     * @param authnContextDeclRef the authentication context declaration reference
++     */
++    public void setAuthnContextDeclRef(String authnContextDeclRef) {
++        this.authnContextDeclRef = authnContextDeclRef;
++    }
++
++    /**
+      * Get the authentication instant
+      * @return the authentication instant
+      */
+@@ -192,6 +209,13 @@
+             return false;
+         }
+ 
++        if (authnContextDeclRef == null && that.authnContextDeclRef != null) {
++            return false;
++        } else if (authnContextDeclRef != null
++            && !authnContextDeclRef.equals(that.authnContextDeclRef)) {
++            return false;
++        }
++
+         if (subject == null && that.subject != null) {
+             return false;
+         } else if (subject != null
+@@ -220,6 +244,7 @@
+         result = 31 * result + (authenticationInstant != null ? authenticationInstant.hashCode() : 0);
+         result = 31 * result + (sessionNotOnOrAfter != null ? sessionNotOnOrAfter.hashCode() : 0);
+         result = 31 * result + (authenticationMethod != null ? authenticationMethod.hashCode() : 0);
++        result = 31 * result + (authnContextDeclRef != null ? authnContextDeclRef.hashCode() : 0);
+         result = 31 * result + (subjectLocality != null ? subjectLocality.hashCode() : 0);
+         result = 31 * result + (sessionIndex != null ? sessionIndex.hashCode() : 0);
+         return result;
+diff -urN wss4j-4.0.0/ws-security-common/src/main/java/org/apache/wss4j/common/saml/builder/SAML2ComponentBuilder.java wss4j-2.4.1/ws-security-common/src/main/java/org/apache/wss4j/common/saml/builder/SAML2ComponentBuilder.java
+--- wss4j-4.0.0/ws-security-common/src/main/java/org/apache/wss4j/common/saml/builder/SAML2ComponentBuilder.java	2022-02-11 11:56:02.000000000 +0100
++++ wss4j-4.0.0/ws-security-common/src/main/java/org/apache/wss4j/common/saml/builder/SAML2ComponentBuilder.java	2025-10-10 10:33:56.985504386 +0200
+@@ -121,6 +121,8 @@
+ 
+     private static volatile SAMLObjectBuilder<AuthnContextClassRef> authnContextClassRefBuilder;
+ 
++    private static volatile SAMLObjectBuilder<org.opensaml.saml.saml2.core.AuthnContextDeclRef> authnContextDeclRefBuilder;
++
+     private static volatile SAMLObjectBuilder<AttributeStatement> attributeStatementBuilder;
+ 
+     private static volatile SAMLObjectBuilder<Attribute> attributeBuilder;
+@@ -465,6 +467,10 @@
+             authnContextClassRefBuilder = (SAMLObjectBuilder<AuthnContextClassRef>)
+                 builderFactory.getBuilder(AuthnContextClassRef.DEFAULT_ELEMENT_NAME);
+         }
++        if (authnContextDeclRefBuilder == null) {
++            authnContextDeclRefBuilder = (SAMLObjectBuilder<org.opensaml.saml.saml2.core.AuthnContextDeclRef>)
++                builderFactory.getBuilder(org.opensaml.saml.saml2.core.AuthnContextDeclRef.DEFAULT_ELEMENT_NAME);
++        }
+         if (subjectLocalityBuilder == null) {
+             subjectLocalityBuilder = (SAMLObjectBuilder<SubjectLocality>)
+             builderFactory.getBuilder(SubjectLocality.DEFAULT_ELEMENT_NAME);
+@@ -494,6 +500,15 @@
+                 );
+                 AuthnContext authnContext = authnContextBuilder.buildObject();
+                 authnContext.setAuthnContextClassRef(authnContextClassRef);
++
++                // Gestione AuthnContextDeclRef se presente
++                if (statementBean.getAuthnContextDeclRef() != null) {
++                    org.opensaml.saml.saml2.core.AuthnContextDeclRef authnContextDeclRef =
++                        authnContextDeclRefBuilder.buildObject();
++                    authnContextDeclRef.setURI(statementBean.getAuthnContextDeclRef());
++                    authnContext.setAuthnContextDeclRef(authnContextDeclRef);
++                }
++
+                 authnStatement.setAuthnContext(authnContext);
+ 
+                 SubjectLocalityBean subjectLocalityBean = statementBean.getSubjectLocality();

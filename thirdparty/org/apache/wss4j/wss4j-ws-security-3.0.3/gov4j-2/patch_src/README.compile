@@ -1,0 +1,13 @@
+ NOTA: Usare java 11 e maven 3.6.1 o superiore
+
+wget https://archive.apache.org/dist/ws/wss4j/3.0.3/wss4j-3.0.3-source-release.zip
+unzip -q wss4j-3.0.3-source-release.zip
+patch -p0 < sorgenti_common.patch
+patch -p0 < sorgenti_dom.patch
+cd wss4j-3.0.3
+mvn clean install
+mvn javadoc:javadoc
+cd ..
+
+
+

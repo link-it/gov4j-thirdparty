@@ -1,0 +1,7 @@
+Aggiunta la gestione delle seguenti variabili:
+
+explicitAttachmentInclusiveNamespace   [value: boolean, default false]: Inserisce gli elementi "InclusiveNamespace" anche se la lista dei prefissi nella trasformazione degli attachment è vuota
+omitCanonicalizationInclusiveNamespace [value: boolean, default false]: Non inserisce l'elemento "InclusiveNamespace" all'interno dell'elemento "CanonicalizationMethod"
+omitAttachmentKeyInfo                  [value: boolean, default false]: Non inserisce all'interno della EncryptedData dell'attachment l'elemento "KeyInfo"
+
+È inoltre stato inoltre aggiunto il supporto a cifrare la chiave simmetrica usata per la cifratura tramite una ulteriore chiave simmetrica prelevata da un keystore di tipo JCEKS. 
