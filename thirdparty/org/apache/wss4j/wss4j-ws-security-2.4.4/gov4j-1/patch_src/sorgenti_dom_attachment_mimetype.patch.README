@@ -1,0 +1,40 @@
+Patch: sorgenti_dom_attachment_mimetype.patch
+
+Aggiunta la gestione della seguente variabile:
+
+decryptAttachmentMimeTypeFallback [value: boolean, default false]: In ricezione, per un attachment cifrato in modalità 'Attachment-Complete' (es. encryptionParts '{Element}cid:Attachments')
+                                  i cui header MIME protetti dalla cifratura non contengono il 'Content-Type', utilizza il MimeType indicato nell'elemento EncryptedData
+                                  invece di considerare non valida la decifratura.
+
+Il valore utilizzato quando la proprietà non è indicata può essere modificato una volta per tutte, per l'intera JVM, tramite il metodo statico:
+
+  org.apache.wss4j.dom.handler.RequestData.setDecryptAttachmentMimeTypeFallbackEnabled(true);
+
+Il default statico si applica alle istanze di RequestData create successivamente e alla lettura della proprietà effettuata dal WSHandler;
+se la proprietà è indicata nella configurazione, il suo valore ha sempre la precedenza sul default statico.
+
+Motivazione:
+A partire dalla versione 2.4.4, nella decifratura di un attachment 'Attachment-Complete' il tipo del contenuto viene ricavato esclusivamente
+dagli header MIME protetti dalla cifratura (in precedenza venivano uniti a quelli, non protetti, della parte MIME che trasporta l'attachment);
+se tra gli header protetti non è presente il 'Content-Type' la decifratura termina con l'errore "The signature or decryption was invalid".
+I mittenti che non includono gli header MIME nella cifratura (es. GovWay fino alla versione 3.3.20 senza l'opzione 'encryptAttachmentHeaders')
+producono un blocco di header protetti vuoto e i loro messaggi non vengono quindi più accettati.
+
+Sicurezza:
+Per default (proprietà non impostata o 'false' e default statico non modificato) il comportamento e il livello di sicurezza restano
+invariati rispetto alla versione 2.4.4: l'assenza del 'Content-Type' negli header protetti causa il fallimento della decifratura.
+Solo abilitando esplicitamente la proprietà viene utilizzato, come per gli attachment cifrati in modalità 'Attachment-Content-Only',
+il MimeType dell'elemento EncryptedData presente nell'header WS-Security; gli header MIME esterni, non protetti dalla cifratura,
+non vengono in alcun caso utilizzati. La proprietà va abilitata solamente sui riceventi che devono interoperare con mittenti che
+non cifrano gli header MIME degli attachment.
+
+Classi modificate:
+- org.apache.wss4j.common.ConfigurationConstants (costante DECRYPT_ATTACH_MIME_TYPE_FALLBACK)
+- org.apache.wss4j.dom.handler.RequestData
+- org.apache.wss4j.dom.handler.WSHandler
+- org.apache.wss4j.dom.util.EncryptionUtils
+- org.apache.wss4j.dom.processor.EncryptedKeyProcessor
+- org.apache.wss4j.dom.processor.EncryptedDataProcessor
+- org.apache.wss4j.dom.processor.ReferenceListProcessor
+
+La patch va applicata dopo le patch sorgenti_common.patch, sorgenti_common_saml.patch e sorgenti_dom.patch (vedi README.compile).

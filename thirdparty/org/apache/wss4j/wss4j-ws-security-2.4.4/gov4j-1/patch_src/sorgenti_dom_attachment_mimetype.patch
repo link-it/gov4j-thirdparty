@@ -1,0 +1,192 @@
+diff -Naur wss4j-2.4.4-orig/ws-security-common/src/main/java/org/apache/wss4j/common/ConfigurationConstants.java wss4j-2.4.4/ws-security-common/src/main/java/org/apache/wss4j/common/ConfigurationConstants.java
+--- wss4j-2.4.4/ws-security-common/src/main/java/org/apache/wss4j/common/ConfigurationConstants.java	2026-10-05 10:39:13.785730627 +0200
++++ wss4j-2.4.4/ws-security-common/src/main/java/org/apache/wss4j/common/ConfigurationConstants.java	2026-10-05 10:39:13.823683522 +0200
+@@ -424,6 +424,13 @@
+     public static final String OMIT_ATTACH_KEY_INFO = "omitAttachmentKeyInfo";
+ 
+     /**
++     * In ricezione, per un attachment cifrato in modalità 'Attachment-Complete' i cui header MIME protetti
++     * non contengono il 'Content-Type', utilizza il MimeType indicato nell'elemento EncryptedData invece
++     * di considerare non valida la decifratura (retrocompatibilità con mittenti che non cifrano gli header).
++     */
++    public static final String DECRYPT_ATTACH_MIME_TYPE_FALLBACK = "decryptAttachmentMimeTypeFallback";
++
++    /**
+      * Whether to add a Nonce Element to a UsernameToken. This only applies when the
+      * password type is of type "text". A Nonce is automatically added for the "digest"
+      * case. The default is false.
+diff -Naur wss4j-2.4.4-orig/ws-security-dom/src/main/java/org/apache/wss4j/dom/handler/RequestData.java wss4j-2.4.4/ws-security-dom/src/main/java/org/apache/wss4j/dom/handler/RequestData.java
+--- wss4j-2.4.4/ws-security-dom/src/main/java/org/apache/wss4j/dom/handler/RequestData.java	2026-10-05 10:39:13.791808731 +0200
++++ wss4j-2.4.4/ws-security-dom/src/main/java/org/apache/wss4j/dom/handler/RequestData.java	2026-10-05 10:39:35.969961964 +0200
+@@ -201,6 +201,12 @@
+     private boolean omitAttachmentKeyInfo = false;
+     private boolean omitCanonicalizationInclusiveNamespace = false;
+     private boolean explicitAttachmentInclusiveNamespace = false;
++    /**
++     * Valore di default della proprietà 'decryptAttachmentMimeTypeFallback', utilizzato quando la proprietà non è indicata.
++     * Per default è disabilitato: il comportamento e il livello di sicurezza restano quelli della versione originale.
++     */
++    private static volatile boolean decryptAttachmentMimeTypeFallbackEnabled = false;
++    private boolean decryptAttachmentMimeTypeFallback = decryptAttachmentMimeTypeFallbackEnabled;
+     
+     public Object getMsgContext() {
+         return msgContext;
+@@ -825,6 +831,22 @@
+         this.signatureProvider = signatureProvider;
+     }
+     
++    public static boolean isDecryptAttachmentMimeTypeFallbackEnabled() {
++        return decryptAttachmentMimeTypeFallbackEnabled;
++    }
++
++    public static void setDecryptAttachmentMimeTypeFallbackEnabled(boolean enabled) {
++        decryptAttachmentMimeTypeFallbackEnabled = enabled;
++    }
++
++    public boolean isDecryptAttachmentMimeTypeFallback() {
++        return decryptAttachmentMimeTypeFallback;
++    }
++
++    public void setDecryptAttachmentMimeTypeFallback(boolean decryptAttachmentMimeTypeFallback) {
++        this.decryptAttachmentMimeTypeFallback = decryptAttachmentMimeTypeFallback;
++    }
++
+     public boolean isOmitAttachmentKeyInfo() {
+         return omitAttachmentKeyInfo;
+     }
+diff -Naur wss4j-2.4.4-orig/ws-security-dom/src/main/java/org/apache/wss4j/dom/handler/WSHandler.java wss4j-2.4.4/ws-security-dom/src/main/java/org/apache/wss4j/dom/handler/WSHandler.java
+--- wss4j-2.4.4/ws-security-dom/src/main/java/org/apache/wss4j/dom/handler/WSHandler.java	2026-10-05 10:39:13.797509184 +0200
++++ wss4j-2.4.4/ws-security-dom/src/main/java/org/apache/wss4j/dom/handler/WSHandler.java	2026-10-05 10:39:13.824222831 +0200
+@@ -362,6 +362,10 @@
+         reqData.setValidateSamlSubjectConfirmation(
+             decodeBooleanConfigValue(mc, WSHandlerConstants.VALIDATE_SAML_SUBJECT_CONFIRMATION, true)
+         );
++        reqData.setDecryptAttachmentMimeTypeFallback(
++            decodeBooleanConfigValue(mc, WSHandlerConstants.DECRYPT_ATTACH_MIME_TYPE_FALLBACK,
++                RequestData.isDecryptAttachmentMimeTypeFallbackEnabled())
++        );
+ 
+         boolean bspCompliant =
+             decodeBooleanConfigValue(mc, WSHandlerConstants.IS_BSP_COMPLIANT, true);
+diff -Naur wss4j-2.4.4-orig/ws-security-dom/src/main/java/org/apache/wss4j/dom/processor/EncryptedDataProcessor.java wss4j-2.4.4/ws-security-dom/src/main/java/org/apache/wss4j/dom/processor/EncryptedDataProcessor.java
+--- wss4j-2.4.4/ws-security-dom/src/main/java/org/apache/wss4j/dom/processor/EncryptedDataProcessor.java	2026-10-05 10:39:13.802979057 +0200
++++ wss4j-2.4.4/ws-security-dom/src/main/java/org/apache/wss4j/dom/processor/EncryptedDataProcessor.java	2026-10-05 10:39:13.824431995 +0200
+@@ -178,7 +178,8 @@
+ 
+         WSDataRef dataRef = EncryptionUtils.decryptEncryptedData(
+                 elem.getOwnerDocument(), encryptedDataId, elem, key, symEncAlgo,
+-                data.getAttachmentCallbackHandler(), data.getEncryptionSerializer());
++                data.getAttachmentCallbackHandler(), data.getEncryptionSerializer(),
++                data.isDecryptAttachmentMimeTypeFallback());
+ 
+         WSSecurityEngineResult result =
+                 new WSSecurityEngineResult(WSConstants.ENCR, Collections.singletonList(dataRef));
+diff -Naur wss4j-2.4.4-orig/ws-security-dom/src/main/java/org/apache/wss4j/dom/processor/EncryptedKeyProcessor.java wss4j-2.4.4/ws-security-dom/src/main/java/org/apache/wss4j/dom/processor/EncryptedKeyProcessor.java
+--- wss4j-2.4.4/ws-security-dom/src/main/java/org/apache/wss4j/dom/processor/EncryptedKeyProcessor.java	2026-10-05 10:39:13.809258988 +0200
++++ wss4j-2.4.4/ws-security-dom/src/main/java/org/apache/wss4j/dom/processor/EncryptedKeyProcessor.java	2026-10-05 10:39:13.824547421 +0200
+@@ -726,7 +726,7 @@
+ 
+         return EncryptionUtils.decryptEncryptedData(
+             doc, dataRefURI, encryptedDataElement, symmetricKey, symEncAlgo, data.getAttachmentCallbackHandler(),
+-            data.getEncryptionSerializer()
++            data.getEncryptionSerializer(), data.isDecryptAttachmentMimeTypeFallback()
+         );
+     }
+ 
+diff -Naur wss4j-2.4.4-orig/ws-security-dom/src/main/java/org/apache/wss4j/dom/processor/ReferenceListProcessor.java wss4j-2.4.4/ws-security-dom/src/main/java/org/apache/wss4j/dom/processor/ReferenceListProcessor.java
+--- wss4j-2.4.4/ws-security-dom/src/main/java/org/apache/wss4j/dom/processor/ReferenceListProcessor.java	2026-10-05 10:39:13.814891420 +0200
++++ wss4j-2.4.4/ws-security-dom/src/main/java/org/apache/wss4j/dom/processor/ReferenceListProcessor.java	2026-10-05 10:39:13.824682826 +0200
+@@ -194,7 +194,7 @@
+         return
+             EncryptionUtils.decryptEncryptedData(
+                 doc, dataRefURI, encryptedDataElement, symmetricKey, symEncAlgo, data.getAttachmentCallbackHandler(),
+-                data.getEncryptionSerializer()
++                data.getEncryptionSerializer(), data.isDecryptAttachmentMimeTypeFallback()
+             );
+     }
+ 
+diff -Naur wss4j-2.4.4-orig/ws-security-dom/src/main/java/org/apache/wss4j/dom/util/EncryptionUtils.java wss4j-2.4.4/ws-security-dom/src/main/java/org/apache/wss4j/dom/util/EncryptionUtils.java
+--- wss4j-2.4.4/ws-security-dom/src/main/java/org/apache/wss4j/dom/util/EncryptionUtils.java	2026-10-05 10:39:13.820504585 +0200
++++ wss4j-2.4.4/ws-security-dom/src/main/java/org/apache/wss4j/dom/util/EncryptionUtils.java	2026-10-05 10:39:13.824812218 +0200
+@@ -60,6 +60,9 @@
+ 
+ public final class EncryptionUtils {
+ 
++    private static final org.slf4j.Logger LOG =
++        org.slf4j.LoggerFactory.getLogger(EncryptionUtils.class);
++
+     private EncryptionUtils() {
+         // complete
+     }
+@@ -149,6 +152,33 @@
+         CallbackHandler attachmentCallbackHandler,
+         Serializer encryptionSerializer
+     ) throws WSSecurityException {
++        return decryptEncryptedData(doc, dataRefURI, encData, symmetricKey,
++                                    symEncAlgo, attachmentCallbackHandler, encryptionSerializer, false);
++    }
++    /**
++     * Decrypt the EncryptedData argument using a SecretKey.
++     * @param doc The (document) owner of EncryptedData
++     * @param dataRefURI The URI of EncryptedData
++     * @param encData The EncryptedData element
++     * @param symmetricKey The SecretKey with which to decrypt EncryptedData
++     * @param symEncAlgo The symmetric encryption algorithm to use
++     * @param attachmentCallbackHandler The CallbackHandler from which to get attachments
++     * @param encryptionSerializer The Serializer to use
++     * @param attachmentMimeTypeFallback se true, per un attachment 'Attachment-Complete' privo del 'Content-Type'
++     *        negli header protetti viene utilizzato il MimeType dell'elemento EncryptedData
++     * @throws WSSecurityException
++     */
++    public static WSDataRef
++    decryptEncryptedData(
++        Document doc,
++        String dataRefURI,
++        Element encData,
++        SecretKey symmetricKey,
++        String symEncAlgo,
++        CallbackHandler attachmentCallbackHandler,
++        Serializer encryptionSerializer,
++        boolean attachmentMimeTypeFallback
++    ) throws WSSecurityException {
+ 
+         // See if it is an attachment, and handle that differently
+         String typeStr = encData.getAttributeNS(null, "Type");
+@@ -167,7 +197,8 @@
+             }
+             String uri = cipherReference.getAttributeNS(null, "URI");
+ 
+-            return decryptAttachment(dataRefURI, uri, encData, symmetricKey, symEncAlgo, attachmentCallbackHandler);
++            return decryptAttachment(dataRefURI, uri, encData, symmetricKey, symEncAlgo, attachmentCallbackHandler,
++                                     attachmentMimeTypeFallback);
+         }
+ 
+         WSDataRef dataRef = new WSDataRef();
+@@ -308,7 +339,8 @@
+         Element encData,
+         SecretKey symmetricKey,
+         String symEncAlgo,
+-        CallbackHandler attachmentCallbackHandler
++        CallbackHandler attachmentCallbackHandler,
++        boolean attachmentMimeTypeFallback
+     ) throws WSSecurityException {
+         WSDataRef dataRef = new WSDataRef();
+         dataRef.setWsuId(dataRefURI);
+@@ -358,6 +390,17 @@
+                 Map<String, String> protectedHeaders = new HashMap<>();
+                 AttachmentUtils.readAndReplaceEncryptedAttachmentHeaders(protectedHeaders, attachmentInputStream);
+                 String contentType = protectedHeaders.get(AttachmentUtils.MIME_HEADER_CONTENT_TYPE);
++                if (contentType == null && attachmentMimeTypeFallback) {
++                    // Retrocompatibilità con i mittenti che non includono gli header MIME nella cifratura:
++                    // si utilizza il MimeType dell'elemento EncryptedData (presente nell'header WS-Security),
++                    // mai gli header MIME esterni non protetti dalla cifratura.
++                    String mimeType = encData.getAttributeNS(null, "MimeType");
++                    if (mimeType != null && !mimeType.isEmpty()) {
++                        LOG.debug("Content-Type not found in the protected headers of the attachment {}: "
++                            + "using the MimeType of the EncryptedData '{}'", attachment.getId(), mimeType);
++                        contentType = mimeType;
++                    }
++                }
+                 if (contentType == null) {
+                     throw new WSSecurityException(WSSecurityException.ErrorCode.FAILED_CHECK);
+                 }

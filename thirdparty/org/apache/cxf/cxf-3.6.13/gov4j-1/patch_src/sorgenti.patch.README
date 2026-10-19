@@ -1,0 +1,1 @@
+Rivisto livello di log in org/apache/cxf/common/jaxb/JAXBUtils.java per loggare come Level.FINER l'eccezione
